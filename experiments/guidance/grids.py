@@ -435,6 +435,101 @@ def _operating_point(root: str = ".") -> Dict[str, object]:
     }
 
 
+def grid_solver_control() -> List[Cell]:
+    """Is SG-prev guidance, or just a better ODE solver?
+
+    SG-prev's direction is (delta_ref / realised_log_sigma_spacing) * (D_cur -
+    D_prev): a consecutive-step derivative estimate, amplified ~96x at 512
+    steps, applied along the trajectory. That is structurally what a 2nd-order
+    solver or a momentum term does, built from the same two quantities -- so
+    "Self-Guidance helps bitstream diffusion" and "this model was under-served
+    by a 1st-order solver" predict the same +4.8 points.
+
+    The discriminating comparison is at MATCHED model evaluations:
+        DDIM  512 steps            =  512 NFE   (baseline)
+        DDIM  512 steps + SG-prev  =  512 NFE   (the claim)
+        Heun  256 steps            =  512 NFE   (2 evals/step: the rival)
+    plus DDIM 1024 (1024 NFE) to separate "better direction" from "finer grid",
+    and Heun 512 (1024 NFE) as the 2nd-order arm at CFG's budget.
+
+    If Heun-256 matches SG-prev at 512 NFE, the effect is a solver artefact and
+    should be reported as one.
+    """
+    out = []
+    for name, kind, steps in (("solv_ddim512", "ddim", 512),
+                              ("solv_sgprev512", "ddim", 512),
+                              ("solv_ddim1024", "ddim", 1024),
+                              ("solv_heun256", "heun", 256),
+                              ("solv_heun512", "heun", 512)):
+        c = dict(DET)
+        c.update(steps=steps, sampler_kind=kind, limit=FULL_LIMIT)
+        if name == "solv_sgprev512":
+            c.update(sg_scale=2.0, sg_variant="prev")
+        # Heun has no GuidedDenoiser path, so it cannot emit the trace.
+        out.append(Cell(name=name, collect_diagnostics=(kind == "ddim"), **c))
+    return [c for cell in out for c in _seeds(cell, (42, 43, 44))]
+
+
+def grid_compute_control() -> List[Cell]:
+    """Deployable multi-sample baselines at guidance's compute.
+
+    pass@2 is computable offline from the seeds already run, but it needs an
+    oracle to pick the right sample. maj@k is what someone could actually ship,
+    and it needs the executed answers -- now recorded per problem. Three extra
+    baseline seeds give maj@3/maj@5 headroom against CFG's 2x and a 4x arm.
+    """
+    base = dict(DET)
+    base.update(steps=512, limit=FULL_LIMIT)
+    cells = [Cell(name="cmp_baseline", **base)]
+    return [c for cell in cells for c in _seeds(cell, (45, 46, 47, 48))]
+
+
+def grid_null_ablation() -> List[Cell]:
+    """How much does CFG depend on the null the model was TRAINED with?
+
+    The run trained its unconditional branch with null_strategy="half" (0.5
+    bits), so this is not a free hyper-parameter: swapping it at evaluation
+    time is a train/eval mismatch probe, not a search for a better null.
+    Choosing a different null properly would need retraining. Reported as
+    sensitivity, and cheap: if CFG collapses under a mismatched null, the
+    +8 points are a statement about that specific null.
+    """
+    out = []
+    for strat in ("half", "data_center", "zeros"):
+        out.append(Cell(name=f"null_{strat}_w12", guidance_scale=12.0,
+                        extra={"null_strategy": strat}, **DET))
+    return out
+
+
+def grid_ag_ema() -> List[Cell]:
+    """AutoGuidance badness axis: is the EMA or the raw weight the better bad?
+
+    Karras et al. degrade the good model along capacity and training time; EMA
+    is a third axis this repository has for free, and the raw weights of a
+    checkpoint are a *differently* bad model from its EMA at the same step, not
+    merely a noisier one.
+    """
+    out = []
+    for step in ("000250000", "000350000"):
+        ck = f"{RUN_DIR}/checkpoints/step={step}.pt"
+        for ema in (1, 0):
+            out.append(Cell(name=f"agema_{step}_ema{ema}", ag_scale=15.0,
+                            bad_checkpoint=ck, bad_ema=ema, **DET))
+    return out
+
+
+def _seeds(cell: Cell, seeds) -> List[Cell]:
+    """Replicate one cell across seeds, keeping everything else fixed."""
+    out = []
+    for s in seeds:
+        d = asdict(cell)
+        d.pop("extra", None)
+        d["name"] = f"{cell.name}_seed{s}"
+        d["seed"] = s
+        out.append(Cell(extra=dict(cell.extra), **d))
+    return out
+
+
 def grid_factorial_confirm(root: str = ".") -> List[Cell]:
     """Phase 13 at confirmation grade: the 12-cell factorial, full test set, 3 seeds.
 
@@ -463,6 +558,10 @@ GRIDS = {
     "sg_mf": grid_sg_mf,
     "factorial": lambda root=".": grid_factorial(**_operating_point(root)),
     "factorial_confirm": grid_factorial_confirm,
+    "solver_control": grid_solver_control,
+    "compute_control": grid_compute_control,
+    "null_ablation": grid_null_ablation,
+    "ag_ema": grid_ag_ema,
     "nfe": lambda root=".": grid_nfe(**_operating_point(root)),
 }
 # Grids that need to inspect the filesystem for available checkpoints.

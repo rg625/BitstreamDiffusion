@@ -344,6 +344,11 @@ def main():
     ap.add_argument("--sg_delta", type=float, default=0.5,
                     help="Reference noise-level offset in LOG-SIGMA units. Also the "
                          "normalisation scale that makes SG-prev comparable across NFE.")
+    ap.add_argument("--null_strategy", default=None,
+                    choices=["half", "data_center", "zeros", "random"],
+                    help="Override cfg.cond.null_strategy for the CFG unconditional "
+                         "branch. Default: whatever the config (and hence training) "
+                         "used. Any other value is a train/eval mismatch probe.")
     ap.add_argument("--sg_mf_mode", default="hold", choices=["hold", "vary"],
                     help="hold (default) re-attaches the analytic matched filter at the "
                          "true sigma so self-guidance amplifies only the learned logit; "
@@ -457,6 +462,17 @@ def main():
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    if args.null_strategy is not None:
+        # The model trained its unconditional branch with ONE null (this run:
+        # "half"). Overriding here evaluates a train/eval MISMATCH -- it probes
+        # how much CFG's gain depends on the null the model actually saw, and
+        # is not a search for a better null, which would require retraining.
+        trained = str(getattr(getattr(cfg, "cond", object()), "null_strategy", "half"))
+        if args.null_strategy != trained:
+            print(f"[warn] null_strategy={args.null_strategy} but this run TRAINED "
+                  f"with '{trained}'. This is a mismatch probe; the unconditional "
+                  f"branch is off-distribution.", flush=True)
+        cfg.cond.null_strategy = args.null_strategy
     steps = int(args.steps or getattr(cfg.evaluation, "num_sampling_steps", 1024))
     timeout_s = float(getattr(getattr(cfg.evaluation, "gsm8k", object()), "timeout_s", 5.0))
     n_boot = int(getattr(getattr(cfg.evaluation, "gsm8k", object()), "bootstrap_size", 10000))
@@ -536,6 +552,7 @@ def main():
     records = []
     per_problem_idx = []
     per_problem_correct = []
+    per_problem_answer = []
     all_texts = []
     guidance_traces = []
     batch_secs = []
@@ -588,7 +605,13 @@ def main():
 
             rec = ds[gi]
             all_texts.append(text)
-            ok = evaluate_samples(text, rec["response_ground_truth"], timeout_s)
+            # One sandboxed execution, two outputs. `evaluate_samples` is
+            # exactly `_numbers_equal(predict_answer(...), gold)`, so calling
+            # both would run every generated program twice -- doubling the
+            # sandbox cost of a 1319-problem run for a number we already have.
+            _pred = predict_answer(text, timeout_s)
+            ok = bool(_numbers_equal(_pred, _extract_gold_answer(
+                rec["response_ground_truth"])))
             per_correct.append(1 if ok else 0)
             # Per-problem outcome for EVERY problem, keyed by test-set index.
             # Methods are evaluated on identical problems, so comparisons are
@@ -599,6 +622,14 @@ def main():
             # 6-point difference and can confirm nothing. Two small lists.
             per_problem_idx.append(int(gi))
             per_problem_correct.append(1 if ok else 0)
+            # The executed answer, not just whether it was right. Correctness
+            # alone supports pass@k (an oracle bound), but the *deployable*
+            # compute-matched control is maj@k, and a majority vote needs the
+            # answers themselves. Recording one number per problem makes every
+            # future run comparable against multi-sample baselines offline,
+            # with no extra sampling. `predict_answer` returns None when the
+            # program does not run or returns nothing.
+            per_problem_answer.append(None if _pred is None else str(_pred))
             if len(records) < 100:
                 records.append({
                     "idx": gi,
@@ -672,7 +703,8 @@ def main():
         # ---- bit-level / guidance diagnostics vs sigma ----
         "guidance_diagnostics": summarise_trace(guidance_traces) if guidance_traces else {},
         # Paired-comparison support: outcome per problem, in test-set index order.
-        "per_problem": {"idx": per_problem_idx, "correct": per_problem_correct},
+        "per_problem": {"idx": per_problem_idx, "correct": per_problem_correct,
+                        "answer": per_problem_answer},
         "sample_records": records,
     }
     tag = f"{args.sampler}_g{args.gamma}_w{args.guidance_scale}_s{steps}_sd{sigma_data_used:.4f}_ema{int(bool(args.ema))}"

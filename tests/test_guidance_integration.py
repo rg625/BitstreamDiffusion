@@ -315,3 +315,69 @@ def test_factorial_confirm_uses_the_exported_operating_point(monkeypatch):
     assert {c.guidance_scale for c in cells} == {0.0, 12.0}
     assert {c.ag_scale for c in cells} == {0.0, 15.0}
     assert {c.sg_scale for c in cells} == {0.0, 2.0}
+
+
+def test_solver_control_arms_are_nfe_matched():
+    """The Heun rival must be compared at equal model evaluations, not equal steps.
+
+    Heun is 2 evaluations per step, DDIM is 1. If the grid compared both at 512
+    steps the Heun arm would silently get twice the compute and the control
+    would prove nothing.
+    """
+    from experiments.guidance import grids
+
+    cells = {c.name.rsplit("_seed", 1)[0]: c for c in grids.build("solver_control")}
+    def nfe(c):
+        return c.steps * (2 if c.sampler_kind == "heun" else 1)
+
+    assert nfe(cells["solv_ddim512"]) == 512
+    assert nfe(cells["solv_sgprev512"]) == 512
+    assert nfe(cells["solv_heun256"]) == 512, "the discriminating comparison"
+    assert nfe(cells["solv_ddim1024"]) == 1024
+    assert nfe(cells["solv_heun512"]) == 1024
+    # SG-prev must be the ONLY arm carrying guidance; the rest are pure solvers.
+    for name, c in cells.items():
+        expected = 2.0 if name == "solv_sgprev512" else 0.0
+        assert c.sg_scale == expected, name
+        assert c.guidance_scale == 0.0 and c.ag_scale == 0.0, name
+    # Heun has no GuidedDenoiser path and cannot emit the diagnostics trace.
+    assert cells["solv_heun256"].collect_diagnostics is False
+    assert cells["solv_ddim512"].collect_diagnostics is True
+
+
+def test_solver_and_compute_controls_run_at_confirmation_scale():
+    from experiments.guidance import grids
+
+    for name, n_cells in (("solver_control", 15), ("compute_control", 4)):
+        cells = grids.build(name)
+        assert len(cells) == n_cells, name
+        assert {c.limit for c in cells} == {1319}, name
+    # compute_control must use seeds DISJOINT from the confirmation grids, or
+    # maj@k would vote over samples already counted in the baseline it beats.
+    seeds = {c.seed for c in grids.build("compute_control")}
+    assert seeds.isdisjoint({42, 43, 44}), seeds
+
+
+def test_null_ablation_emits_the_override_flag():
+    from experiments.guidance import grids
+
+    cells = grids.build("null_ablation")
+    strategies = set()
+    for c in cells:
+        argv = c.cli("/tmp/out")
+        assert c.guidance_scale == 12.0, "the null only matters when CFG is on"
+        i = argv.index("--null_strategy")
+        strategies.add(argv[i + 1])
+    assert strategies == {"half", "data_center", "zeros"}
+
+
+def test_ag_ema_ablation_varies_only_the_bad_model_weights():
+    from experiments.guidance import grids
+
+    cells = grids.build("ag_ema")
+    assert len(cells) == 4
+    assert {c.bad_ema for c in cells} == {0, 1}
+    assert {c.ag_scale for c in cells} == {15.0}
+    for c in cells:
+        argv = c.cli("/tmp/out")
+        assert argv[argv.index("--bad_ema") + 1] == str(c.bad_ema)
