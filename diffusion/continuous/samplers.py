@@ -1819,6 +1819,10 @@ class DDIMSampler:
             bad_model=bad_model,
             is_cont_tokens=self.is_cont_tokens,
             collect_diagnostics=bool(collect_diagnostics),
+            # Self-guidance evaluates at a HIGHER noise level; cap it at this
+            # trajectory's own top sigma so the shifted call stays inside the
+            # range the model was trained on.
+            sigma_hi_cap=float(sigma0),
         )
         gdn.reset()
         sc_state = gdn.make_self_cond_state(cond_enabled)

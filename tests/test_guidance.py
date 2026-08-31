@@ -622,3 +622,52 @@ def test_d10_sg_hold_isolates_the_network_from_the_analytic_term():
     a = g.denoise(x, sigma, sc=g.make_self_cond_state(True), **kw)
     b = ref.denoise(x, sigma, sc=ref.make_self_cond_state(True), **kw)
     assert (a.D - b.D)[free].abs().max() > 1e-2
+
+
+def test_d11_sg_exact_shifted_sigma_is_capped_to_the_trained_range():
+    """SG-exact must not query the model outside the noise range it was trained on.
+
+    sigma*exp(sg_delta) overshoots the top of the schedule near sigma_max
+    (exp(0.5) = 1.65x), and a model asked about an unseen noise level does not
+    return a meaningfully "worse prediction of the same thing" -- it
+    extrapolates. The cap keeps the shifted call in-distribution, and the
+    spacing normalisation absorbs the smaller, varying offset that results.
+    """
+    pf, pm, nf = _ctx()
+    kw = dict(prefix_full=pf, prefix_mask=pm, null_full=nf, cond_enabled=True)
+    gcfg = GuidanceConfig(sg_scale=1.0, sg_variant="exact", sg_delta=0.5, sg_mf_mode="vary")
+    cap = 10.0
+    cfg = make_cpu_cfg(self_condition=False, num_steps=8)
+    model = PerRowSigmaDenoiser(S, seed=0).eval()
+
+    seen = []
+
+    class Spy(torch.nn.Module):
+        def __init__(self, inner):
+            super().__init__()
+            self.inner = inner
+
+        def forward(self, x, sigma, x0_hat=None):
+            seen.append(float(sigma.max()))
+            return self.inner(x, sigma, x0_hat)
+
+    gdn = GuidedDenoiser(Spy(model), cfg, gcfg, sigma_hi_cap=cap)
+
+    # Well below the cap: the full nominal offset is available.
+    seen.clear()
+    gdn.denoise(torch.rand(B, S), torch.full((B,), 1.0),
+                sc=gdn.make_self_cond_state(True), **kw)
+    assert max(seen) == pytest.approx(1.0 * math.exp(0.5), rel=1e-5)
+
+    # At the cap: the shifted evaluation must not exceed it.
+    seen.clear()
+    gdn.denoise(torch.rand(B, S), torch.full((B,), cap),
+                sc=gdn.make_self_cond_state(True), **kw)
+    assert max(seen) <= cap * (1 + 1e-6), max(seen)
+
+    # Just under the cap: shifted level clamped, and still a real correction.
+    seen.clear()
+    p_capped = gdn.denoise(torch.rand(B, S), torch.full((B,), cap * 0.9),
+                           sc=gdn.make_self_cond_state(True), **kw)
+    assert max(seen) <= cap * (1 + 1e-6)
+    assert torch.isfinite(p_capped.D).all()

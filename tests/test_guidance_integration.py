@@ -148,8 +148,17 @@ def test_model_evaluation_count_matches_the_policy(name):
     # hard-coding a step count.
     n_calls = seen["n"]
     assert n_calls > 0
-    assert gdn.model_evaluations == n_calls * EXPECTED_BRANCHES[name], (
-        name, gdn.model_evaluations, n_calls, EXPECTED_BRANCHES[name])
+
+    # SG-exact is capped to the trained noise range, so at the very top of the
+    # schedule there is no headroom for a shifted evaluation and that call
+    # costs the un-shifted branch count. Account for those explicitly rather
+    # than loosening the assertion.
+    branches = EXPECTED_BRANCHES[name]
+    gcfg_ = COMBINATIONS[name]
+    skipped = gdn.sg_stats["skipped"] if gcfg_.sg_variant == "exact" and gcfg_.sg_enabled else 0
+    expected = n_calls * branches - skipped * (branches // 2)
+    assert gdn.model_evaluations == expected, (
+        name, gdn.model_evaluations, expected, n_calls, branches, skipped)
 
 
 def test_sg_prev_costs_exactly_what_the_unguided_sampler_costs():
@@ -174,8 +183,11 @@ def test_sg_prev_costs_exactly_what_the_unguided_sampler_costs():
             GuidedDenoiser.denoise = orig
         counts[name] = seen["gdn"].model_evaluations
 
+    # SG-prev is exactly free.
     assert counts["sg_prev"] == counts["baseline"]
-    assert counts["sg_exact"] == 2 * counts["baseline"]
+    # SG-exact roughly doubles it -- strictly less than 2x because the call at
+    # the top of the sigma schedule has no headroom for a shifted evaluation.
+    assert counts["baseline"] < counts["sg_exact"] <= 2 * counts["baseline"]
 
 
 @pytest.mark.parametrize("name", list(COMBINATIONS))
@@ -253,7 +265,7 @@ def test_sg_prev_reports_when_churn_makes_it_inapplicable():
             _sample(cfg, good, bad, proc, COMBINATIONS["sg_prev"], seed=1)
         finally:
             GuidedDenoiser.denoise = orig
-        s = stats["gdn"].sg_prev_stats
+        s = stats["gdn"].sg_stats
         assert s["applied"] + s["skipped"] > 0, "no SG-prev decisions recorded"
         if not stochastic:
             # Deterministic sampling: sigma decreases monotonically, so every

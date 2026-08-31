@@ -105,6 +105,7 @@ one.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence, Tuple
 
@@ -448,6 +449,7 @@ class GuidedDenoiser:
         bad_model=None,
         is_cont_tokens: bool = False,
         collect_diagnostics: bool = False,
+        sigma_hi_cap: Optional[float] = None,
     ):
         if gcfg.ag_enabled and bad_model is None:
             raise ValueError(
@@ -467,6 +469,16 @@ class GuidedDenoiser:
         self.gcfg = gcfg
         self.is_cont_tokens = bool(is_cont_tokens)
         self.collect_diagnostics = bool(collect_diagnostics)
+        # Ceiling for SG-exact's shifted noise level. sigma*exp(sg_delta) can
+        # exceed the largest sigma the model was ever trained on (sigma_max=80
+        # for the task configs, and exp(0.5)=1.65x of that is well outside it).
+        # Asking the network about a noise level it has never seen does not
+        # produce a meaningful "worse prediction of the same thing" -- it
+        # produces an extrapolation, which is not what self-guidance assumes.
+        # Capping keeps the shifted evaluation in-distribution; the spacing
+        # normalisation in `sg_direction` already handles the resulting smaller
+        # (and varying) delta correctly.
+        self.sigma_hi_cap = None if sigma_hi_cap is None else float(sigma_hi_cap)
         self._sg_cache = _SGCache()
         self._nfe = 0
         # SG-prev needs the previous evaluation to sit at a STRICTLY higher noise
@@ -474,20 +486,28 @@ class GuidedDenoiser:
         # spacing non-positive and the correction inapplicable. Count those so a
         # null self-guidance result under churn is interpretable rather than
         # mysterious.
-        self._sg_prev_applied = 0
-        self._sg_prev_skipped = 0
+        self._sg_applied = 0
+        self._sg_skipped = 0
 
     # -- lifecycle ------------------------------------------------------------
     def reset(self) -> None:
         """Clear per-trajectory state. Call once at the start of `sample()`."""
         self._sg_cache.clear()
         self._nfe = 0
-        self._sg_prev_applied = 0
-        self._sg_prev_skipped = 0
+        self._sg_applied = 0
+        self._sg_skipped = 0
 
     @property
-    def sg_prev_stats(self) -> Dict[str, int]:
-        return {"applied": self._sg_prev_applied, "skipped": self._sg_prev_skipped}
+    def sg_stats(self) -> Dict[str, int]:
+        """How often self-guidance was actually applicable.
+
+        A correction is skipped when there is no valid noise-level offset:
+        SG-prev when churn pushed sigma back up, SG-exact when sigma is already
+        at the top of the schedule and the shifted level would be capped onto
+        it. Without this an inapplicable configuration would look identical to
+        one that simply did not help.
+        """
+        return {"applied": self._sg_applied, "skipped": self._sg_skipped}
 
     @property
     def model_evaluations(self) -> int:
@@ -615,8 +635,24 @@ class GuidedDenoiser:
                 "Use sg_mf_mode='vary' (and note it amplifies the analytic term)."
             )
 
-        # Shifted (noisier) evaluation level for exact self-guidance.
-        sigma_hi_b = sigma_b * float(torch.exp(torch.tensor(float(gc.sg_delta)))) if sg_exact else None
+        # Shifted (noisier) evaluation level for exact self-guidance, capped to
+        # the trained noise range (see `sigma_hi_cap`). The realised per-row
+        # offset is recomputed from the capped value so the normalisation stays
+        # exact rather than assuming the nominal sg_delta.
+        sigma_hi_b = None
+        sg_delta_eff = float(gc.sg_delta)
+        if sg_exact:
+            sigma_hi_b = sigma_b * math.exp(float(gc.sg_delta))
+            if self.sigma_hi_cap is not None:
+                sigma_hi_b = sigma_hi_b.clamp(max=self.sigma_hi_cap)
+            log_lo = torch.log(sigma_b.clamp_min(1e-20))
+            log_hi = torch.log(sigma_hi_b.clamp_min(1e-20))
+            sg_delta_eff = float((log_hi - log_lo).min())
+            if sg_delta_eff <= 1e-8:
+                # Already at the ceiling: no headroom for a shifted evaluation.
+                sg_exact = False
+                sigma_hi_b = None
+                self._sg_skipped += 1
 
         # Per-branch network inputs (prompt-clamped) are shared by both levels.
         x_in = {
@@ -700,7 +736,8 @@ class GuidedDenoiser:
                     D_hi, cfg_scale=gc.cfg_scale, ag_scale=gc.ag_scale,
                     cond_enabled=cond_enabled,
                 )
-                delta_used = float(gc.sg_delta)
+                delta_used = sg_delta_eff
+                self._sg_applied += 1
                 direction = sg_direction(
                     base, bad_side, delta=delta_used, delta_ref=float(gc.sg_delta),
                 )
@@ -709,7 +746,7 @@ class GuidedDenoiser:
                 delta_i = float(self._sg_cache.log_sigma) - log_sig_cur
                 if delta_i <= 1e-8:
                     # Churn pushed sigma back up (or held it): no valid spacing.
-                    self._sg_prev_skipped += 1
+                    self._sg_skipped += 1
                 if delta_i > 1e-8:
                     D_prev: Dict[Branch, torch.Tensor] = {}
                     ok = True
@@ -726,9 +763,9 @@ class GuidedDenoiser:
                             _clamp_mask_(D, null_full if b[1] == "u" else prefix_full, prefix_mask)
                         D_prev[b] = D
                     if not ok:
-                        self._sg_prev_skipped += 1
+                        self._sg_skipped += 1
                     if ok:
-                        self._sg_prev_applied += 1
+                        self._sg_applied += 1
                         bad_side = combine_cfg_ag(
                             D_prev, cfg_scale=gc.cfg_scale, ag_scale=gc.ag_scale,
                             cond_enabled=cond_enabled,
@@ -817,9 +854,9 @@ class GuidedDenoiser:
             out["guidance_over_score"] = shift / base_rms
         if delta_used is not None:
             out["sg_delta_used"] = float(delta_used)
-        if gc.sg_enabled and gc.sg_variant == "prev":
-            out["sg_prev_applied"] = float(self._sg_prev_applied)
-            out["sg_prev_skipped"] = float(self._sg_prev_skipped)
+        if gc.sg_enabled:
+            out["sg_applied"] = float(self._sg_applied)
+            out["sg_skipped"] = float(self._sg_skipped)
 
         # Bit-level saturation / entropy of the conditional posterior.
         p = D_branches[GOOD_C].detach().to(torch.float32)
