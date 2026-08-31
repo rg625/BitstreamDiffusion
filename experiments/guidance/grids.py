@@ -384,6 +384,30 @@ def grid_confirm(cells: List[Cell], seeds=(42, 43, 44, 45, 46)) -> List[Cell]:
     return out
 
 
+def _require_operating_point(root: str = ".") -> Dict[str, object]:
+    """As `_operating_point`, but refuses to fall back to the defaults.
+
+    The confirmation-grade factorial is ~18 GPU-hours. Silently building it at
+    the placeholder operating point (w=3 / 1.5 / 0.5, bad=the first checkpoint
+    on disk) because a GUID_* variable was missing from --export would burn all
+    of it on the wrong grid, and the result JSONs would look perfectly normal
+    afterwards. The single-axis confirmations have chosen these values, so at
+    this stage an unset variable is a mistake, not a request for a default.
+    """
+    missing = [k for k in ("GUID_CFG_W", "GUID_AG_W", "GUID_SG_W", "GUID_BAD_STEP")
+               if not os.environ.get(k)]
+    if missing:
+        raise SystemExit(
+            "factorial_confirm needs an explicit operating point; missing: "
+            + ", ".join(missing)
+            + "\nThe confirmations chose: GUID_CFG_W=12 GUID_AG_W=15 "
+              "GUID_SG_W=2 GUID_BAD_STEP=350000\n"
+              "Pass them in --export too, not just your shell "
+              "(see scripts/hpc/guidance/RUNBOOK.md section 6)."
+        )
+    return _operating_point(root)
+
+
 def _operating_point(root: str = ".") -> Dict[str, object]:
     """Per-axis operating points for the factorial and NFE grids.
 
@@ -421,7 +445,8 @@ def grid_factorial_confirm(root: str = ".") -> List[Cell]:
     already used, so the per-axis operating points transfer unchanged -- is what
     makes an interaction estimate meaningful rather than decorative.
     """
-    return grid_confirm(grid_factorial(**_operating_point(root)), seeds=(42, 43, 44))
+    return grid_confirm(grid_factorial(**_require_operating_point(root)),
+                        seeds=(42, 43, 44))
 
 
 GRIDS = {

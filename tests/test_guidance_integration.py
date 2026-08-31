@@ -272,3 +272,46 @@ def test_sg_prev_reports_when_churn_makes_it_inapplicable():
             # step after the first must have a usable spacing.
             assert s["applied"] > 0
             assert s["skipped"] == 0, s
+
+
+def test_factorial_confirm_refuses_a_default_operating_point(monkeypatch):
+    """An unset GUID_* must not silently build the placeholder grid.
+
+    factorial_confirm is ~18 GPU-hours. If a variable is missing from --export,
+    falling back to the defaults (w=3/1.5/0.5, bad=first checkpoint on disk)
+    would spend all of it on the wrong operating point and leave result JSONs
+    that look entirely normal.
+    """
+    import pytest
+    from experiments.guidance import grids
+
+    for k in ("GUID_CFG_W", "GUID_AG_W", "GUID_SG_W", "GUID_BAD_STEP"):
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(SystemExit) as e:
+        grids.build("factorial_confirm")
+    msg = str(e.value)
+    assert "GUID_CFG_W" in msg and "operating point" in msg
+    # The message must carry the values the confirmations actually chose.
+    assert "GUID_BAD_STEP=350000" in msg
+
+
+def test_factorial_confirm_uses_the_exported_operating_point(monkeypatch):
+    from experiments.guidance import grids
+
+    monkeypatch.setenv("GUID_CFG_W", "12")
+    monkeypatch.setenv("GUID_AG_W", "15")
+    monkeypatch.setenv("GUID_SG_W", "2")
+    monkeypatch.setenv("GUID_BAD_STEP", "350000")
+    try:
+        cells = grids.build("factorial_confirm")
+    except SystemExit:
+        import pytest
+        pytest.skip("step=000350000.pt not present in this checkout")
+    assert len(cells) == 36, "12 conditions x 3 seeds"
+    assert {c.limit for c in cells} == {1319}
+    assert {c.steps for c in cells} == {512}
+    assert {c.seed for c in cells} == {42, 43, 44}
+    # Every axis is either off or at exactly the exported operating point.
+    assert {c.guidance_scale for c in cells} == {0.0, 12.0}
+    assert {c.ag_scale for c in cells} == {0.0, 15.0}
+    assert {c.sg_scale for c in cells} == {0.0, 2.0}
