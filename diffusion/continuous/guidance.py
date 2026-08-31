@@ -478,7 +478,12 @@ class GuidedDenoiser:
 
     @property
     def model_evaluations(self) -> int:
-        """Forward passes issued, counted in units of one batch of B rows."""
+        """Denoiser evaluations issued, in units of one batch of B rows.
+
+        Batching several branches into one forward pass saves kernel launches
+        but not FLOPs, so this counts *rows / B*, which is what NFE-matched
+        comparisons need.
+        """
         return self._nfe
 
     def make_self_cond_state(self, cond_enabled: bool) -> SelfCondState:
@@ -519,8 +524,13 @@ class GuidedDenoiser:
             _clamp_mask_(s, null_full if branch[1] == "u" else prefix_full, prefix_mask)
         return s
 
-    def _logits(self, which: str, x, sigma_b, sc, *, posterior_temp, posterior_temp_target, pt_ctx):
-        self._nfe += 1
+    def _logits(self, which: str, x, sigma_b, sc, *, posterior_temp, posterior_temp_target,
+                pt_ctx, rows_per_eval: int):
+        # Count in units of one batch of `rows_per_eval` rows, NOT in forward
+        # passes: branches (and, for SG-exact, noise levels) are concatenated, so
+        # one pass can carry several evaluations' worth of compute. Phase-14
+        # cost comparisons depend on this being the honest number.
+        self._nfe += max(1, int(x.shape[0]) // max(1, int(rows_per_eval)))
         return _model_logits_continuous(
             self._net(which), self.cfg, x, sigma_b, sc,
             posterior_temp=posterior_temp,
@@ -618,6 +628,12 @@ class GuidedDenoiser:
                 scs.append(self._branch_sc(b, sc, x_state, prefix_full, prefix_mask,
                                            null_full, cond_enabled))
             if sg_exact:
+                # NOTE: this packs two different noise levels into one forward
+                # pass, so the network MUST condition on sigma per row. CoBit's
+                # SDT does (`SigmaEmbedding` computes sigma.log()[:, None]); a
+                # model that collapsed sigma to a scalar would silently return
+                # the current level twice and make self-guidance a no-op.
+                # `test_d9_sg_exact_requires_per_row_sigma` pins this.
                 for b in group:
                     xs.append(x_in[b])
                     sigs.append(sigma_hi_b)
@@ -629,6 +645,7 @@ class GuidedDenoiser:
                 posterior_temp=posterior_temp,
                 posterior_temp_target=posterior_temp_target,
                 pt_ctx=pt_ctx,
+                rows_per_eval=B,
             )
             for j, b in enumerate(group):
                 total_logits[b] = out[j * B:(j + 1) * B]

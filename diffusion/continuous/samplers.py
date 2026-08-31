@@ -470,6 +470,37 @@ def _resolve_guidance_config(cfg, guidance_scale, guidance) -> GuidanceConfig:
     return GuidanceConfig(cfg_scale=float(guidance_scale or 0.0))
 
 
+def _guard_legacy_guidance(who, cfg, guidance_scale, guidance, bad_model,
+                           collect_diagnostics) -> float:
+    """Accept only CFG for samplers not yet migrated to `GuidedDenoiser`.
+
+    These paths keep their original inline CFG block, so AutoGuidance,
+    Self-Guidance and the diagnostics trace are unavailable there. Failing
+    loudly beats returning unguided samples that look plausible but silently
+    ignored the requested policy.
+    """
+    if bad_model is not None:
+        raise NotImplementedError(
+            f"{who} does not support AutoGuidance (no bad_model path). "
+            "Use DDIMSampler (sampler_kind='ddim'), the headline CoBit sampler."
+        )
+    if collect_diagnostics:
+        raise NotImplementedError(
+            f"{who} does not emit a guidance diagnostics trace; use DDIMSampler."
+        )
+    if guidance is not None:
+        if guidance.ag_enabled or guidance.sg_enabled:
+            raise NotImplementedError(
+                f"{who} supports classifier-free guidance only; got "
+                f"ag_scale={guidance.ag_scale}, sg_scale={guidance.sg_scale}. "
+                "Use DDIMSampler (sampler_kind='ddim') for AutoGuidance / Self-Guidance."
+            )
+        return float(guidance.cfg_scale)
+    if guidance_scale is None:
+        guidance_scale = getattr(getattr(cfg, "evaluation", object()), "guidance_scale", 0.0)
+    return float(guidance_scale or 0.0)
+
+
 def _expand_prefix_to_batch(prefix: torch.Tensor, B: int, device, dtype) -> torch.Tensor:
     prefix = prefix.to(device=device, dtype=dtype)
     if prefix.dim() == 1:
@@ -1152,12 +1183,13 @@ class HeunSampler:
             vocab_size=self.vocab_size,
         )
 
-        use_cfg = False
-        if guidance_scale is None:
-            guidance_scale = float(
-                getattr(getattr(self.cfg, "evaluation", object()), "guidance_scale", 0.0)
-            )
-        guidance_scale = float(guidance_scale)
+        # HeunSampler still runs the legacy inline CFG block. It is a 2nd-order
+        # ablation path, not the headline `ddim_entropic` sampler, so it has not
+        # been migrated to GuidedDenoiser. Refuse anything it cannot honour
+        # rather than silently ignoring the policy.
+        guidance_scale = _guard_legacy_guidance(
+            "HeunSampler", self.cfg, guidance_scale, guidance, bad_model, collect_diagnostics,
+        )
         use_cfg = bool(cond_enabled and (guidance_scale > 0.0))
 
         if self.is_cont_tokens:
@@ -2167,7 +2199,8 @@ class PredictorCorrectorSampler(DDIMSampler):
     @torch.no_grad()
     def sample(self, num_samples, seq_len, *, conditioning_prefix_full=None,
                cond_prefix_mask=None, conditioning_prefix=None, cond_len_bits=None,
-               guidance_scale=None, schedule=None, num_steps=None, entropic_blend_alpha=None,
+               guidance_scale=None, guidance=None, bad_model=None, collect_diagnostics=False,
+               schedule=None, num_steps=None, entropic_blend_alpha=None,
                entropy_run_dir=None, sigma_min_override=None, sigma_max_override=None,
                sc_refresh_mode="refined", ati_eta=None, return_probs=False, progress=True):
         st = getattr(getattr(self.cfg, "evaluation", object()), "stochastic", None)
@@ -2187,9 +2220,12 @@ class PredictorCorrectorSampler(DDIMSampler):
                 conditioning_prefix_full=conditioning_prefix_full, cond_prefix_mask=cond_prefix_mask,
                 conditioning_prefix=conditioning_prefix, cond_len_bits=cond_len_bits,
                 is_cont_tokens=self.is_cont_tokens, vocab_size=self.vocab_size)
-            if guidance_scale is None:
-                guidance_scale = float(getattr(getattr(self.cfg, "evaluation", object()), "guidance_scale", 0.0))
-            w = float(guidance_scale)
+            # PC keeps its own predictor/corrector-asymmetric CFG block, which
+            # has no analogue in the shared combinator; refuse AG/SG here.
+            w = _guard_legacy_guidance(
+                "PredictorCorrectorSampler", self.cfg, guidance_scale, guidance,
+                bad_model, collect_diagnostics,
+            )
             w_pred = w
             # corrector uses conditional (w=1) under predictor_only when guidance is active (w>1)
             w_corr = 1.0 if (self.guidance_mode == "predictor_only" and w > 1.0) else w
