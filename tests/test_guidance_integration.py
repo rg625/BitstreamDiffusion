@@ -227,3 +227,36 @@ def test_unsupported_samplers_refuse_rather_than_ignore():
             cls(good, proc, cfg).sample(guidance=GuidanceConfig(ag_scale=2.0), **kw)
         with pytest.raises(NotImplementedError):
             cls(good, proc, cfg).sample(guidance=GuidanceConfig(sg_scale=1.0), **kw)
+
+
+def test_sg_prev_reports_when_churn_makes_it_inapplicable():
+    """SG-prev needs the cached evaluation to sit at a strictly HIGHER sigma.
+
+    EDM churn can push sigma back up between steps, which leaves no valid
+    spacing and silently disables the correction. Without this bookkeeping a
+    null self-guidance result under churn would be indistinguishable from
+    'self-guidance does not help', so the denoiser counts both outcomes.
+    """
+    from diffusion.continuous.guidance import GuidedDenoiser
+
+    stats = {}
+    orig = GuidedDenoiser.denoise
+
+    def spy(self, *a, **k):
+        stats["gdn"] = self
+        return orig(self, *a, **k)
+
+    for stochastic in (False, True):
+        cfg, good, bad, proc = _setup(stochastic=stochastic)
+        GuidedDenoiser.denoise = spy
+        try:
+            _sample(cfg, good, bad, proc, COMBINATIONS["sg_prev"], seed=1)
+        finally:
+            GuidedDenoiser.denoise = orig
+        s = stats["gdn"].sg_prev_stats
+        assert s["applied"] + s["skipped"] > 0, "no SG-prev decisions recorded"
+        if not stochastic:
+            # Deterministic sampling: sigma decreases monotonically, so every
+            # step after the first must have a usable spacing.
+            assert s["applied"] > 0
+            assert s["skipped"] == 0, s

@@ -34,7 +34,11 @@
 #   badness axis at zero GPU cost. Only train if they are truly unavailable.
 set -euo pipefail
 
-source "$(dirname "$0")/env.sh"
+# SLURM copies the batch script to /var/spool/slurm/slurmd/job<id>/slurm_script,
+# so $(dirname "$0") points at the spool directory, NOT the repository. Resolve
+# the environment from PROJECT_DIR instead.
+PROJECT_DIR="${PROJECT_DIR:-/rds/user/rg625/hpc-work/BitstreamDiffusion}"
+source "$PROJECT_DIR/scripts/hpc/guidance/env.sh"
 
 CONFIG="configs/tasks/tinygsm_bits_cfg_bad.py"
 RUN_DIR="runs/tasks/tinygsm/cobit_raw_binary_bits_cfg_bad"

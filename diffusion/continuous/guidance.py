@@ -469,12 +469,25 @@ class GuidedDenoiser:
         self.collect_diagnostics = bool(collect_diagnostics)
         self._sg_cache = _SGCache()
         self._nfe = 0
+        # SG-prev needs the previous evaluation to sit at a STRICTLY higher noise
+        # level. Under EDM churn sigma can rise between steps, which makes the
+        # spacing non-positive and the correction inapplicable. Count those so a
+        # null self-guidance result under churn is interpretable rather than
+        # mysterious.
+        self._sg_prev_applied = 0
+        self._sg_prev_skipped = 0
 
     # -- lifecycle ------------------------------------------------------------
     def reset(self) -> None:
         """Clear per-trajectory state. Call once at the start of `sample()`."""
         self._sg_cache.clear()
         self._nfe = 0
+        self._sg_prev_applied = 0
+        self._sg_prev_skipped = 0
+
+    @property
+    def sg_prev_stats(self) -> Dict[str, int]:
+        return {"applied": self._sg_prev_applied, "skipped": self._sg_prev_skipped}
 
     @property
     def model_evaluations(self) -> int:
@@ -694,6 +707,9 @@ class GuidedDenoiser:
             elif self._sg_cache.ready:
                 log_sig_cur = float(torch.log(sigma_b.reshape(-1)[0].clamp_min(1e-20)))
                 delta_i = float(self._sg_cache.log_sigma) - log_sig_cur
+                if delta_i <= 1e-8:
+                    # Churn pushed sigma back up (or held it): no valid spacing.
+                    self._sg_prev_skipped += 1
                 if delta_i > 1e-8:
                     D_prev: Dict[Branch, torch.Tensor] = {}
                     ok = True
@@ -709,7 +725,10 @@ class GuidedDenoiser:
                         if cond_enabled:
                             _clamp_mask_(D, null_full if b[1] == "u" else prefix_full, prefix_mask)
                         D_prev[b] = D
+                    if not ok:
+                        self._sg_prev_skipped += 1
                     if ok:
+                        self._sg_prev_applied += 1
                         bad_side = combine_cfg_ag(
                             D_prev, cfg_scale=gc.cfg_scale, ag_scale=gc.ag_scale,
                             cond_enabled=cond_enabled,
@@ -798,6 +817,9 @@ class GuidedDenoiser:
             out["guidance_over_score"] = shift / base_rms
         if delta_used is not None:
             out["sg_delta_used"] = float(delta_used)
+        if gc.sg_enabled and gc.sg_variant == "prev":
+            out["sg_prev_applied"] = float(self._sg_prev_applied)
+            out["sg_prev_skipped"] = float(self._sg_prev_skipped)
 
         # Bit-level saturation / entropy of the conditional posterior.
         p = D_branches[GOOD_C].detach().to(torch.float32)

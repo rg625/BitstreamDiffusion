@@ -32,7 +32,11 @@
 #   * an out-of-range index is a hard error rather than a silent no-op.
 set -euo pipefail
 
-source "$(dirname "$0")/env.sh"
+# SLURM copies the batch script to /var/spool/slurm/slurmd/job<id>/slurm_script,
+# so $(dirname "$0") points at the spool directory, NOT the repository. Resolve
+# the environment from PROJECT_DIR instead.
+PROJECT_DIR="${PROJECT_DIR:-/rds/user/rg625/hpc-work/BitstreamDiffusion}"
+source "$PROJECT_DIR/scripts/hpc/guidance/env.sh"
 
 GRID="${GRID:?set GRID=<name>, e.g. GRID=cfg_coarse}"
 OUT_DIR="${OUT_DIR:-runs/guidance/$GRID}"
