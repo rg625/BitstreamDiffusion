@@ -101,7 +101,7 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
     EDM churn and reduces to deterministic DDIM at lambda_zero=0.
     """
     model = create_model(cfg).to(device).eval()
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     model.load_state_dict(_clean_state_dict(ckpt["model"]), strict=False)
 
     if apply_ema and ckpt.get("ema") is not None:
@@ -182,7 +182,7 @@ def load_bad_model(cfg, ckpt_path: str, device, *, apply_ema: bool = True):
     architectural difference.
     """
     model = create_model(cfg).to(device).eval()
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     model.load_state_dict(_clean_state_dict(ckpt["model"]), strict=False)
     if apply_ema and ckpt.get("ema") is not None:
         ema = EMA(model, decay=float(getattr(cfg.train, "ema_decay", 0.9999)))

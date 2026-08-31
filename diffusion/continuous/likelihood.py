@@ -178,9 +178,9 @@ def _load_entropy_tables(cfg, device: torch.device):
     try:
         ckpt_path = Path(cfg.evaluation.checkpoint_path).expanduser().resolve()
         run_dir = ckpt_path.parent.parent
-        pdf = torch.load(run_dir / "entropy_pdf.pt", map_location=device)
-        cdf = torch.load(run_dir / "entropy_cdf.pt", map_location=device)
-        sigs = torch.load(run_dir / "entropy_sigmas.pt", map_location=device)
+        pdf = torch.load(run_dir / "entropy_pdf.pt", map_location=device, weights_only=True)
+        cdf = torch.load(run_dir / "entropy_cdf.pt", map_location=device, weights_only=True)
+        sigs = torch.load(run_dir / "entropy_sigmas.pt", map_location=device, weights_only=True)
         return pdf.to(device), cdf.to(device), sigs.to(device)
     except Exception:
         return None, None, None

@@ -64,9 +64,9 @@ class EntropySchedulePlotCallback(Callback):
 
         dev = trainer.device
         try:
-            pdf = torch.load(pdf_p, map_location=dev).to(dev).float()
-            cdf = torch.load(cdf_p, map_location=dev).to(dev).float()
-            sig = torch.load(sig_p, map_location=dev).to(dev).float()
+            pdf = torch.load(pdf_p, map_location=dev, weights_only=True).to(dev).float()
+            cdf = torch.load(cdf_p, map_location=dev, weights_only=True).to(dev).float()
+            sig = torch.load(sig_p, map_location=dev, weights_only=True).to(dev).float()
         except Exception as e:
             if getattr(trainer, "is_master", False):
                 print(f"[WARN] Failed to load entropy tables from {entropy_run_dir}: {e}")

@@ -1255,7 +1255,7 @@ class Trainer:
                 print(f"⚠️  RNG state restore warning: {e}")
 
     def _load_checkpoint(self, path: Path):
-        ckpt = torch.load(path, map_location="cpu")
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
         state_dict = ckpt["model"]
         clean_state_dict = {}
         for k, v in state_dict.items():
@@ -1316,7 +1316,7 @@ class Trainer:
 
         This is the "fresh run from weights" mode.
         """
-        ckpt = torch.load(path, map_location="cpu")
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
         if "model" not in ckpt:
             raise KeyError(f"Checkpoint at {path} missing key 'model'.")
 

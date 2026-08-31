@@ -103,10 +103,10 @@ class EntropyScheduleController:
 
         if pdf_p.exists() and cdf_p.exists() and sig_p.exists():
             dev = self.trainer.device
-            self.trainer._entropy_pdf = torch.load(pdf_p, map_location=dev)
-            self.trainer._entropy_cdf = torch.load(cdf_p, map_location=dev)
-            self.trainer._entropy_sigmas = torch.load(sig_p, map_location=dev)
-            self.trainer._entropy_edges = torch.load(edg_p, map_location=dev) if edg_p.exists() else None
+            self.trainer._entropy_pdf = torch.load(pdf_p, map_location=dev, weights_only=True)
+            self.trainer._entropy_cdf = torch.load(cdf_p, map_location=dev, weights_only=True)
+            self.trainer._entropy_sigmas = torch.load(sig_p, map_location=dev, weights_only=True)
+            self.trainer._entropy_edges = torch.load(edg_p, map_location=dev, weights_only=True) if edg_p.exists() else None
             self.trainer._entropy_ready = True
             self.fit_lognormal_to_entropy_profile()
 
