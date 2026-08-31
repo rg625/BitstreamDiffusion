@@ -15,7 +15,7 @@ import argparse
 import json
 import math
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
 # Columns lifted out of each result JSON. Nested blocks are flattened with a
 # prefix so the table stays flat enough for pandas/CSV without losing provenance.
