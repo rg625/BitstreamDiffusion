@@ -95,6 +95,12 @@ def _extract_code(text):
     try:
         compile(text, "<sample>", "exec")
         return text
+    except ValueError:
+        # compile() raises ValueError -- NOT SyntaxError -- when the source
+        # contains NUL bytes, which a diffusion model decoding raw bits can
+        # certainly produce. There is no recoverable prefix, and an
+        # uncompilable sample is simply a wrong answer.
+        return text
     except SyntaxError as err:
         # If parsing fails immediately, there is no useful prefix to recover.
         if err.lineno is None or err.lineno <= 1:
@@ -110,7 +116,7 @@ def _extract_code(text):
     try:
         compile(candidate, "<sample>", "exec")
         return candidate
-    except SyntaxError:
+    except (SyntaxError, ValueError):
         return text
 
 
@@ -186,9 +192,13 @@ def predict_answer(sample, timeout_s):
     over program text — many distinct programs return the same number, so
     text-level voting would badly under-count agreement.
     """
-    code = _extract_code(sample)
-
     try:
+        # Inside the guard: a sample that cannot even be parsed into candidate
+        # code is a wrong answer, not a reason to abort the whole evaluation.
+        # Guidance makes degenerate outputs more likely, so one such sample
+        # used to kill an entire sweep cell.
+        code = _extract_code(sample)
+
         with _time_limit(timeout_s):
             ns = _safe_exec_no_timer(code)
 
