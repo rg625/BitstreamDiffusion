@@ -119,18 +119,22 @@ Writes `all_cells.csv`, `per_step.csv`, `paired_comparisons.json`,
 
 ## 6. Factorial and NFE grids (after the single-axis optima are known)
 
-`grid_factorial` and `grid_nfe` take the per-axis operating points as
-arguments, so they are built once the sweeps above have picked them. Add the
-chosen values to `GRIDS` in `experiments/guidance/grids.py`, e.g.
+These two grids need one operating point per axis, which only the sweeps above
+can supply — so they are read from the environment rather than hard-coded.
+Set them to whatever the single-axis sweeps found, and **export them for the
+job too**, or the array will build a different grid than you reviewed:
 
-```python
-GRIDS["factorial"] = lambda: grid_factorial(cfg_w=3.0, ag_w=1.5, sg_w=0.5,
-                                            bad=f"{RUN_DIR}/checkpoints/step=000250000.pt")
-GRIDS["nfe"] = lambda: grid_nfe(cfg_w=3.0, ag_w=1.5, sg_w=0.5,
-                                bad=f"{RUN_DIR}/checkpoints/step=000250000.pt")
+```bash
+export GUID_CFG_W=3 GUID_AG_W=1.5 GUID_SG_W=0.5 GUID_BAD_STEP=250000
+
+$COBIT_PYTHON -m experiments.guidance.grids show factorial   # review first
+submit factorial     # 12 cells — the full 2x2x3 design
+submit nfe           # 28 cells — quality vs compute
 ```
 
-then `submit factorial` / `submit nfe`.
+`--export=ALL` in `submit` carries the `GUID_*` variables into the job.
+`GUID_BAD_STEP` is validated against the files on disk and fails loudly if the
+checkpoint is missing.
 
 ---
 

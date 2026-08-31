@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import argparse
 import itertools
+import os
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional
 
 # -----------------------------------------------------------------------------
@@ -273,6 +275,33 @@ def grid_confirm(cells: List[Cell], seeds=(42, 43, 44, 45, 46)) -> List[Cell]:
     return out
 
 
+def _operating_point(root: str = ".") -> Dict[str, object]:
+    """Per-axis operating points for the factorial and NFE grids.
+
+    These are only meaningful AFTER the single-axis sweeps have found each
+    method's useful setting, so they are read from the environment rather than
+    hard-coded: the sweep results choose them, not this file.
+
+        GUID_CFG_W=3 GUID_AG_W=1.5 GUID_SG_W=0.5 \
+        GUID_BAD_STEP=250000 python -m experiments.guidance.grids show factorial
+    """
+    bad_step = os.environ.get("GUID_BAD_STEP")
+    bad = None
+    if bad_step:
+        cand = f"{RUN_DIR}/checkpoints/step={int(bad_step):09d}.pt"
+        bad = cand if (Path(root) / cand).exists() else None
+        if bad is None:
+            raise SystemExit(f"GUID_BAD_STEP={bad_step} -> {cand} does not exist")
+    elif available_bad_checkpoints(root):
+        bad = available_bad_checkpoints(root)[0]
+    return {
+        "cfg_w": float(os.environ.get("GUID_CFG_W", 3.0)),
+        "ag_w": float(os.environ.get("GUID_AG_W", 1.5)),
+        "sg_w": float(os.environ.get("GUID_SG_W", 0.5)),
+        "bad": bad,
+    }
+
+
 GRIDS = {
     "cfg_coarse": grid_cfg_coarse,
     "cfg_stochastic": grid_cfg_stochastic,
@@ -280,14 +309,18 @@ GRIDS = {
     "sg": grid_sg,
     "sg_delta": grid_sg_delta,
     "sg_mf": grid_sg_mf,
+    "factorial": lambda root=".": grid_factorial(**_operating_point(root)),
+    "nfe": lambda root=".": grid_nfe(**_operating_point(root)),
 }
+# Grids that need to inspect the filesystem for available checkpoints.
+_ROOT_AWARE = {"ag", "factorial", "nfe"}
 
 
 def build(name: str, root: str = ".") -> List[Cell]:
     if name not in GRIDS:
         raise SystemExit(f"unknown grid {name!r}; have {sorted(GRIDS)}")
     fn = GRIDS[name]
-    return fn(root) if name == "ag" else fn()
+    return fn(root) if name in _ROOT_AWARE else fn()
 
 
 def main() -> None:
