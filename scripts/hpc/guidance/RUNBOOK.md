@@ -151,6 +151,39 @@ sbatch --array=0-35 --export="$EXPORTS,GRID=factorial_confirm" \
        scripts/hpc/guidance/array.slurm
 ```
 
+### The two control grids — submit these FIRST
+
+They are cheap and they decide whether the headline findings survive; the
+factorial and NFE grids are only worth their GPU-hours if these come back the
+right way.
+
+```bash
+# 1. Is SG-prev guidance, or just a 2nd-order solver? 15 cells, ~7 GPU-h.
+#    Heun-256 (512 NFE) vs SG-prev-512 (512 NFE) is the discriminating pair.
+sbatch --array=0-14 --export="$EXPORTS,GRID=solver_control" \
+       scripts/hpc/guidance/array.slurm
+
+# 2. maj@2 / maj@3: the deployable compute-matched baseline. 4 cells, ~2 GPU-h.
+#    Seeds 45-48, disjoint from the confirmation grids on purpose.
+sbatch --array=0-3 --export="$EXPORTS,GRID=compute_control" \
+       scripts/hpc/guidance/array.slurm
+
+# 3. Cheap ablations. 3 + 4 cells, well under 1 GPU-h each.
+sbatch --array=0-2 --export="$EXPORTS,GRID=null_ablation" \
+       scripts/hpc/guidance/array.slurm
+sbatch --array=0-3 --export="$EXPORTS,GRID=ag_ema" \
+       scripts/hpc/guidance/array.slurm
+```
+
+Then re-run §5 plus:
+
+```bash
+$COBIT_PYTHON -m experiments.guidance.compute_matched results/guidance
+```
+
+which picks up maj@k automatically once `per_problem.answer` is present (runs
+from before that change report pass@k only).
+
 Cells are idempotent (a cell whose result JSON exists is skipped), so a
 partially failed array can be resubmitted wholesale. Afterwards re-run §5;
 `analyse.py` estimates the main effects and the two- and three-way interactions

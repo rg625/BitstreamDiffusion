@@ -273,6 +273,57 @@ and not consistently signed (SG-prev moves *up* on the holdout). **The
 contamination is real but immaterial**, because the response surfaces are flat
 near their optima: selection had little to select. The ranking is unchanged.
 
+### 5.4b The compute-matched control — and what it does to the headline
+
+Every delta above compares guidance against a baseline given **half the
+compute**. CFG and AutoGuidance evaluate two branches per step: at 512 steps
+they spend 1024 model evaluations, the baseline 512. The question a user
+actually faces is not "does guidance beat the baseline" but "does guidance beat
+spending those same evaluations on two baseline samples".
+
+Computed from the confirmation seeds already on disk
+(`python -m experiments.guidance.compute_matched results/guidance`):
+
+| Arm | NFE/sample | accuracy |
+|---|---|---|
+| baseline pass@1 | 512 | 0.1385 |
+| **baseline pass@2** (oracle bound) | **1024** | **0.2012** |
+| baseline pass@3 | 1536 | 0.2396 |
+| CFG w=12 | 1024 | 0.2196 |
+| AG w=15 bad=350k | 1024 | 0.2047 |
+
+Paired against the equal-compute baseline:
+
+| Config | Δ vs baseline pass@2 | 95% CI | verdict |
+|---|---|---|---|
+| CFG w=12 | **+0.0184** | [+0.0033, +0.0341] | guidance wins |
+| CFG w=20 | +0.0152 | [−0.0008, +0.0311] | inconclusive |
+| CFG w=7 | +0.0136 | [−0.0010, +0.0288] | inconclusive |
+| CFG w=4 | +0.0003 | [−0.0136, +0.0144] | inconclusive |
+| **AG w=15 bad=350k** | +0.0035 | [−0.0114, +0.0182] | **inconclusive** |
+| AG w=6 bad=250k | −0.0220 | [−0.0356, −0.0086] | baseline wins |
+| SG-exact w=1 | −0.0778 | [−0.0890, −0.0667] | baseline wins |
+
+**This is the most important table in the report.** CFG's +0.0811 headline
+becomes **+0.0184** once the baseline is given the same compute, and only at
+w=12 does it clear zero. **AutoGuidance's advantage over simply drawing two
+samples is not resolvable at this sample size** — it is a 2× cost for an effect
+we cannot distinguish from free.
+
+Two caveats, in both directions:
+
+* pass@2 is an **oracle** bound: it needs someone to say which of the two
+  samples is right. It is therefore the *pessimistic* reading for guidance, and
+  it is not deployable. The deployable control is maj@2, which is strictly
+  weaker than pass@2, so guidance's true matched-compute margin is somewhere
+  between +0.018 and +0.081.
+* maj@2 could not be computed: the executed answers were not recorded.
+  `gsm8k_eval` now records `per_problem.answer`, and `compute_control` supplies
+  the disjoint-seed baselines needed — neither has run (§9).
+
+**SG-prev is untouched by this critique**: it runs at 512 NFE, the same as the
+baseline, so its +0.0483 is already a matched-compute result.
+
 ### 5.5 Diversity, saturation and cost
 
 Confirmation runs, averaged over seeds:
@@ -325,6 +376,27 @@ Guidance/score ratio, binned by log₁₀σ (confirmation runs, 512 steps):
   (momentum) term. The finding that the cheap variant beats the exact one is
   real, but it should not be read as "the approximation is good enough".
 
+### 5.7 The matched filter must stay out of the guidance direction
+
+`sg_mf_mode` controls whether the analytic matched filter is held fixed across
+the two σ evaluations of Self-Guidance (`hold`, so it cancels from the
+difference) or allowed to vary with σ (`vary`, so the analytic term enters the
+guidance direction). Paired, n=250:
+
+| sg_scale | hold − vary |
+|---|---|
+| 0.5 | +0.0000 |
+| 1.0 | +0.0040 |
+| 2.0 | **+0.0160** |
+
+The penalty for letting the analytic term into the direction **grows with the
+guidance scale**, which is exactly the signature the design principle predicts:
+amplifying a data-consistency term that carries no learned information is
+harmless at small weights and progressively harmful at large ones. Small and
+exploratory (n=250, one seed), but monotone and correctly signed — it is
+empirical support for keeping `mf` outside the interpolation, which the unit
+tests otherwise only assert algebraically.
+
 Figures (regenerated from the CSVs by `experiments/guidance/analyse.py`, never
 hand-edited): `results/guidance/figures/` — `cfg_scale.png`, `ag_scale.png`,
 `ag_heatmap.png`, `sg_scale.png`, `quality_vs_compute.png`,
@@ -334,42 +406,65 @@ hand-edited): `results/guidance/figures/` — `cfg_scale.png`, `ag_scale.png`,
 
 ## 6. Answers to the research questions
 
-**CFG.** Yes — the largest confirmed gain, +8.1 points (0.139 → 0.220). Useful
-from w≈4, plateauing above w≈7 with no degradation observed out to w=30 at
-n=250. Diversity cost is real but modest (distinct-2 −0.018). The instability
-region is *below* w=1, not above it. Costs 2× NFE.
+**CFG.** Yes, but the margin depends entirely on what it is compared against.
+Against a single baseline sample: **+8.1 points** (0.139 → 0.220). Against a
+baseline given the *same* 1024 evaluations (pass@2, an oracle bound): **+1.8
+points** [+0.003, +0.034]. The truth for a deployable system lies between, and
+pinning it down needs maj@2 (§9). Useful from w≈4, plateauing above w≈7 with no
+degradation to w=30. Diversity cost is the smallest of the three methods. The
+instability region is **below w=1**, not above it: w=0.25 and w=0.5 score
+exactly zero.
 
-**AutoGuidance.** Yes — a deliberately weaker CoBit checkpoint supplies a useful
-direction: +6.6 points, confirmed. The best bad model is an **intermediate**
-checkpoint (350k of 500k), not the earliest; the checkpoint closest to the good
-model (425k) is worst at every scale. AG does **not** beat CFG here (+0.066 vs
-+0.081, intervals barely overlapping) and it costs the same 2× NFE *plus* a
-second 2.1 GB model resident. It does **not** preserve diversity better than CFG, contrary
-to the usual argument for AutoGuidance: it is lower on both distinct-2 (.5966
-vs .5978) and token entropy (7.071 vs 7.078) while also less accurate, so on
-this testbed CFG dominates it on every axis measured. The "earlier checkpoint vs
-smaller model" comparison was **not run** (§9).
+**AutoGuidance.** A weaker CoBit checkpoint does supply a real direction (+6.6
+points against a single sample, confirmed). But **it does not survive the
+compute-matched control**: against baseline pass@2 the effect is +0.0035
+[−0.0114, +0.0182] — indistinguishable from simply sampling twice, at a 2× cost
+*plus* a second 2.1 GB model resident. The weaker bad model (250k) is
+significantly *worse* than the matched-compute baseline. The best bad model is
+**intermediate** (350k of 500k), not the earliest; the checkpoint nearest the
+good model (425k) is worst at every scale, consistent with a too-similar bad
+model yielding a small, noise-dominated difference. AG does not beat CFG and
+does not preserve diversity better than it. **On this testbed AutoGuidance is
+not recommended.** The smaller-model variant was not run (§9).
 
-**Self-Guidance.** Yes for SG-prev, no for SG-exact. SG-prev gains +4.8 points
-at **zero additional model evaluations** — the only method here that improves
-quality at fixed compute. SG-exact *significantly degrades* quality (−1.5
-points) while costing 2× NFE. SG-prev is stable at low σ. Its benefit was
-present at every NFE tested in exploration (64–512), so it is not a high-NFE-only
-effect; the systematic NFE study was not run (§9).
+**Self-Guidance.** Yes for SG-prev, no for SG-exact — with one large unresolved
+caveat. SG-prev gains **+4.8 points at zero additional model evaluations**, and
+because it runs at the baseline's 512 NFE this is *already* a matched-compute
+result — the only such result in the study. SG-exact significantly *degrades*
+quality (−1.5 points) at 2× cost, and loses badly to the matched-compute
+baseline (−0.078). Both are stable at low σ, where the correction decays to zero
+rather than being clipped.
 
-**Compute.** At fixed NFE, SG-prev is the only confirmed winner: it is the sole
-method whose gain is not bought with a second forward pass. At fixed *wall
-clock* the ranking is the same (1.338 vs 0.706 samples/s for CFG). Whether CFG
-still wins when given the same compute budget as a longer baseline trajectory is
-**exploratory only**: CFG at 256 steps (=512 NFE) scored .228–.252 at n=250
-against a 512-step baseline's .160, which suggests CFG survives a matched-NFE
-comparison — but the grid built to settle this did not run (§9).
+> **The caveat.** SG-prev's direction is `(delta_ref / realised log-σ spacing) ×
+> (D_cur − D_prev)` — a consecutive-step derivative estimate, amplified ~96× at
+> 512 steps, applied along the trajectory. That is structurally what a
+> second-order solver or a momentum term does, from the same two quantities. So
+> "Self-Guidance helps bitstream diffusion" and "this model was under-served by
+> a first-order solver" predict the same +4.8 points, and **the study cannot
+> currently tell them apart.** `solver_control` (Heun at matched NFE) is built
+> to decide it and has not run. Until it does, SG-prev's gain is established as
+> an *effect* but not as *guidance*.
 
-**Bitstream-specific.** Guidance halves mean bit entropy and pushes ~3 points of
-probability mass into the saturated tails, without producing invalid sequences.
-The learned and analytic components are affected differently by construction:
-the matched filter is identical across branches and cancels from every guidance
-difference, so all three mechanisms move only the learned score.
+Note also that SG-prev and SG-exact are not variants of one mechanism: at the
+scales tested SG-prev's correction is an order of magnitude larger (guidance/
+score 0.28 vs 0.02) and differently distributed in σ. The cheap variant beating
+the exact one should not be read as "the approximation is good enough".
+
+**Interactions.** No evidence either way. The factorial did not run (§9).
+
+**Compute.** SG-prev is the only method that improves quality at fixed NFE and
+fixed wall clock (512 NFE, 1.338 vs 1.349 samples/s). CFG buys a further ~2
+points over an equal-compute oracle baseline; AG buys nothing measurable. The
+full Pareto front is not established — the NFE grid did not run.
+
+**Bitstream-specific.** Guidance roughly halves mean bit entropy (.0477 → .0272
+under CFG) and pushes ~3 points of probability mass into the saturated tails,
+without producing invalid sequences (invalid-token rate stays at 3e-6 … 5e-5 and
+does not trend with guidance strength). The learned and analytic components are
+affected differently by construction — `mf` is identical across branches and
+cancels from every guidance difference — and §5.7 shows this matters
+empirically: letting `mf` into the direction costs progressively more as the
+scale grows.
 
 ---
 
@@ -377,11 +472,11 @@ difference, so all three mechanisms move only the learned score.
 
 | Situation | Recommendation |
 |---|---|
-| Best quality, compute available | **CFG w=12** (anything in 7–20 is equivalent; 12 is mid-plateau) |
-| **Fixed compute / latency** | **SG-prev w=2** — +4.8 points for free |
-| Model trained **without** conditioning dropout (CFG undefined) | **AG w=15, bad = 70% checkpoint** — the only option, not a preference |
-| Combining | not yet supported by evidence — see §9 |
-| Avoid | any CFG w<1; SG-exact at any scale tested |
+| **Fixed compute or latency** | **SG-prev w=2** — the only confirmed matched-compute gain. But run `solver_control` first: if Heun matches it, prefer the solver, which is better understood |
+| Maximum quality, compute is free | **CFG w=12** (7–20 equivalent). Confirmed to beat even an equal-compute oracle baseline, though by ~2 points rather than 8 |
+| Model trained **without** conditioning dropout | AutoGuidance is the only option, but on this testbed it did not beat sampling twice — consider multi-sample voting instead |
+| Combining methods | **No recommendation** — the factorial did not run |
+| Avoid | any CFG w<1; SG-exact at any scale; AG with a too-weak bad model (250k) |
 
 ---
 
@@ -402,34 +497,53 @@ difference, so all three mechanisms move only the learned score.
 5. **The SG δ choice is only lightly ablated** (`sg_delta` grid, n=250, 10
    cells); δ=0.5 was carried into confirmation without a confirmed optimum.
 6. **No interaction evidence.** All confirmed results are single-mechanism.
+7. **SG-prev's mechanism is unidentified.** It may be a solver improvement
+   rather than guidance; `solver_control` decides this and has not run.
+8. **The compute-matched control is one-sided.** pass@2 is an oracle bound, so
+   it under-credits guidance; maj@2 needs `compute_control`.
+9. **The 250-problem exploration prefix is a subset of the confirmation set.**
+   Quantified in §5.4a and immaterial (shifts ≤0.002), but a disjoint split
+   would have been the cleaner design.
 
 ---
 
 ## 9. What did not run
 
-Stated plainly, because these gaps bound the conclusions above.
+Stated plainly, because these gaps bound the conclusions above. All six grids
+are implemented, enumerated and covered by tests; none has been submitted.
+Submission was blocked at the tool level in the sessions that built them — the
+exact `sbatch` lines are in [`RUNBOOK.md` §6](../scripts/hpc/guidance/RUNBOOK.md).
 
-| Phase | Grid | Status |
-|---|---|---|
-| 13 — factorial | `factorial_confirm`, 36 cells, ready and reviewed | **not submitted** |
-| 14 — NFE / compute | `nfe`, 28 cells, ready and reviewed | **not submitted** |
-| 15 — temperature/FKC interaction | no grid written | not attempted |
-| 11 — smaller bad model | `train_bad_model.slurm` written | not run (needs the TinyGSM token cache, absent from this checkout) |
+| Priority | Grid | Cells | Decides |
+|---|---|---|---|
+| **1** | `solver_control` | 15 | **Is SG-prev guidance or a second-order solver?** Heun-256 at 512 NFE against SG-prev-512 at 512 NFE. The study's most interesting claim rests on this |
+| **1** | `compute_control` | 4 | **maj@2/maj@3**, the deployable compute-matched baseline. Fixes the one-sided oracle bound in §5.4b |
+| 2 | `factorial_confirm` | 36 | main effects, 2-way and 3-way interactions |
+| 2 | `nfe` | 28 | quality vs compute Pareto front |
+| 3 | `null_ablation` | 3 | how much CFG depends on the trained null |
+| 3 | `ag_ema` | 4 | EMA vs raw weights as a badness axis |
 
-The two ready grids were blocked at the submission step in this session; the
-exact `sbatch` lines are in
-[`RUNBOOK.md` §6](../scripts/hpc/guidance/RUNBOOK.md). Until they run:
+Not attempted at all:
 
-* **no claim is made about whether CFG+AG, CFG+SG or the three-way combination
-  helps.** The single 12-condition exploratory factorial cell that exists
-  (`CFG+AG+SG-prev` at 32 steps, n=16) is far too small to read — a Wilson
-  interval of [0.011, 0.283] around a point estimate of 0.0625. `analyse.py` refuses to estimate interaction effects
-  until the grid is complete, and prints `factorial grid incomplete` instead.
-* **the quality-vs-compute Pareto front is not established**, only suggested by
-  the exploratory numbers in §6.
+* **Phase 15 — temperature/FKC interaction.** No grid written.
+* **Phase 11B — a separately trained smaller bad model.** `train_bad_model.slurm`
+  exists but needs the TinyGSM token cache, absent from this checkout.
+* **Stochastic sampling.** `cfg_stochastic` is defined but unrun; all results
+  are DDIM deterministic (γ=0). AutoGuidance and Self-Guidance are implemented
+  for `DDIMSampler` only — the other samplers keep their inline CFG block and
+  raise rather than silently ignore the policy — so guidance under EDM churn,
+  EM, PC or FKC is entirely unmeasured.
 
-Consequently the "recommended defaults" table offers no combined configuration.
-Everything needed to close both gaps is committed; they are ~21 GPU-hours.
+Consequently:
+
+* **No claim is made about combinations.** The single exploratory cell that
+  exists (`CFG+AG+SG-prev`, 32 steps, n=16) has a Wilson interval of
+  [0.011, 0.283] around 0.0625. `analyse.py` refuses to estimate interaction
+  effects until the factorial completes.
+* **The compute Pareto front is not established.**
+* **SG-prev's mechanism is unidentified** — see the caveat in §6.
+
+Total outstanding: ~90 cells, roughly 25 GPU-hours.
 
 ---
 
