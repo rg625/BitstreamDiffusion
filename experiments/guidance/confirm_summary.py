@@ -60,11 +60,13 @@ def outcomes(path: str) -> Dict[int, int]:
     return {int(i): int(c) for i, c in zip(idx, cor)}
 
 
-def seed_mean(files: List[str]) -> Dict[int, float]:
-    """Per-problem outcome averaged over seeds."""
+def seed_mean(files: List[str], min_idx: Optional[int] = None) -> Dict[int, float]:
+    """Per-problem outcome averaged over seeds, optionally restricted to a holdout."""
     acc = collections.defaultdict(list)
     for f in files:
         for i, c in outcomes(f).items():
+            if min_idx is not None and i < min_idx:
+                continue
             acc[i].append(c)
     return {i: sum(v) / len(v) for i, v in acc.items() if v}
 
@@ -100,6 +102,12 @@ def main() -> None:
     ap.add_argument("results", help="directory containing all_cells.csv")
     ap.add_argument("--n-boot", type=int, default=20000)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--holdout-from", type=int, default=None, metavar="IDX",
+                    help="Keep only problems with index >= IDX. The exploration "
+                         "sweeps ran on a 250-problem PREFIX and chose the "
+                         "operating points; the confirmation set contains those "
+                         "250, so --holdout-from 250 re-estimates every effect "
+                         "on problems that played no part in the selection.")
     args = ap.parse_args()
 
     root = Path(args.results)
@@ -115,14 +123,14 @@ def main() -> None:
     base_files = [r["result_file"] for r in by.get("baseline", [])]
     if not base_files:
         raise SystemExit("no baseline rows in the confirmation grids")
-    base = seed_mean(base_files)
+    base = seed_mean(base_files, args.holdout_from)
     base_acc = sum(base.values()) / len(base)
 
     out = []
     for name, rs in by.items():
         if name == "baseline":
             continue
-        arm = seed_mean([r["result_file"] for r in rs])
+        arm = seed_mean([r["result_file"] for r in rs], args.holdout_from)
         st = paired_bootstrap(base, arm, n_boot=args.n_boot)
         if st is None:
             continue
@@ -140,7 +148,9 @@ def main() -> None:
 
     hdr = (f"{'config':<26}{'acc':>8}{'base':>8}{'delta':>9}"
            f"{'95% CI':>20}{'p':>8}{'NFE':>7}{'seeds':>7}")
-    print(f"\nConfirmation stage -- GSM8K test, {len(base)} problems, "
+    scope = (f"holdout: problems >= {args.holdout_from}"
+             if args.holdout_from else "all problems")
+    print(f"\nConfirmation stage -- GSM8K test, {len(base)} problems ({scope}), "
           f"seed-averaged, paired bootstrap over problems "
           f"({args.n_boot} resamples)\n")
     print(hdr)
@@ -152,7 +162,8 @@ def main() -> None:
         print(f"{r['config']:<26}{r['accuracy']:>8.4f}{r['baseline']:>8.4f}"
               f"{r['delta']:>+9.4f}{ci:>20}{p:>8}{nfe:>7}{r['n_seeds']:>7}")
 
-    dest = Path(args.out or (root / "confirm_summary.json"))
+    suffix = f"_holdout{args.holdout_from}" if args.holdout_from else ""
+    dest = Path(args.out or (root / f"confirm_summary{suffix}.json"))
     dest.write_text(json.dumps(out, indent=2))
     print(f"\n[confirm] wrote {dest}")
 

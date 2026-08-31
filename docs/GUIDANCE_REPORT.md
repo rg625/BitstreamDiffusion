@@ -245,6 +245,34 @@ is a plateau above w≈7, not a peak.** The n=250 sweep's apparent maximum at
 w=20 was noise, which is precisely the failure mode the confirmation stage
 exists to catch.
 
+### 5.4a Selection contamination, and why it does not bite
+
+The operating points confirmed above (w=12, ag=15/bad=350k, sg=2) were **chosen
+on the 250-problem exploration prefix, which is a subset of the 1319-problem
+confirmation set**. 19% of the confirmation set therefore played a part in
+selecting what was confirmed on it — a winner's-curse channel that inflates
+every effect by an unknown amount.
+
+Re-estimating on the disjoint 1069 problems that took no part in the selection
+(`confirm_summary.py --holdout-from 250`):
+
+| Config | Δ (all 1319) | Δ (held-out 1069) | shift |
+|---|---|---|---|
+| CFG w=12 | +0.0811 | +0.0804 [+0.0655,+0.0957] | −0.0007 |
+| CFG w=20 | +0.0778 | +0.0761 [+0.0605,+0.0920] | −0.0018 |
+| CFG w=7 | +0.0763 | +0.0755 [+0.0608,+0.0904] | −0.0009 |
+| AG w=15 bad=350k | +0.0662 | +0.0649 [+0.0505,+0.0795] | −0.0014 |
+| CFG w=4 | +0.0629 | +0.0608 [+0.0477,+0.0745] | −0.0021 |
+| SG-prev w=2 | +0.0483 | +0.0496 [+0.0393,+0.0599] | +0.0013 |
+| AG w=6 bad=250k | +0.0407 | +0.0387 [+0.0259,+0.0511] | −0.0020 |
+| SG-prev w=1 | +0.0351 | +0.0362 [+0.0278,+0.0446] | +0.0010 |
+| SG-exact w=1 | −0.0152 | −0.0156 [−0.0231,−0.0081] | −0.0004 |
+
+Every shift is ≤0.002 — an order of magnitude inside the confidence intervals,
+and not consistently signed (SG-prev moves *up* on the holdout). **The
+contamination is real but immaterial**, because the response surfaces are flat
+near their optima: selection had little to select. The ranking is unchanged.
+
 ### 5.5 Diversity, saturation and cost
 
 Confirmation runs, averaged over seeds:
