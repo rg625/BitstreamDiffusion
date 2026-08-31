@@ -145,6 +145,20 @@ def grid_cfg_coarse() -> List[Cell]:
     return [Cell(name=f"cfg_w{w:g}", guidance_scale=w, **DET) for w in ws]
 
 
+def grid_cfg_high() -> List[Cell]:
+    """Extension of the coarse CFG sweep past w=7.
+
+    The coarse pass rose monotonically to w=7 (0.164 -> 0.224 at n=250,
+    NFE=256) without turning over, so the optimum is not yet bracketed and no
+    "best scale" can be claimed. This extends the range until accuracy actually
+    degrades. Note the earlier 250k-checkpoint sweep peaked near w=6 and
+    declined by w=12, so the turnover is expected somewhere in here -- but the
+    500k model may behave differently, which is the point of measuring.
+    """
+    ws = [8.0, 10.0, 12.0, 15.0, 20.0, 30.0]
+    return [Cell(name=f"cfghigh_w{w:g}", guidance_scale=w, **DET) for w in ws]
+
+
 def grid_cfg_stochastic() -> List[Cell]:
     """The same sweep under EDM churn, to separate 'guidance helps' from
     'guidance substitutes for stochasticity'."""
@@ -304,6 +318,7 @@ def _operating_point(root: str = ".") -> Dict[str, object]:
 
 GRIDS = {
     "cfg_coarse": grid_cfg_coarse,
+    "cfg_high": grid_cfg_high,
     "cfg_stochastic": grid_cfg_stochastic,
     "ag": grid_ag,
     "sg": grid_sg,
