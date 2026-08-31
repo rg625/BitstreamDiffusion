@@ -166,6 +166,27 @@ def grid_cfg_stochastic() -> List[Cell]:
     return [Cell(name=f"cfgstoch_w{w:g}", guidance_scale=w, **STOCH) for w in ws]
 
 
+def grid_cfg_confirm() -> List[Cell]:
+    """Phase 16: confirm the CFG finding at full evaluation size, several seeds.
+
+    The exploratory sweep (n=250, NFE=256) put the optimum at w~20 with a broad
+    flat top from w~7 upward. This promotes a shortlist spanning that plateau,
+    plus the baseline and one clearly sub-optimal point, to the full 1319-problem
+    test set at NFE=512 across three seeds.
+
+    Scales are held to the shortlist rather than re-swept: re-optimising on the
+    confirmation set would be fitting the scale to the data it is then reported
+    on. Seeds vary the initial noise; within a seed every method sees identical
+    problems AND identical noise, so the comparison stays paired on both.
+    """
+    out = []
+    for w in (0.0, 4.0, 7.0, 12.0, 20.0):
+        for seed in (42, 43, 44):
+            out.append(Cell(name=f"cfgconf_w{w:g}_s{seed}", guidance_scale=w,
+                            steps=512, limit=FULL_LIMIT, seed=seed, **DET))
+    return out
+
+
 def grid_ag(root: str = ".") -> List[Cell]:
     """Phase 11: the badness x scale surface.
 
@@ -319,6 +340,7 @@ def _operating_point(root: str = ".") -> Dict[str, object]:
 GRIDS = {
     "cfg_coarse": grid_cfg_coarse,
     "cfg_high": grid_cfg_high,
+    "cfg_confirm": grid_cfg_confirm,
     "cfg_stochastic": grid_cfg_stochastic,
     "ag": grid_ag,
     "sg": grid_sg,
