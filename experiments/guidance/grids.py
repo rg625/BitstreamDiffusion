@@ -187,6 +187,28 @@ def grid_cfg_confirm() -> List[Cell]:
     return out
 
 
+def grid_sg_confirm() -> List[Cell]:
+    """Phase 16: confirm the SG-prev finding at full evaluation size.
+
+    The exploratory grid put SG-prev at w=1 between +0.028 and +0.036 across
+    NFE 64..512 (significant at 3 of 4, same sign and magnitude at all 4) at
+    ZERO extra model evaluations, while SG-exact was consistently negative at
+    2x the cost. That is the study's most useful claim, so it gets the same
+    full-size treatment as CFG.
+
+    SG-exact is carried along at the same scale, not dropped: a confirmation
+    that only re-runs the winner cannot distinguish "SG-prev works" from
+    "this evaluation set happens to favour it".
+    """
+    out = []
+    for variant, w in (("prev", 0.0), ("prev", 1.0), ("prev", 2.0), ("exact", 1.0)):
+        for seed in (42, 43, 44):
+            tag = "base" if w == 0 else f"{variant}{w:g}"
+            out.append(Cell(name=f"sgconf_{tag}_s{seed}", sg_scale=w, sg_variant=variant,
+                            steps=512, limit=FULL_LIMIT, seed=seed, **DET))
+    return out
+
+
 def grid_ag(root: str = ".") -> List[Cell]:
     """Phase 11: the badness x scale surface.
 
@@ -363,6 +385,7 @@ GRIDS = {
     "cfg_coarse": grid_cfg_coarse,
     "cfg_high": grid_cfg_high,
     "cfg_confirm": grid_cfg_confirm,
+    "sg_confirm": grid_sg_confirm,
     "cfg_stochastic": grid_cfg_stochastic,
     "ag": grid_ag,
     "ag_high": grid_ag_high,
