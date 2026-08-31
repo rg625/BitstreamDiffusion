@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import os
 from pathlib import Path
 
@@ -27,13 +28,77 @@ import torch
 
 from data.tinygsm import GSM8KTestDataset
 from data.task_codec import bits_to_token_ids
+from diffusion.continuous.guidance import GuidanceConfig
+from evaluation.guidance_metrics import (
+    efficiency_metrics, summarise_trace, text_metrics,
+)
 from evaluation.tasks._task_common import (
     load_config, load_model_and_sampler, configure_stochastic, sample_bits,
-    resolve_sigma_data,
+    resolve_sigma_data, load_bad_model,
 )
 from evaluation.tasks.sandbox_gsm8k import (
     evaluate_samples, predict_answer, _extract_gold_answer, _numbers_equal,
 )
+
+
+def _ckpt_tag(path: str) -> str:
+    """Short, filename-safe identifier for a checkpoint (e.g. '250000')."""
+    stem = Path(path).stem
+    digits = "".join(ch for ch in stem if ch.isdigit())
+    return digits or stem.replace("=", "")
+
+
+def _branches_per_step(gcfg) -> float:
+    """Denoiser evaluations per sampler step implied by a guidance policy.
+
+    Recorded so quality-vs-compute comparisons can be made without re-running:
+    CFG and AutoGuidance each double the branch count, and SG-exact doubles it
+    again, while SG-prev is free.
+    """
+    b = 1.0
+    if gcfg.cfg_enabled:
+        b *= 2.0
+    if gcfg.ag_enabled:
+        b *= 2.0
+    if gcfg.sg_enabled and gcfg.sg_variant == "exact":
+        b *= 2.0
+    return b
+
+
+def _provenance(args, cfg) -> dict:
+    """Everything needed to reproduce this cell exactly."""
+    import platform
+    import subprocess
+
+    def _git(*a):
+        try:
+            return subprocess.run(["git", *a], capture_output=True, check=True,
+                                  cwd=Path(__file__).resolve().parents[2]).stdout.decode().strip()
+        except Exception:
+            return None
+
+    return {
+        "git_commit": _git("rev-parse", "HEAD"),
+        "git_branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "git_dirty": bool(_git("status", "--porcelain")),
+        "config": str(args.config),
+        "checkpoint": str(args.checkpoint),
+        "bad_checkpoint": str(args.bad_checkpoint) if args.bad_checkpoint else None,
+        "dataset": "gsm8k",
+        "dataset_split": "test",
+        "gsm8k_test_path": str(getattr(cfg.data, "gsm8k_test_path", "")),
+        "schedule": args.schedule,
+        "sampler_kind": args.sampler_kind,
+        "num_sampling_steps": int(args.steps or getattr(cfg.evaluation, "num_sampling_steps", 1024)),
+        "seed": int(args.seed),
+        "torch_version": torch.__version__,
+        "cuda_version": torch.version.cuda,
+        "gpu_name": (torch.cuda.get_device_name(0) if torch.cuda.is_available() else None),
+        "gpu_count": (torch.cuda.device_count() if torch.cuda.is_available() else 0),
+        "hostname": platform.node(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "slurm_array_task_id": os.environ.get("SLURM_ARRAY_TASK_ID"),
+    }
 
 
 def bootstrap_ci(correct: np.ndarray, n_boot: int, seed: int = 0):
@@ -260,6 +325,34 @@ def main():
     ap.add_argument("--guidance_scale", type=float, default=0.0,
                     help="Classifier-free guidance weight w (probs_u + w*(probs_c-probs_u)). "
                          "0 => no guidance. Requires a checkpoint trained with cond dropout.")
+    # ---- AutoGuidance (Karras et al.) -----------------------------------
+    ap.add_argument("--ag_scale", type=float, default=0.0,
+                    help="AutoGuidance weight w_ag in s_bad + w_ag*(s_good - s_bad). "
+                         "0 disables. Requires --bad_checkpoint.")
+    ap.add_argument("--bad_checkpoint", default=None,
+                    help="Checkpoint for AutoGuidance's deliberately weaker model "
+                         "(an EARLIER checkpoint of the same run is the confound-free choice).")
+    ap.add_argument("--bad_ema", type=int, default=1,
+                    help="1=EMA weights for the bad model, 0=raw. Raw weights of the same "
+                         "step are themselves a mild 'badness' axis.")
+    # ---- Self-guidance ---------------------------------------------------
+    ap.add_argument("--sg_scale", type=float, default=0.0,
+                    help="Self-guidance weight. 0 disables.")
+    ap.add_argument("--sg_variant", default="prev", choices=["prev", "exact"],
+                    help="prev = reuse the previous step's prediction (0 extra NFE); "
+                         "exact = a second evaluation at sigma*exp(sg_delta).")
+    ap.add_argument("--sg_delta", type=float, default=0.5,
+                    help="Reference noise-level offset in LOG-SIGMA units. Also the "
+                         "normalisation scale that makes SG-prev comparable across NFE.")
+    ap.add_argument("--sg_mf_mode", default="hold", choices=["hold", "vary"],
+                    help="hold (default) re-attaches the analytic matched filter at the "
+                         "true sigma so self-guidance amplifies only the learned logit; "
+                         "vary is the naive form, kept for ablation.")
+    ap.add_argument("--collect_diagnostics", action="store_true",
+                    help="Record per-step guidance diagnostics (direction norms, bit "
+                         "entropy, saturation) as a function of sigma.")
+    ap.add_argument("--tag", default=None,
+                    help="Optional extra tag appended to the result filename.")
     ap.add_argument("--ema", type=int, default=1, help="1=EMA weights (headline), 0=raw weights")
     ap.add_argument("--steps", type=int, default=None)
     ap.add_argument("--batch_size", type=int, default=64)
@@ -399,6 +492,28 @@ def main():
         fkc_sc_policy=args.sc_policy, fkc_prior_mode=args.prior_mode,
         fkc_proposal=args.proposal, fkc_churn_gamma=args.churn_gamma,
         fkc_resample_entropy_frac=args.resample_entropy_frac)
+    # ---- guidance policy -------------------------------------------------
+    # guidance_scale keeps its historical meaning (CFG weight w); ag_scale and
+    # sg_scale are new axes. All three combine inside GuidedDenoiser.
+    gcfg = GuidanceConfig(
+        cfg_scale=float(args.guidance_scale or 0.0),
+        ag_scale=float(args.ag_scale or 0.0),
+        sg_scale=float(args.sg_scale or 0.0),
+        sg_variant=args.sg_variant,
+        sg_delta=float(args.sg_delta),
+        sg_mf_mode=args.sg_mf_mode,
+    )
+    bad_model = None
+    if gcfg.ag_enabled:
+        if not args.bad_checkpoint:
+            raise SystemExit("--ag_scale > 0 requires --bad_checkpoint")
+        bad_model = load_bad_model(cfg, args.bad_checkpoint, device,
+                                   apply_ema=bool(args.bad_ema))
+    elif args.bad_checkpoint:
+        print("[gsm8k] WARNING: --bad_checkpoint given but --ag_scale is 0; "
+              "AutoGuidance is OFF and the bad model will not be loaded.", flush=True)
+    print(f"[gsm8k] guidance = {gcfg.describe()}", flush=True)
+
     schedule = args.schedule
     configure_stochastic(cfg, mode=args.sampler, gamma=args.gamma, num_steps=steps)
 
@@ -419,6 +534,12 @@ def main():
     n_invalid_tok = 0
     n_gen_tokens = 0
     records = []
+    all_texts = []
+    guidance_traces = []
+    batch_secs = []
+    t_start = time.time()
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
 
     for start in range(0, n, args.batch_size):
         idxs = list(range(start, min(start + args.batch_size, n)))
@@ -426,12 +547,15 @@ def main():
         pm = torch.stack([ds[i]["prefix_mask"] for i in idxs]).to(device)
         plens = [int(ds[i]["prompt_len_tokens"]) for i in idxs]
 
+        t_batch = time.time()
         bits = sample_bits(
             cfg, sampler, prefix_full=x0, prefix_mask=pm, num_steps=steps,
             schedule=schedule, entropy_run_dir=str(run_dir),
             sigma_min_override=args.sigma_min, sigma_max_override=args.sigma_max,
             seed=args.seed,
-            guidance_scale=args.guidance_scale,
+            guidance=gcfg,
+            bad_model=bad_model,
+            collect_diagnostics=bool(args.collect_diagnostics),
             posterior_temp=args.posterior_temp,
             posterior_temp_target=args.posterior_temp_target,
             posterior_temp_schedule=args.posterior_temp_schedule,
@@ -443,6 +567,11 @@ def main():
             score_temp_tau=args.score_temp_tau,
             score_temp_clean_var=args.score_temp_clean_var,
         )
+        if args.collect_diagnostics:
+            bits, trace = bits
+            if trace:
+                guidance_traces.append(trace)
+        batch_secs.append(time.time() - t_batch)
         gen_ids = bits_to_token_ids(bits, bpt)  # [B,512]
 
         for b, gi in enumerate(idxs):
@@ -456,6 +585,7 @@ def main():
             text = tok.decode(safe, skip_special_tokens=True)
 
             rec = ds[gi]
+            all_texts.append(text)
             ok = evaluate_samples(text, rec["response_ground_truth"], timeout_s)
             per_correct.append(1 if ok else 0)
             if len(records) < 100:
@@ -473,12 +603,26 @@ def main():
     correct = np.asarray(per_correct, dtype=np.float64)
     acc, lo, hi = bootstrap_ci(correct, n_boot, seed=args.seed)
 
+    wall = time.time() - t_start
+    peak = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else None
+
     result = {
         "task": "gsm8k",
         "checkpoint": str(args.checkpoint),
         "sampler": args.sampler,
         "gamma": args.gamma,
         "guidance_scale": args.guidance_scale,
+        # ---- guidance policy (full provenance) ----
+        "guidance": gcfg.describe(),
+        "ag_scale": float(args.ag_scale or 0.0),
+        "bad_checkpoint": str(args.bad_checkpoint) if args.bad_checkpoint else None,
+        "bad_ema": int(bool(args.bad_ema)),
+        "sg_scale": float(args.sg_scale or 0.0),
+        "sg_variant": args.sg_variant,
+        "sg_delta": float(args.sg_delta),
+        "sg_mf_mode": args.sg_mf_mode,
+        # ---- reproducibility ----
+        "provenance": _provenance(args, cfg),
         "sampler_kind": args.sampler_kind,
         "lambda_zero": args.lambda_zero,
         "lambda_profile": args.lambda_profile,
@@ -504,6 +648,18 @@ def main():
         "num_correct": int(correct.sum()),
         "invalid_token_rate": n_invalid_tok / max(1, n_gen_tokens),
         "timeout_s": timeout_s,
+        "seed": int(args.seed),
+        "batch_size": int(args.batch_size),
+        # ---- diversity / distributional ----
+        "diversity": text_metrics(all_texts),
+        # ---- efficiency ----
+        "efficiency": efficiency_metrics(
+            wall_clock_s=wall, n_samples=int(n), n_gen_tokens=int(n_gen_tokens),
+            nfe_per_sample=float(steps) * _branches_per_step(gcfg),
+            peak_gpu_bytes=peak,
+        ),
+        # ---- bit-level / guidance diagnostics vs sigma ----
+        "guidance_diagnostics": summarise_trace(guidance_traces) if guidance_traces else {},
         "sample_records": records,
     }
     tag = f"{args.sampler}_g{args.gamma}_w{args.guidance_scale}_s{steps}_sd{sigma_data_used:.4f}_ema{int(bool(args.ema))}"
@@ -515,6 +671,18 @@ def main():
             tag += f"_{args.posterior_temp_space}"
             if args.codeword_topk is not None:
                 tag += f"k{args.codeword_topk}"
+    if float(args.ag_scale or 0.0) > 0.0:
+        tag += f"_ag{args.ag_scale:g}"
+        if args.bad_checkpoint:
+            tag += f"_bad{_ckpt_tag(args.bad_checkpoint)}"
+        if not args.bad_ema:
+            tag += "_badraw"
+    if float(args.sg_scale or 0.0) != 0.0:
+        tag += f"_sg{args.sg_scale:g}{args.sg_variant}_d{args.sg_delta:g}"
+        if args.sg_mf_mode != "hold":
+            tag += f"_mf{args.sg_mf_mode}"
+    if args.tag:
+        tag += f"_{args.tag}"
     if abs(float(args.score_temp_tau) - 1.0) > 1e-8:
         tag += f"_tau{args.score_temp_tau:g}"
     if args.sigma_max is not None:

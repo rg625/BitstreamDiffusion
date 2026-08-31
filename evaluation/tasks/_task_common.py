@@ -172,6 +172,32 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
     return model, sampler
 
 
+def load_bad_model(cfg, ckpt_path: str, device, *, apply_ema: bool = True):
+    """Load a second network to act as AutoGuidance's deliberately weaker model.
+
+    Karras et al. guide with a *bad version of the same model*: same
+    architecture and conditioning, less training (or less capacity). We
+    therefore build it from the SAME config as the good model and only swap the
+    weights, so the AG direction isolates training quality rather than an
+    architectural difference.
+    """
+    model = create_model(cfg).to(device).eval()
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+    model.load_state_dict(_clean_state_dict(ckpt["model"]), strict=False)
+    if apply_ema and ckpt.get("ema") is not None:
+        ema = EMA(model, decay=float(getattr(cfg.train, "ema_decay", 0.9999)))
+        try:
+            ema.load_state_dict(ckpt["ema"])
+            ema.to(device)
+            ema.apply(model)
+            print(f"[task_eval] bad model: applied EMA weights from {ckpt_path}")
+        except Exception as e:  # pragma: no cover
+            print(f"[task_eval] WARNING: bad-model EMA failed ({e}); using raw weights")
+    for p_ in model.parameters():
+        p_.requires_grad_(False)
+    return model
+
+
 def configure_stochastic(cfg, *, mode: str, gamma: float, num_steps: int, s_noise: float = 1.003,
                          qlo: float = 0.0, qhi: float = 1.0):
     """Set cfg.evaluation.stochastic in place (read by SigmaSchedule.resolve_stochastic_cfg).
@@ -216,6 +242,9 @@ def sample_bits(
     sigma_max_override: Optional[float] = None,
     seed: Optional[int] = None,
     guidance_scale: Optional[float] = None,
+    guidance=None,
+    bad_model=None,
+    collect_diagnostics: bool = False,
     posterior_temp: float = 1.0,
     posterior_temp_target: str = "learned",
     posterior_temp_schedule: str = "const",
@@ -250,7 +279,7 @@ def sample_bits(
     dev = prefix_full.device
 
     with torch.autocast(dev.type, enabled=use_amp, dtype=amp_dtype):
-        x, probs = sampler.sample(
+        out = sampler.sample(
             num_samples=B,
             seq_len=S,
             conditioning_prefix_full=prefix_full,
@@ -260,7 +289,10 @@ def sample_bits(
             entropy_run_dir=entropy_run_dir,
             sigma_min_override=sigma_min_override,
             sigma_max_override=sigma_max_override,
-            guidance_scale=guidance_scale,
+            guidance_scale=(None if guidance is not None else guidance_scale),
+            guidance=guidance,
+            bad_model=bad_model,
+            collect_diagnostics=bool(collect_diagnostics),
             sc_refresh_mode="carry",
             ati_eta=0.0,
             return_probs=True,
@@ -276,8 +308,14 @@ def sample_bits(
             score_temp_tau=score_temp_tau,
             score_temp_clean_var=score_temp_clean_var,
         )
+    # collect_diagnostics adds a third element (the per-step guidance trace).
+    if collect_diagnostics:
+        x, probs, trace = out
+    else:
+        x, probs = out
+        trace = None
     bits = (probs.float() >= 0.5).long()
-    return bits
+    return (bits, trace) if collect_diagnostics else bits
 
 
 @torch.no_grad()
