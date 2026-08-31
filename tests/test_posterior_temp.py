@@ -152,12 +152,37 @@ def test_codeword_T1_with_mf_full_codebook():
 
 def test_codeword_lowT_full_codebook_is_perbit_map():
     # Full codebook => joint MAP == per-bit MAP, so D -> 1[ell>0].
+    #
+    # The T->0 limit is only reached once temp is small *relative to the logit
+    # margin*: a bit with |ell| ~ temp keeps residual mass 1/(1+exp(|ell|/temp)),
+    # so an unseeded randn that happens to land a logit near zero fails this by
+    # up to 0.5 while the implementation is perfectly correct. Seed the draw and
+    # hold the margin away from zero, which is the precondition the claim
+    # actually carries.
     from diffusion.continuous.logit_postprocess import _codeword_sharpen
     m = 4
     C = _full_codebook(m)
+    torch.manual_seed(0)
     raw = torch.randn(2, 2 * m)
-    D = _codeword_sharpen(raw, None, temp=1e-3, target="learned", codebook=C)
+    temp = 1e-3
+    margin = 0.05  # >> temp, so residual mass is exp(-50), far below atol
+    raw = raw.sign() * raw.abs().clamp_min(margin)
+    D = _codeword_sharpen(raw, None, temp=temp, target="learned", codebook=C)
     assert torch.allclose(D, (raw > 0).float(), atol=1e-3)
+
+
+def test_codeword_lowT_residual_mass_matches_margin_law():
+    # Pin the quantitative law the test above relies on: the deviation from the
+    # hard per-bit MAP is exactly the two-state Gibbs weight 1/(1+exp(|ell|/T)).
+    # This is what makes the margin precondition principled rather than a fudge.
+    from diffusion.continuous.logit_postprocess import _codeword_sharpen
+    C = _full_codebook(3)
+    temp = 1e-3
+    for ell in (0.0005, 0.001, 0.002, 0.005):
+        raw = torch.full((1, 6), float(ell))
+        D = _codeword_sharpen(raw, None, temp=temp, target="learned", codebook=C)
+        expected = 1.0 / (1.0 + math.exp(-ell / temp))
+        assert torch.allclose(D, torch.full_like(D, expected), atol=1e-6), ell
 
 
 def test_codeword_restricted_avoids_invalid_corner():

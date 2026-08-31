@@ -411,6 +411,19 @@ def _operating_point(root: str = ".") -> Dict[str, object]:
     }
 
 
+def grid_factorial_confirm(root: str = ".") -> List[Cell]:
+    """Phase 13 at confirmation grade: the 12-cell factorial, full test set, 3 seeds.
+
+    The n=250 exploration factorial cannot resolve interactions: its paired
+    deltas carry a +/-0.04 CI while a two-way interaction is second-order and
+    smaller than either main effect. Promoting the same 12 cells to the full
+    1319 problems and three seeds -- the settings the single-axis confirmations
+    already used, so the per-axis operating points transfer unchanged -- is what
+    makes an interaction estimate meaningful rather than decorative.
+    """
+    return grid_confirm(grid_factorial(**_operating_point(root)), seeds=(42, 43, 44))
+
+
 GRIDS = {
     "cfg_coarse": grid_cfg_coarse,
     "cfg_high": grid_cfg_high,
@@ -424,10 +437,12 @@ GRIDS = {
     "sg_delta": grid_sg_delta,
     "sg_mf": grid_sg_mf,
     "factorial": lambda root=".": grid_factorial(**_operating_point(root)),
+    "factorial_confirm": grid_factorial_confirm,
     "nfe": lambda root=".": grid_nfe(**_operating_point(root)),
 }
 # Grids that need to inspect the filesystem for available checkpoints.
-_ROOT_AWARE = {"ag", "ag_high", "ag_confirm", "factorial", "nfe"}
+_ROOT_AWARE = {"ag", "ag_high", "ag_confirm", "factorial", "factorial_confirm",
+               "nfe"}
 
 
 def build(name: str, root: str = ".") -> List[Cell]:
