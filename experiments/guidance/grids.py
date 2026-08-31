@@ -249,6 +249,36 @@ def grid_ag_high(root: str = ".") -> List[Cell]:
     return out
 
 
+def grid_ag_confirm(root: str = ".") -> List[Cell]:
+    """Phase 16: resolve whether AutoGuidance actually helps.
+
+    The extended sweep produced two individually significant cells (bad=350k
+    w=15, +0.056, p=0.029; bad=250k w=6, +0.044, p=0.039). That is NOT the same
+    standard of evidence as CFG or SG-prev: across ~30 AG cells, two hits at
+    p<0.05 is roughly the chance expectation, whereas CFG showed a large effect
+    consistent across a dozen scales and SG-prev the same effect at four
+    independent NFE settings. AG's evidence rests on isolated cells and could
+    easily be selection.
+
+    So the two candidates are re-measured on the full test set across three
+    seeds, against a shared baseline. The scales are fixed from the exploratory
+    stage and not re-tuned here.
+    """
+    bads = {_step_of(b): b for b in available_bad_checkpoints(root)}
+    out = []
+    for seed in (42, 43, 44):
+        out.append(Cell(name=f"agconf_base_s{seed}", steps=512,
+                        limit=FULL_LIMIT, seed=seed, **DET))
+    for step, w in (("000350000", 15.0), ("000250000", 6.0)):
+        if step not in bads:
+            continue
+        for seed in (42, 43, 44):
+            out.append(Cell(name=f"agconf_b{step}_w{w:g}_s{seed}", ag_scale=w,
+                            bad_checkpoint=bads[step], steps=512,
+                            limit=FULL_LIMIT, seed=seed, **DET))
+    return out
+
+
 def grid_sg() -> List[Cell]:
     """Phase 12: SG-prev vs SG-exact across strength and NFE.
 
@@ -386,6 +416,7 @@ GRIDS = {
     "cfg_high": grid_cfg_high,
     "cfg_confirm": grid_cfg_confirm,
     "sg_confirm": grid_sg_confirm,
+    "ag_confirm": grid_ag_confirm,
     "cfg_stochastic": grid_cfg_stochastic,
     "ag": grid_ag,
     "ag_high": grid_ag_high,
@@ -396,7 +427,7 @@ GRIDS = {
     "nfe": lambda root=".": grid_nfe(**_operating_point(root)),
 }
 # Grids that need to inspect the filesystem for available checkpoints.
-_ROOT_AWARE = {"ag", "ag_high", "factorial", "nfe"}
+_ROOT_AWARE = {"ag", "ag_high", "ag_confirm", "factorial", "nfe"}
 
 
 def build(name: str, root: str = ".") -> List[Cell]:
