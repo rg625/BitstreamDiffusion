@@ -99,21 +99,28 @@ def paired_bootstrap(a: Sequence[int], b: Sequence[int], n_boot: int = 10000,
     }
 
 
-def per_problem_outcomes(result_file: str) -> Optional[List[int]]:
-    """Per-problem correctness, if the result JSON recorded it.
+def per_problem_outcomes(result_file: str) -> Optional[Dict[int, int]]:
+    """Per-problem correctness keyed by test-set index, or None.
 
-    `sample_records` is capped at 100 entries by the evaluator, so this is only
-    usable for paired tests when the evaluation set is that small; otherwise the
-    analysis falls back to unpaired intervals and labels the comparison as such.
+    Prefers the complete `per_problem` block. Falls back to `sample_records`,
+    which the evaluator caps at 100 entries and which therefore only supports
+    pairing when the evaluation set is that small -- older result files predate
+    the complete record and can only be compared unpaired.
     """
     try:
         r = json.loads(Path(result_file).read_text())
     except (OSError, json.JSONDecodeError):
         return None
+
+    pp = r.get("per_problem") or {}
+    idx, correct = pp.get("idx"), pp.get("correct")
+    if idx and correct and len(idx) == len(correct):
+        return {int(i): int(c) for i, c in zip(idx, correct)}
+
     recs = r.get("sample_records") or []
     if not recs or len(recs) < int(r.get("num_examples") or 0):
         return None
-    return [1 if x.get("correct") else 0 for x in sorted(recs, key=lambda z: z["idx"])]
+    return {int(x["idx"]): (1 if x.get("correct") else 0) for x in recs}
 
 
 # -----------------------------------------------------------------------------
@@ -345,9 +352,13 @@ def paired_table(rows: List[Dict], baseline_method: str = "baseline") -> List[Di
 
         oa = per_problem_outcomes(b.get("result_file", ""))
         ob = per_problem_outcomes(r.get("result_file", ""))
-        if oa and ob and len(oa) == len(ob):
+        shared = sorted(set(oa) & set(ob)) if (oa and ob) else []
+        if len(shared) >= 20:
+            # Pair on the problems both runs actually saw, so a differing
+            # --limit cannot silently misalign the two vectors.
             rec.update({f"paired_{k}": v for k, v in
-                        paired_bootstrap(oa, ob).items()})
+                        paired_bootstrap([oa[i] for i in shared],
+                                         [ob[i] for i in shared]).items()})
             rec["comparison"] = "paired_bootstrap"
         else:
             n = int(rec["n"] or 0)

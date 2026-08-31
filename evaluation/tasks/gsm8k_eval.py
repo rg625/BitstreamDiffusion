@@ -534,6 +534,8 @@ def main():
     n_invalid_tok = 0
     n_gen_tokens = 0
     records = []
+    per_problem_idx = []
+    per_problem_correct = []
     all_texts = []
     guidance_traces = []
     batch_secs = []
@@ -588,6 +590,15 @@ def main():
             all_texts.append(text)
             ok = evaluate_samples(text, rec["response_ground_truth"], timeout_s)
             per_correct.append(1 if ok else 0)
+            # Per-problem outcome for EVERY problem, keyed by test-set index.
+            # Methods are evaluated on identical problems, so comparisons are
+            # naturally paired; a paired bootstrap over problems removes
+            # problem-difficulty variance and is far tighter than comparing two
+            # independent intervals. Without this the analysis can only fall
+            # back to unpaired Wilson intervals, which at n=250 overlap for a
+            # 6-point difference and can confirm nothing. Two small lists.
+            per_problem_idx.append(int(gi))
+            per_problem_correct.append(1 if ok else 0)
             if len(records) < 100:
                 records.append({
                     "idx": gi,
@@ -660,6 +671,8 @@ def main():
         ),
         # ---- bit-level / guidance diagnostics vs sigma ----
         "guidance_diagnostics": summarise_trace(guidance_traces) if guidance_traces else {},
+        # Paired-comparison support: outcome per problem, in test-set index order.
+        "per_problem": {"idx": per_problem_idx, "correct": per_problem_correct},
         "sample_records": records,
     }
     tag = f"{args.sampler}_g{args.gamma}_w{args.guidance_scale}_s{steps}_sd{sigma_data_used:.4f}_ema{int(bool(args.ema))}"
