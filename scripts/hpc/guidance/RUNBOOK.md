@@ -124,13 +124,38 @@ can supply — so they are read from the environment rather than hard-coded.
 Set them to whatever the single-axis sweeps found, and **export them for the
 job too**, or the array will build a different grid than you reviewed:
 
-```bash
-export GUID_CFG_W=3 GUID_AG_W=1.5 GUID_SG_W=0.5 GUID_BAD_STEP=250000
+The single-axis confirmations have now supplied those operating points
+(§7 results): **CFG w=12, AG w=15 with bad=step 350000, SG-prev w=2**.
 
-$COBIT_PYTHON -m experiments.guidance.grids show factorial   # review first
-submit factorial     # 12 cells — the full 2x2x3 design
-submit nfe           # 28 cells — quality vs compute
+```bash
+export GUID_CFG_W=12 GUID_AG_W=15 GUID_SG_W=2 GUID_BAD_STEP=350000
+
+$COBIT_PYTHON -m experiments.guidance.grids show factorial_confirm   # review first
+$COBIT_PYTHON -m experiments.guidance.grids show nfe
 ```
+
+**The two grids still outstanding.** Submit exactly these (the `GUID_*` values
+must be in `--export`, not merely in your shell, or the array silently builds a
+*different* grid than the one you reviewed — the defaults are w=3/1.5/0.5):
+
+```bash
+EXPORTS="ALL,GUID_CFG_W=12,GUID_AG_W=15,GUID_SG_W=2,GUID_BAD_STEP=350000"
+
+# Phase 14 — quality vs compute. 28 cells, n=250, NFE 8..512. Cheap (~3 GPU-h).
+sbatch --array=0-27 --export="$EXPORTS,GRID=nfe" \
+       scripts/hpc/guidance/array.slurm
+
+# Phase 13 — the 2x2x3 factorial at confirmation grade.
+# 36 cells = 12 conditions x 3 seeds, 1319 problems, 512 steps (~18 GPU-h).
+sbatch --array=0-35 --export="$EXPORTS,GRID=factorial_confirm" \
+       scripts/hpc/guidance/array.slurm
+```
+
+Cells are idempotent (a cell whose result JSON exists is skipped), so a
+partially failed array can be resubmitted wholesale. Afterwards re-run §5;
+`analyse.py` estimates the main effects and the two- and three-way interactions
+automatically once the factorial grid is complete — until then it prints
+`factorial grid incomplete; interaction effects not estimated`.
 
 `--export=ALL` in `submit` carries the `GUID_*` variables into the job.
 `GUID_BAD_STEP` is validated against the files on disk and fails loudly if the
