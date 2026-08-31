@@ -37,7 +37,7 @@ mkdir -p "$OUT_DIR" logs/guidance
 
 CONFIG="configs/tasks/tinygsm_bits_cfg.py"
 RUN="tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg"
-GOOD="$RUN/checkpoints/step=000425000.pt"
+GOOD="$RUN/checkpoints/last.pt"          # global_step=500000
 BAD="${BAD:-$RUN/checkpoints/step=000250000.pt}"
 
 for f in "$GOOD" "$BAD"; do

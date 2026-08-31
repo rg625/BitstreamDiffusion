@@ -32,7 +32,9 @@ from typing import Dict, List, Optional
 # on which classifier-free guidance is even defined.
 CONFIG = "configs/tasks/tinygsm_bits_cfg.py"
 RUN_DIR = "tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg"
-GOOD_CKPT = f"{RUN_DIR}/checkpoints/step=000425000.pt"
+# The CFG run trained to 500k; `last.pt` (global_step=500000) is the strongest
+# model and therefore AutoGuidance's "good". Verified by loading each file.
+GOOD_CKPT = f"{RUN_DIR}/checkpoints/last.pt"
 
 # Candidate "bad" models for AutoGuidance, weakest first. Only those present on
 # disk are used; `available_bad_checkpoints()` filters at build time so a sweep
@@ -45,6 +47,7 @@ BAD_CKPT_CANDIDATES = [
     f"{RUN_DIR}/checkpoints/step=000200000.pt",
     f"{RUN_DIR}/checkpoints/step=000250000.pt",
     f"{RUN_DIR}/checkpoints/step=000350000.pt",
+    f"{RUN_DIR}/checkpoints/step=000425000.pt",
 ]
 
 # Exploration runs on a fixed 250-problem prefix of the GSM8K test set; the
