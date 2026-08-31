@@ -205,6 +205,28 @@ def grid_ag(root: str = ".") -> List[Cell]:
     return out
 
 
+def grid_ag_high(root: str = ".") -> List[Cell]:
+    """Extension of the AutoGuidance scale range, mirroring cfg_high.
+
+    The coarse AG surface was still rising at w_ag=5 for every bad checkpoint,
+    so the scale is not bracketed and no optimum can be claimed -- the same
+    situation the CFG sweep was in before cfg_high, where the true optimum
+    turned out to be w~20, far outside the initial range. Nothing about
+    AutoGuidance says its useful scale should be smaller, so it gets the same
+    treatment rather than being written off at w=5.
+
+    Run for every available bad checkpoint: the badness axis is the point, and
+    the coarse pass could not separate them (all paired CIs covered zero).
+    """
+    ws = [6.0, 8.0, 10.0, 15.0, 20.0]
+    out = []
+    for bad in available_bad_checkpoints(root):
+        for w in ws:
+            out.append(Cell(name=f"aghigh_b{_step_of(bad)}_w{w:g}",
+                            ag_scale=w, bad_checkpoint=bad, **DET))
+    return out
+
+
 def grid_sg() -> List[Cell]:
     """Phase 12: SG-prev vs SG-exact across strength and NFE.
 
@@ -343,6 +365,7 @@ GRIDS = {
     "cfg_confirm": grid_cfg_confirm,
     "cfg_stochastic": grid_cfg_stochastic,
     "ag": grid_ag,
+    "ag_high": grid_ag_high,
     "sg": grid_sg,
     "sg_delta": grid_sg_delta,
     "sg_mf": grid_sg_mf,
@@ -350,7 +373,7 @@ GRIDS = {
     "nfe": lambda root=".": grid_nfe(**_operating_point(root)),
 }
 # Grids that need to inspect the filesystem for available checkpoints.
-_ROOT_AWARE = {"ag", "factorial", "nfe"}
+_ROOT_AWARE = {"ag", "ag_high", "factorial", "nfe"}
 
 
 def build(name: str, root: str = ".") -> List[Cell]:
