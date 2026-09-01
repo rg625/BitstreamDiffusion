@@ -111,9 +111,23 @@ merely shrink, it disappears:
 | CFG w=12 | +0.0801 [+0.0665,+0.0938] wins | +0.0088 n.s. | −0.0045 n.s. |
 | AG w=15 | +0.0690 [+0.0561,+0.0819] wins | +0.0018 n.s. | −0.0169 **loses** |
 
-**Alternatives.** w=12 was tuned at γ=0, so "guidance stops helping" and
-"guidance is mis-tuned for this regime" remain confounded.
-**Remaining test.** `churn_anatomy` arm 1 — CFG scale swept *at* γ=0.3.
+**CORRECTED — the confound was the explanation.** `churn_anatomy` arm 1 swept
+CFG scale *at* γ=0.3 (1319 problems, 3 seeds, vs the plain γ=0.3 baseline):
+
+| CFG w | exact match | Δ vs baseline | 95% CI | |
+|---|---|---|---|---|
+| 1 | 0.2557 | −0.0010 | [−0.0025,+0.0003] | n.s. |
+| **2** | **0.2757** | **+0.0190** | [+0.0068,+0.0316] | **wins** |
+| 4 | 0.2742 | +0.0174 | [+0.0045,+0.0303] | **wins** |
+| 7 | 0.2621 | +0.0053 | [−0.0086,+0.0190] | n.s. |
+| 0 | 0.2568 | reference | | |
+
+CFG is **not** superseded by churn — it was **mis-tuned**. The optimum moves
+from w≈12 at γ=0 to **w≈2–4 at γ=0.3**, and the gain shrinks from +0.080 to
++0.019. My earlier reading, that churn eliminates guidance, was premature; the
+confound I flagged turned out to carry the whole effect.
+**Implication.** Guidance scale is not transferable across sampler regimes. Any
+guidance number quoted without its γ is under-specified.
 **Implication.** Consistent with guidance partly substituting for stochasticity
 rather than adding to it (H13/H14). Does not yet establish it.
 
@@ -143,9 +157,30 @@ is not the known "SG skipped under churn" failure mode.
 **Evidence.** Per-step traces in `runs/guidance/stoch_screen/`.
 **Confidence.** **Established** for the effect (−0.1736 [−0.1898,−0.1577] at
 γ=0.2; −0.2120 [−0.2305,−0.1946] at γ=0.3); mechanistic for the cause.
-**Remaining test.** `churn_anatomy` arm 2 — if only the *magnitude* is wrong,
-`sg_scale ≈ 2/16 = 0.125` should restore it. A flat null across 0.06/0.125/0.25
-would falsify the magnitude explanation and implicate the direction itself.
+**CORRECTED — the magnitude explanation is falsified.** `churn_anatomy` arm 2,
+at γ=0.3 against the plain baseline:
+
+| SG-prev w | exact match | Δ | 95% CI | |
+|---|---|---|---|---|
+| 0.06 | 0.2436 | −0.0131 | [−0.0248,−0.0015] | loses |
+| 0.125 | 0.2282 | −0.0286 | [−0.0409,−0.0164] | loses |
+| 0.25 | 0.2017 | −0.0551 | [−0.0687,−0.0417] | loses |
+| (2.0) | 0.0447 | −0.2120 | | loses |
+
+**No scale rescues it.** Shrinking by the ~16× that `sg_dir_rms` grew does not
+restore SG-prev; even 0.06 — 33× smaller than the γ=0 optimum — still loses.
+
+The harm is **linear in w**: −0.0131 / −0.0286 / −0.0551 at w = 0.06 / 0.125 /
+0.25 is a ratio of 1 : 2.2 : 4.2 against scale ratios 1 : 2.1 : 4.2. Pure noise
+amplification would be roughly neutral at small w; harm proportional to w is the
+signature of a **systematically wrong direction**, i.e. a bias, not variance.
+**Revised hypothesis (untested).** Under churn each step re-noises `x_t`, so
+`D_prev` was computed at a strictly noisier state. `D_cur − D_prev` then partly
+measures the model's response to the injected noise and points back toward the
+noisier estimate — a consistent pull away from the denoised manifold rather than
+a random kick.
+**Implication.** SG-prev is a deterministic-sampler method by construction, not
+by tuning. It cannot be carried into stochastic sampling at any scale.
 **Implication.** SG-prev is a *deterministic-sampler* method as implemented.
 The PDF's "SG-prev for fixed compute" recommendation is void once churn is on.
 
@@ -181,22 +216,66 @@ Against the guided γ=0 configurations the PDF recommends:
 **Evidence.** `runs/guidance/stoch_confirm/`; cost measured, not inferred —
 every γ runs at 256 NFE / ~94 s / 2.31 GB, so the baseline wins on accuracy
 *and* uses half CFG's forward passes.
-**Alternatives.** Confined to 256 steps and this checkpoint/task. CFG might pay
-at a different scale under churn (`churn_anatomy`).
-**Implication.** On this model and task the PDF's entire recommendation table is
-superseded. Guidance is not merely smaller than reported — it is dominated by a
-sampler setting that costs nothing and was held fixed throughout the study.
+**QUALIFIED by F5.** The claim "beats *every* guided configuration" held only
+because every guided configuration had been tuned at γ=0. Re-tuned, **CFG w=2 at
+γ=0.3 reaches 0.2757**, above the plain baseline's 0.2568. What survives intact
+is the comparison against the PDF's *recommended* settings, and the fact that
+the single largest effect in this study is a free sampler flag, not a guidance
+method.
+**Implication.** The PDF's recommendation table is superseded, but by
+"re-tune guidance at the right γ", not by "drop guidance".
+
+---
+
+## F8 — Under churn, guidance loses to spending the same compute on more samples
+
+**Finding.** At γ=0.3, with the executed answers already recorded, the
+compute-matched control costs nothing to compute:
+
+| arm | NFE | exact match |
+|---|---|---|
+| baseline pass@1 | 256 | 0.2568 |
+| **baseline maj@2** (deployable) | 512 | **0.2881** |
+| baseline pass@2 (oracle bound) | 512 | 0.3298 |
+| CFG w=2 (best guided) | 512 | 0.2757 |
+
+| comparison | Δ | 95% CI | |
+|---|---|---|---|
+| CFG w=2 − baseline maj@2 | −0.0124 | [−0.0268,+0.0020] | inconclusive |
+| CFG w=2 − baseline pass@2 | −0.0541 | [−0.0682,−0.0399] | **baseline wins** |
+
+**Confidence.** Established, 1319 problems, 3 seeds, paired.
+**The contrast with γ=0 is the point.** At γ=0 the PDF found CFG w=12 *beat*
+maj@2 by +0.0325 [+0.0201,+0.0447]. At γ=0.3 the sign flips: CFG w=2 trails
+maj@2 by −0.0124. Guidance's one surviving compute-matched win is specific to
+the deterministic sampler.
+**Alternatives.** maj@2 needs two samples, so it doubles latency where guidance
+does not — for a single-stream, latency-bound deployment CFG w=2 is still the
+better of the two. The comparison is compute-matched, not latency-matched.
+**Remaining test.** maj@k for k>2 under churn, and whether guidance and voting
+compose (CFG w=2 maj@2 at 1024 NFE).
+**Implication.** Once stochasticity is switched on, the marginal value of
+guidance is close to zero at equal compute — the budget is better spent on
+samples.
 
 ---
 
 ## Standing implication for the programme
 
-The PDF's headline claims are all true *at γ=0*, and γ=0 is dominated. Guidance
-anatomy (Stages 5–7) must be re-centred on the stochastic operating point or it
-will describe a regime nobody should deploy.
+Every guidance conclusion in the PDF is conditional on γ=0, and each behaves
+differently once churn is on: **CFG survives but must be re-tuned** (w 12 → 2–4,
+gain 0.080 → 0.019), **AutoGuidance turns negative**, **SG-prev inverts at any
+scale**. A guidance scale quoted without its sampler regime is under-specified.
 
-The scientific question also changes shape. It is no longer "which guidance
-method is best" but **"why does injected noise do, for free, what guidance was
-being paid 2× compute to do — and are they the same mechanism?"** Both raise
-accuracy while reshaping the bit-entropy/saturation profile, which is the
-concrete thing to compare next.
+The programme's question has changed. It is no longer "which guidance method is
+best" but **"what is the marginal value of guidance once the sampler is
+configured properly — and is that value larger than spending the same compute on
+more samples?"** F8 says: currently, no.
+
+Two things follow for the remaining ~890 GPU-h:
+1. Guidance anatomy (Stages 5–7) must run at γ≈0.3, not γ=0. The vector-geometry
+   and trajectory studies are still worth doing — they now explain a +0.019
+   effect rather than a +0.080 one, so they need the *mechanism*, not more sweeps.
+2. The highest-value open question is no longer about guidance at all: **why does
+   a free sampler flag outperform every method the study was built to test?**
+   The bit-entropy and saturation traces to answer it are already logged.

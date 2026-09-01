@@ -20,9 +20,14 @@ Rates measured from completed CSD3 arrays (Ampere A100-80GB, batch 64):
 | 1a | `repro` | 4 | 1.7 | 1.5 | done | **PASS** — grading bit-identical (F1) |
 | 1b | `stoch_screen` | 20 | 2.0 | 1.1 | done | **churn dominates guidance** (F4–F6) |
 | 2a | `stoch_confirm` | 36 | 8.0 | 7.2 | done | **F4–F7 established; guidance superseded** |
-| 2b | `churn_anatomy` | 21 | 5.0 | — | ready | is CFG mis-tuned or redundant under churn? |
+| 2b | `churn_anatomy` | 21 | 5.0 | 4.1 | done | **CFG mis-tuned, not redundant (F5); SG unrescuable (F6)** |
+| 2c | compute-matched at γ=0.3 | 0 | 0 | 0 | done | **F8** — free, from recorded answers |
 
-**Spent: ~102.8 h. Committed in tranche 2b: ~5 h. Remaining: ~892 h.**
+**Spent: ~106.9 h. Remaining: ~893 h.** No tranche currently committed.
+
+Tranche 2c cost nothing: recording `per_problem.answer` in tranche 1 made the
+whole compute-matched control a post-hoc analysis. Cheap instrumentation keeps
+paying.
 
 Tranche 1 came in under estimate (2.6 h vs 3.7 h) because the screen ran at 256
 steps rather than 512. Keep that shape for screening.
