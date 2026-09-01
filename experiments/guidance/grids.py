@@ -435,6 +435,63 @@ def _operating_point(root: str = ".") -> Dict[str, object]:
     }
 
 
+def grid_repro() -> List[Cell]:
+    """Section 4: reproduce the PDF's headline cells with the CURRENT code.
+
+    Mandatory before extending, and not a formality here: the evaluation loop
+    changed after those numbers were produced. `evaluate_samples(text, gold)`
+    was replaced by `predict_answer` + `_numbers_equal` so the executed answer
+    could be recorded for maj@k. That composition is what evaluate_samples
+    already was, so grading *should* be bit-identical -- but "should" is
+    exactly what a reproduction run is for, and a silent change in grading
+    would invalidate every comparison in the study.
+
+    Same checkpoint, steps, limit and seed as the confirmation cells, written
+    to a separate out_dir so the per-problem vectors can be diffed against the
+    originals element by element rather than only in aggregate.
+    """
+    base = dict(DET)
+    base.update(steps=512, limit=FULL_LIMIT, seed=42)
+    return [
+        Cell(name="repro_baseline_s42", **base),
+        Cell(name="repro_cfg12_s42", guidance_scale=12.0, **base),
+        Cell(name="repro_sgprev2_s42", sg_scale=2.0, sg_variant="prev", **base),
+        Cell(name="repro_ag15_s42", ag_scale=15.0,
+             bad_checkpoint=f"{RUN_DIR}/checkpoints/step=000350000.pt", **base),
+    ]
+
+
+def grid_stoch_screen() -> List[Cell]:
+    """Section 12: the axis the PDF never touched -- guidance under churn.
+
+    Every number in the study is deterministic (gamma=0), so "guidance helps"
+    and "guidance substitutes for the stochasticity we never used" are not yet
+    separable. This is a coarse screen, not a confirmation: 250 problems, one
+    seed, 256 steps, to find which gamma region is worth spending on.
+
+    gamma enters as s_churn = gamma*(NFE-1) and DDIM caps it at sqrt(2)-1, so
+    0.41 is the top of the usable band, not an arbitrary endpoint.
+
+    One confound is already instrumented: churn can push sigma back UP between
+    steps, which makes SG-prev's backward derivative invalid, so it is skipped
+    on those steps and the run reports sg_skipped. Read that before reading the
+    SG row -- a null result there may mean "SG never fired", not "SG failed".
+    """
+    out = []
+    for gamma in (0.0, 0.1, 0.2, 0.3, 0.41):
+        mode = "deterministic" if gamma == 0.0 else "stochastic"
+        common = dict(sampler=mode, gamma=gamma, steps=256, limit=EXPLORE_LIMIT)
+        g = f"{gamma:g}".replace(".", "p")
+        out += [
+            Cell(name=f"stoch_g{g}_base", **common),
+            Cell(name=f"stoch_g{g}_cfg12", guidance_scale=12.0, **common),
+            Cell(name=f"stoch_g{g}_ag15", ag_scale=15.0,
+                 bad_checkpoint=f"{RUN_DIR}/checkpoints/step=000350000.pt", **common),
+            Cell(name=f"stoch_g{g}_sgprev2", sg_scale=2.0, sg_variant="prev", **common),
+        ]
+    return out
+
+
 def grid_solver_control() -> List[Cell]:
     """Is SG-prev guidance, or just a better ODE solver?
 
@@ -559,6 +616,8 @@ GRIDS = {
     "factorial": lambda root=".": grid_factorial(**_operating_point(root)),
     "factorial_confirm": grid_factorial_confirm,
     "solver_control": grid_solver_control,
+    "repro": grid_repro,
+    "stoch_screen": grid_stoch_screen,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,
