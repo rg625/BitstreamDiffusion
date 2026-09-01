@@ -48,6 +48,30 @@ def _ckpt_tag(path: str) -> str:
     return digits or stem.replace("=", "")
 
 
+def _solver_evals_per_step(sampler_kind: str, steps: int) -> float:
+    """Denoiser evaluations per step contributed by the SOLVER, not by guidance.
+
+    Measured, not assumed (see tests/test_nfe_accounting.py): DDIM/EM/PC take
+    one forward per step; HeunSampler takes two -- a predictor and a corrector
+    -- except on the final step, which is Euler, giving 2N-1 in total.
+
+    This was missing: nfe_per_sample was `steps * branches`, blind to solver
+    order, so every Heun run under-reported its cost by ~2x. The solver_control
+    grid happened to be designed in forward passes anyway (Heun-256 vs
+    DDIM-512), so its conclusion is unaffected -- but the recorded NFE column
+    was wrong and would have corrupted any later quality-vs-compute plot.
+    """
+    if str(sampler_kind).lower() == "heun":
+        return (2.0 * steps - 1.0) / max(1, steps)
+    return 1.0
+
+
+def _nfe_per_sample(steps: int, gcfg, sampler_kind: str) -> float:
+    """Total denoiser forward passes per sample: solver order x guidance branches."""
+    return float(steps) * _solver_evals_per_step(sampler_kind, steps) \
+        * _branches_per_step(gcfg)
+
+
 def _branches_per_step(gcfg) -> float:
     """Denoiser evaluations per sampler step implied by a guidance policy.
 
@@ -697,7 +721,7 @@ def main():
         # ---- efficiency ----
         "efficiency": efficiency_metrics(
             wall_clock_s=wall, n_samples=int(n), n_gen_tokens=int(n_gen_tokens),
-            nfe_per_sample=float(steps) * _branches_per_step(gcfg),
+            nfe_per_sample=_nfe_per_sample(steps, gcfg, args.sampler_kind),
             peak_gpu_bytes=peak,
         ),
         # ---- bit-level / guidance diagnostics vs sigma ----
