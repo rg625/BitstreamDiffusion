@@ -381,3 +381,46 @@ def test_ag_ema_ablation_varies_only_the_bad_model_weights():
     for c in cells:
         argv = c.cli("/tmp/out")
         assert argv[argv.index("--bad_ema") + 1] == str(c.bad_ema)
+
+
+def test_sample_bits_only_sends_temperature_kwargs_a_sampler_supports():
+    """Heun/EM lack the temperature knobs; at defaults they must still run.
+
+    The solver_control grid lost all six Heun cells to
+    `TypeError: sample() got an unexpected keyword argument 'posterior_temp'`
+    even though every temperature knob was at its no-op default.
+    """
+    import inspect
+    import pytest
+    from evaluation.tasks import _task_common
+
+    src = inspect.getsource(_task_common.sample_bits)
+    assert "**temp_kwargs" in src, "kwargs must be filtered, not passed blindly"
+
+    class _NoTempSampler:
+        def sample(self, num_samples, seq_len, *, conditioning_prefix_full=None,
+                   cond_prefix_mask=None, num_steps=None, schedule=None,
+                   entropy_run_dir=None, sigma_min_override=None,
+                   sigma_max_override=None, guidance_scale=None, guidance=None,
+                   bad_model=None, collect_diagnostics=False,
+                   sc_refresh_mode="carry", ati_eta=0.0, return_probs=True,
+                   progress=False):
+            raise AssertionError("reached sample(): kwargs were accepted")
+
+    params = inspect.signature(_NoTempSampler.sample).parameters
+    assert "posterior_temp" not in params
+
+    # A no-op temperature must be dropped -> we reach sample() and hit the
+    # sentinel, rather than dying on an unexpected keyword.
+    from types import SimpleNamespace
+    import torch as _t
+    cfg = SimpleNamespace(evaluation=SimpleNamespace(use_amp=False, amp_dtype="bf16"))
+    pf, pm = _t.zeros(1, 4), _t.zeros(1, 4, dtype=_t.bool)
+    with pytest.raises(AssertionError, match="reached sample"):
+        _task_common.sample_bits(cfg, _NoTempSampler(), prefix_full=pf,
+                                 prefix_mask=pm, num_steps=2)
+
+    # An ACTIVE temperature must refuse rather than be silently dropped.
+    with pytest.raises(NotImplementedError, match="posterior_temp"):
+        _task_common.sample_bits(cfg, _NoTempSampler(), prefix_full=pf,
+                                 prefix_mask=pm, num_steps=2, posterior_temp=0.5)
