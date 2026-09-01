@@ -166,23 +166,36 @@ def main() -> None:
             bp2[i].append(v)
     bp2 = {i: sum(v) / len(v) for i, v in bp2.items()}
 
-    print(f"\nGuidance vs the compute-matched oracle bound "
-          f"(paired bootstrap, {args.n_boot} resamples):\n")
-    for k in sorted(corr):
-        if k == "baseline" or abs(nfe.get(k, 0) - 2 * base_nfe) > 1:
+    # maj@2 per problem, averaged over seed pairs -- the DEPLOYABLE control.
+    bm2 = collections.defaultdict(list)
+    for p in pairs:
+        mk = maj_at_k(corr["baseline"], answ["baseline"], list(p))
+        if mk:
+            for i, v in mk.items():
+                bm2[i].append(v)
+    bm2 = {i: sum(v) / len(v) for i, v in bm2.items()} if bm2 else None
+
+    for ref, refname in ((bp2, "pass@2 (oracle bound)"),
+                         (bm2, "maj@2 (deployable)")):
+        if not ref:
             continue
-        arm = collections.defaultdict(list)
-        for s, o in corr[k].items():
-            for i, v in o.items():
-                arm[i].append(v)
-        arm = {i: sum(v) / len(v) for i, v in arm.items()}
-        res = boot(bp2, arm, args.n_boot)
-        if not res:
-            continue
-        pt, lo, hi = res
-        verdict = ("guidance wins" if lo > 0 else
-                   "baseline wins" if hi < 0 else "INCONCLUSIVE")
-        print(f"  {k:<26} delta={pt:+.4f}  [{lo:+.4f},{hi:+.4f}]  -> {verdict}")
+        print(f"\nGuidance vs compute-matched baseline {refname} "
+              f"(paired bootstrap, {args.n_boot} resamples):\n")
+        for k in sorted(corr):
+            if k == "baseline" or abs(nfe.get(k, 0) - 2 * base_nfe) > 1:
+                continue
+            arm = collections.defaultdict(list)
+            for s, o in corr[k].items():
+                for i, v in o.items():
+                    arm[i].append(v)
+            arm = {i: sum(v) / len(v) for i, v in arm.items()}
+            res = boot(ref, arm, args.n_boot)
+            if not res:
+                continue
+            pt, lo, hi = res
+            verdict = ("guidance wins" if lo > 0 else
+                       "baseline wins" if hi < 0 else "INCONCLUSIVE")
+            print(f"  {k:<26} delta={pt:+.4f}  [{lo:+.4f},{hi:+.4f}]  -> {verdict}")
     print("\nNote: pass@2 needs an oracle to pick the right sample, so it is an\n"
           "upper bound. Guidance beating it is strong; guidance losing to it is\n"
           "not decisive until maj@2 is available.\n")
