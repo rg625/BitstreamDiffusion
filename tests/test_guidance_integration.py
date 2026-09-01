@@ -421,6 +421,20 @@ def test_sample_bits_only_sends_temperature_kwargs_a_sampler_supports():
                                  prefix_mask=pm, num_steps=2)
 
     # An ACTIVE temperature must refuse rather than be silently dropped.
-    with pytest.raises(NotImplementedError, match="posterior_temp"):
+    with pytest.raises(NotImplementedError, match="tempering"):
         _task_common.sample_bits(cfg, _NoTempSampler(), prefix_full=pf,
                                  prefix_mask=pm, num_steps=2, posterior_temp=0.5)
+    with pytest.raises(NotImplementedError, match="tempering"):
+        _task_common.sample_bits(cfg, _NoTempSampler(), prefix_full=pf,
+                                 prefix_mask=pm, num_steps=2, codeword_topk=8)
+
+    # But a COMPANION parameter must not count as a request. The task evals
+    # pass codeword_vocab_size unconditionally -- it is just the tokenizer
+    # size, and DDIM reads it only when posterior_temp_space="token" -- so
+    # treating it as active rejected every untempered Heun run and cost the
+    # solver_control grid its whole rival arm twice.
+    with pytest.raises(AssertionError, match="reached sample"):
+        _task_common.sample_bits(cfg, _NoTempSampler(), prefix_full=pf,
+                                 prefix_mask=pm, num_steps=2,
+                                 codeword_vocab_size=49153,
+                                 posterior_temp_space="bit")

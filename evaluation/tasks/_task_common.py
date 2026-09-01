@@ -279,34 +279,45 @@ def sample_bits(
     amp_dtype = torch.bfloat16 if str(getattr(cfg.evaluation, "amp_dtype", "bf16")).startswith("bf") else torch.float16
     dev = prefix_full.device
 
-    # The posterior-/score-temperature knobs exist only on DDIMSampler. Every
-    # one of them is a no-op at its default, so passing them unconditionally
-    # would make the *untempered* Heun and EM paths crash on a keyword they
-    # would have ignored anyway. Send them only when a caller actually turned
-    # one on, and refuse loudly if the chosen sampler cannot honour it -- a
-    # silently dropped temperature would be far worse than a TypeError.
-    _TEMP_DEFAULTS = {
-        "posterior_temp": (posterior_temp, 1.0),
-        "posterior_temp_target": (posterior_temp_target, "learned"),
-        "posterior_temp_schedule": (posterior_temp_schedule, "const"),
-        "posterior_temp_sigma_lo": (posterior_temp_sigma_lo, 0.1),
-        "posterior_temp_sigma_hi": (posterior_temp_sigma_hi, 4.0),
-        "posterior_temp_space": (posterior_temp_space, "bit"),
-        "codeword_vocab_size": (codeword_vocab_size, None),
-        "codeword_topk": (codeword_topk, None),
-        "score_temp_tau": (score_temp_tau, 1.0),
-        "score_temp_clean_var": (score_temp_clean_var, 0.25),
+    # The posterior-/score-temperature knobs exist only on DDIMSampler, and
+    # every one is a no-op at its default, so passing them unconditionally
+    # makes the untempered Heun/EM paths crash on keywords they would have
+    # ignored. Send only what the sampler's signature accepts.
+    #
+    # Refusing on "any non-default value" is too strict: only three of these
+    # are SWITCHES that change sampling on their own. The rest are companions
+    # that do nothing unless a switch is on -- codeword_vocab_size in
+    # particular is passed unconditionally by the task evals (it is just the
+    # tokenizer size) and is read only when posterior_temp_space="token", so
+    # treating it as active rejected every untempered Heun run.
+    _switch_on = (
+        float(posterior_temp) != 1.0
+        or float(score_temp_tau) != 1.0
+        or codeword_topk is not None
+    )
+    _temp_kwargs_all = {
+        "posterior_temp": posterior_temp,
+        "posterior_temp_target": posterior_temp_target,
+        "posterior_temp_schedule": posterior_temp_schedule,
+        "posterior_temp_sigma_lo": posterior_temp_sigma_lo,
+        "posterior_temp_sigma_hi": posterior_temp_sigma_hi,
+        "posterior_temp_space": posterior_temp_space,
+        "codeword_vocab_size": codeword_vocab_size,
+        "codeword_topk": codeword_topk,
+        "score_temp_tau": score_temp_tau,
+        "score_temp_clean_var": score_temp_clean_var,
     }
     _supported = inspect.signature(sampler.sample).parameters
-    temp_kwargs = {}
-    for _k, (_val, _default) in _TEMP_DEFAULTS.items():
-        if _k in _supported:
-            temp_kwargs[_k] = _val
-        elif _val != _default:
-            raise NotImplementedError(
-                f"{type(sampler).__name__} does not support {_k}={_val!r} "
-                f"(default {_default!r}). Use DDIMSampler for tempered sampling."
-            )
+    temp_kwargs = {k: v for k, v in _temp_kwargs_all.items() if k in _supported}
+    if _switch_on and len(temp_kwargs) < len(_temp_kwargs_all):
+        # A tempering setting was actually requested and this sampler cannot
+        # honour it. Silently dropping it would corrupt results far more
+        # quietly than a crash.
+        raise NotImplementedError(
+            f"{type(sampler).__name__} cannot honour the requested tempering "
+            f"(posterior_temp={posterior_temp}, score_temp_tau={score_temp_tau}, "
+            f"codeword_topk={codeword_topk}). Use DDIMSampler for tempered sampling."
+        )
 
     with torch.autocast(dev.type, enabled=use_amp, dtype=amp_dtype):
         out = sampler.sample(
