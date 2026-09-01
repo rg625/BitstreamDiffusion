@@ -86,9 +86,8 @@ Cost is measured, not inferred: every γ runs at 256 NFE, ~94 s, 2.31 GB.
 **The baseline at γ=0.3 (0.2760, 256 NFE, 94 s) beats CFG w=12 at γ=0 (0.2280,
 512 NFE, 177 s) on half the compute.**
 **Evidence.** `runs/guidance/stoch_screen/`, 250 problems, 1 seed.
-**Confidence.** Screening — but +0.112 is ~3× the ±0.04 screening noise.
-**Alternatives.** Could be a 250-problem artifact, or specific to 256 steps.
-**Remaining test.** `stoch_confirm` (36 cells, 1319 problems, 3 seeds).
+**Confidence.** **Established.** `stoch_confirm`, 1319 problems, 3 seeds:
+baseline γ=0.2 **+0.1054 [+0.0915,+0.1203]**, γ=0.3 **+0.1200 [+0.1056,+0.1350]**.
 **Implication.** The whole study optimised guidance inside γ=0, which is the
 *worst* operating point available. Every headline recommendation in the PDF is
 conditional on a sampler setting that should not have been fixed.
@@ -104,11 +103,17 @@ conditional on a sampler setting that should not have been fixed.
 | CFG w=12 | +0.0640 | +0.0480 | +0.0240 | −0.0080 | +0.0120 |
 | AG w=15 | +0.0560 | +0.0360 | +0.0400 | −0.0160 | −0.0080 |
 
-**Confidence.** Screening; individual points are inside noise, the *trend* is
-the signal and it is monotone for CFG.
-**Alternatives.** w=12 was tuned at γ=0 and may simply be mis-tuned under churn
-— guidance might still pay at a lower scale. Not yet tested.
-**Remaining test.** `stoch_confirm`, then a CFG scale sweep *at the best γ*.
+**Confidence.** **Established** at full size — guidance's advantage does not
+merely shrink, it disappears:
+
+| vs same-γ baseline | γ=0 | γ=0.2 | γ=0.3 |
+|---|---|---|---|
+| CFG w=12 | +0.0801 [+0.0665,+0.0938] wins | +0.0088 n.s. | −0.0045 n.s. |
+| AG w=15 | +0.0690 [+0.0561,+0.0819] wins | +0.0018 n.s. | −0.0169 **loses** |
+
+**Alternatives.** w=12 was tuned at γ=0, so "guidance stops helping" and
+"guidance is mis-tuned for this regime" remain confounded.
+**Remaining test.** `churn_anatomy` arm 1 — CFG scale swept *at* γ=0.3.
 **Implication.** Consistent with guidance partly substituting for stochasticity
 rather than adding to it (H13/H14). Does not yet establish it.
 
@@ -136,18 +141,62 @@ SG fired on all 255 steps at every γ (`sg_applied=255, sg_skipped=0`), so this
 is not the known "SG skipped under churn" failure mode.
 
 **Evidence.** Per-step traces in `runs/guidance/stoch_screen/`.
-**Confidence.** Screening for the effect; mechanistic for the cause.
-**Remaining test.** If noise amplification is right, SG-prev should be
-recoverable under churn by shrinking `sg_scale` roughly as 1/`sg_dir_rms`, or
-by smoothing `D_cur − D_prev` over several steps.
+**Confidence.** **Established** for the effect (−0.1736 [−0.1898,−0.1577] at
+γ=0.2; −0.2120 [−0.2305,−0.1946] at γ=0.3); mechanistic for the cause.
+**Remaining test.** `churn_anatomy` arm 2 — if only the *magnitude* is wrong,
+`sg_scale ≈ 2/16 = 0.125` should restore it. A flat null across 0.06/0.125/0.25
+would falsify the magnitude explanation and implicate the direction itself.
 **Implication.** SG-prev is a *deterministic-sampler* method as implemented.
 The PDF's "SG-prev for fixed compute" recommendation is void once churn is on.
 
 ---
 
+---
+
+## F7 — Plain stochastic sampling beats **every** guided configuration, at half the compute
+
+**Finding.** The best cell in the entire 36-cell confirmation is the *unguided*
+baseline at γ=0.3.
+
+| configuration | exact match | NFE |
+|---|---|---|
+| **baseline, γ=0.3** | **0.2568** | **256** |
+| CFG w=12, γ=0.3 | 0.2522 | 512 |
+| CFG w=12, γ=0.2 | 0.2509 | 512 |
+| baseline, γ=0.2 | 0.2421 | 256 |
+| CFG w=12, γ=0 | 0.2168 | 512 |
+| AG w=15, γ=0 | 0.2057 | 512 |
+| SG-prev w=2, γ=0 | 0.1865 | 256 |
+| baseline, γ=0 | 0.1367 | 256 |
+
+Against the guided γ=0 configurations the PDF recommends:
+
+| | Δ | 95% CI |
+|---|---|---|
+| baseline γ=0.3 − CFG w=12 γ=0 | **+0.0399** | [+0.0263,+0.0538] |
+| baseline γ=0.3 − AG w=15 γ=0 | **+0.0510** | [+0.0374,+0.0647] |
+| baseline γ=0.3 − SG-prev w=2 γ=0 | **+0.0703** | [+0.0564,+0.0844] |
+
+**Confidence.** Established, 1319 problems, 3 seeds, paired.
+**Evidence.** `runs/guidance/stoch_confirm/`; cost measured, not inferred —
+every γ runs at 256 NFE / ~94 s / 2.31 GB, so the baseline wins on accuracy
+*and* uses half CFG's forward passes.
+**Alternatives.** Confined to 256 steps and this checkpoint/task. CFG might pay
+at a different scale under churn (`churn_anatomy`).
+**Implication.** On this model and task the PDF's entire recommendation table is
+superseded. Guidance is not merely smaller than reported — it is dominated by a
+sampler setting that costs nothing and was held fixed throughout the study.
+
+---
+
 ## Standing implication for the programme
 
-Three of the PDF's four headline claims survive only inside γ=0, and γ=0 is a
-poor operating point. The guidance anatomy (Stages 5–7 of the brief) should be
-re-centred on the best stochastic operating point rather than continued at γ=0,
-or it will characterise a regime nobody should deploy.
+The PDF's headline claims are all true *at γ=0*, and γ=0 is dominated. Guidance
+anatomy (Stages 5–7) must be re-centred on the stochastic operating point or it
+will describe a regime nobody should deploy.
+
+The scientific question also changes shape. It is no longer "which guidance
+method is best" but **"why does injected noise do, for free, what guidance was
+being paid 2× compute to do — and are they the same mechanism?"** Both raise
+accuracy while reshaping the bit-entropy/saturation profile, which is the
+concrete thing to compare next.

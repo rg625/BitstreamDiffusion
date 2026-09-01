@@ -19,9 +19,10 @@ Rates measured from completed CSD3 arrays (Ampere A100-80GB, batch 64):
 | 0b | `solver_control` Heun arm | 6 | 3 | 3.4 | done | **SG-prev is not 2nd-order integration** |
 | 1a | `repro` | 4 | 1.7 | 1.5 | done | **PASS** — grading bit-identical (F1) |
 | 1b | `stoch_screen` | 20 | 2.0 | 1.1 | done | **churn dominates guidance** (F4–F6) |
-| 2a | `stoch_confirm` | 36 | 8.0 | — | ready | promote F4/F5/F6 to full size |
+| 2a | `stoch_confirm` | 36 | 8.0 | 7.2 | done | **F4–F7 established; guidance superseded** |
+| 2b | `churn_anatomy` | 21 | 5.0 | — | ready | is CFG mis-tuned or redundant under churn? |
 
-**Spent: ~95.6 h. Committed in tranche 2a: ~8 h. Remaining: ~896 h.**
+**Spent: ~102.8 h. Committed in tranche 2b: ~5 h. Remaining: ~892 h.**
 
 Tranche 1 came in under estimate (2.6 h vs 3.7 h) because the screen ran at 256
 steps rather than 512. Keep that shape for screening.

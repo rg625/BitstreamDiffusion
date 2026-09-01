@@ -528,6 +528,38 @@ def grid_stoch_confirm() -> List[Cell]:
     return out
 
 
+def grid_churn_anatomy() -> List[Cell]:
+    """Two questions left open by stoch_confirm, at gamma=0.3.
+
+    ARM 1 -- does CFG pay at ANY scale under churn?
+    stoch_confirm shows CFG w=12 is n.s. against the same-gamma baseline once
+    churn is on. But w=12 was tuned at gamma=0, so "guidance stops helping" and
+    "guidance is mis-tuned for this regime" are still confounded. Sweeping the
+    scale *at the good gamma* separates them. If no scale beats the plain
+    baseline, guidance is genuinely superseded here; if a small scale wins, the
+    story is re-tuning, not redundancy.
+
+    ARM 2 -- is SG-prev's collapse the noise amplification F6 identified?
+    sg_dir_rms grows ~16x from gamma=0 to 0.41, so if the direction is right and
+    only its magnitude is wrong, dividing the scale by roughly that factor
+    should restore it. w=2/16 ~ 0.125, bracketed either side. A flat null across
+    all three would falsify the magnitude explanation and point at the direction
+    itself being corrupted by injected noise.
+    """
+    G = 0.3
+    common = dict(sampler="stochastic", gamma=G, steps=256, limit=FULL_LIMIT)
+    out = []
+    for w in (1.0, 2.0, 4.0, 7.0):
+        for seed in (42, 43, 44):
+            out.append(Cell(name=f"chn_cfg{w:g}_s{seed}", guidance_scale=w,
+                            seed=seed, **common))
+    for w in (0.06, 0.125, 0.25):
+        for seed in (42, 43, 44):
+            out.append(Cell(name=f"chn_sg{w:g}_s{seed}", sg_scale=w,
+                            sg_variant="prev", seed=seed, **common))
+    return out
+
+
 def grid_solver_control() -> List[Cell]:
     """Is SG-prev guidance, or just a better ODE solver?
 
@@ -655,6 +687,7 @@ GRIDS = {
     "repro": grid_repro,
     "stoch_screen": grid_stoch_screen,
     "stoch_confirm": grid_stoch_confirm,
+    "churn_anatomy": grid_churn_anatomy,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,
