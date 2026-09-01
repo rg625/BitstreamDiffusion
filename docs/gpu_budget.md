@@ -17,10 +17,14 @@ Rates measured from completed CSD3 arrays (Ampere A100-80GB, batch 64):
 |---|---|---|---|---|---|---|
 | 0 | Prior study (PDF) | 242 | — | ~90 | done | the starting point |
 | 0b | `solver_control` Heun arm | 6 | 3 | 3.4 | done | **SG-prev is not 2nd-order integration** |
-| 1a | `repro` | 4 | 1.7 | — | ready | grading unchanged after the eval-loop edit? |
-| 1b | `stoch_screen` | 20 | 2.0 | — | ready | which γ band is worth confirming |
+| 1a | `repro` | 4 | 1.7 | 1.5 | done | **PASS** — grading bit-identical (F1) |
+| 1b | `stoch_screen` | 20 | 2.0 | 1.1 | done | **churn dominates guidance** (F4–F6) |
+| 2a | `stoch_confirm` | 36 | 8.0 | — | ready | promote F4/F5/F6 to full size |
 
-**Spent so far: ~93 h. Committed in tranche 1: ~4 h. Remaining: ~903 h.**
+**Spent: ~95.6 h. Committed in tranche 2a: ~8 h. Remaining: ~896 h.**
+
+Tranche 1 came in under estimate (2.6 h vs 3.7 h) because the screen ran at 256
+steps rather than 512. Keep that shape for screening.
 
 ## Staged allocation (guideline, reallocable)
 
