@@ -492,6 +492,42 @@ def grid_stoch_screen() -> List[Cell]:
     return out
 
 
+def grid_stoch_confirm() -> List[Cell]:
+    """Confirm the screen's two large effects at full size.
+
+    The 250-problem screen found two things that dwarf everything in the PDF:
+    churn alone takes the baseline 0.164 -> 0.276 at zero extra NFE, which is
+    larger than any guidance effect ever measured here; and SG-prev *inverts*
+    under churn (+0.028 -> -0.244). Both are far outside the +/-0.04 screening
+    noise, but the study's headline recommendation now depends on them, so they
+    get 1319 problems and three seeds.
+
+    Also decides the interaction the PDF could not: guidance's margin over the
+    SAME-gamma baseline shrinks as gamma rises (CFG +0.064 -> ~+0.01), which is
+    what "guidance was substituting for stochasticity we never used" predicts.
+    Three gammas is enough to test monotonicity without paying for a surface.
+
+    256 steps, not 512: the screen ran there, and at 1319 problems this keeps
+    the whole grid near 8 GPU-h.
+    """
+    out = []
+    for gamma in (0.0, 0.2, 0.3):
+        mode = "deterministic" if gamma == 0.0 else "stochastic"
+        common = dict(sampler=mode, gamma=gamma, steps=256, limit=FULL_LIMIT)
+        g = f"{gamma:g}".replace(".", "p")
+        arms = [
+            (f"stc_g{g}_base", {}),
+            (f"stc_g{g}_cfg12", dict(guidance_scale=12.0)),
+            (f"stc_g{g}_ag15", dict(ag_scale=15.0,
+                bad_checkpoint=f"{RUN_DIR}/checkpoints/step=000350000.pt")),
+            (f"stc_g{g}_sgprev2", dict(sg_scale=2.0, sg_variant="prev")),
+        ]
+        for name, kw in arms:
+            for seed in (42, 43, 44):
+                out.append(Cell(name=f"{name}_s{seed}", seed=seed, **kw, **common))
+    return out
+
+
 def grid_solver_control() -> List[Cell]:
     """Is SG-prev guidance, or just a better ODE solver?
 
@@ -618,6 +654,7 @@ GRIDS = {
     "solver_control": grid_solver_control,
     "repro": grid_repro,
     "stoch_screen": grid_stoch_screen,
+    "stoch_confirm": grid_stoch_confirm,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,
