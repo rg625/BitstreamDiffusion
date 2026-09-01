@@ -31,6 +31,13 @@ Rates measured from completed CSD3 arrays (Ampere A100-80GB, batch 64):
 | C | 150 h | dynamic guidance, trajectory control, adaptive compute |
 | D | 150 h | RL / reserve / follow-ups |
 
+**Reallocation flagged.** F4 shows every guidance number in the study was
+measured at γ=0, the worst sampler setting available. Phase A's remaining
+guidance-anatomy budget should be re-centred on the best stochastic operating
+point once `stoch_confirm` fixes it, and Phase B pulled earlier. Characterising
+CFG/AG/SG geometry at γ=0 would describe a regime nobody should deploy.
+
+
 Phase A is already partly paid: the prior study's 90 h plus the solver arm answer
 several Phase-A questions outright. Do not spend the Phase-D reserve without
 recording here why.
