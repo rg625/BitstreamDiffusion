@@ -57,3 +57,20 @@ def test_valid_sample_still_scores_correct():
     """The robustness fix must not turn every sample into a wrong answer."""
     ok = "def simple_math_problem():\n    return 42\n"
     assert evaluate_samples(ok, GOLD, 5.0) is True
+
+
+def test_fkc_result_filename_honours_the_tag():
+    """Two FKC cells differing only in --checkpoint must not collide.
+
+    The FKC branch builds its filename from sampler parameters alone, so
+    `aud_A_collab` (base checkpoint) and `aud_B_ourckpt` (CFG checkpoint) --
+    identical in every sampler argument -- wrote to the same path and the
+    second silently overwrote the first, losing a replication-audit cell.
+    """
+    import re
+    from pathlib import Path
+
+    src = Path("evaluation/tasks/gsm8k_eval.py").read_text()
+    # The FKC tag assembly must consume args.tag before the path is built.
+    fkc = src[src.index('prop_tag = ('):src.index('out_path = out_dir / f"gsm8k_results_{tag}.json"')]
+    assert "args.tag" in fkc, "FKC filename ignores --tag; cells will collide"

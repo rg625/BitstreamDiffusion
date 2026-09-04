@@ -325,6 +325,13 @@ def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir, out_di
         tag += f"_cfgw{args.guidance_scale:g}"
     if args.resample_entropy_frac is not None:
         tag += f"_rband{args.resample_entropy_frac:g}"
+    if args.tag:
+        # The FKC filename is built from sampler parameters only, so two cells
+        # differing solely in --checkpoint collide and the second silently
+        # overwrites the first. That destroyed a replication-audit cell; the
+        # collaborator's handoff warns about the same hazard. Honour --tag here
+        # exactly as the non-FKC path does.
+        tag += f"_{args.tag}"
     out_path = out_dir / f"gsm8k_results_{tag}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print("\n=== GSM8K FKC RESULT ===")

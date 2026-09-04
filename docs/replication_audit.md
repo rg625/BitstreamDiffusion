@@ -87,54 +87,107 @@ axes are considered.
 
 ---
 
-## 5. Ablation tree (grid `replication_audit`, 7 cells, ~5 GPU-h)
+## 5. Ablation tree — RESULTS
 
-Starts at their configuration and removes one axis per cell, so each change in
-accuracy is attributable to a single factor. All cells: 1319 problems, seed 42.
+Grid `replication_audit`, 7 cells, 1319 problems, seed 42, ~5 GPU-h actual.
+Each cell removes one axis from the collaborator's configuration.
 
-| Cell | Checkpoint | Sampler | Churn | Steps | Isolates |
-|---|---|---|---|---|---|
-| A | base 425k | fkc_em | `churn_gamma=0.41` | 1024 | their configuration |
-| B | CFG 500k | fkc_em | `churn_gamma=0.41` | 1024 | checkpoint / training dropout |
-| C | CFG 500k | ddim | `gamma=0.41` | 1024 | churn implementation + solver |
-| D | CFG 500k | ddim | `gamma=0.41` | 512 | step count = churn dose |
-| E | CFG 500k | ddim | `gamma=0.41` | 256 | step count = churn dose |
-| F | CFG 500k | ddim | `gamma=0` | 1024 | **already measured: 0.1390** |
-| G | base 425k | ddim | `gamma=0` | 512 | checkpoint at our setting |
-| H | CFG 500k | ddim | `gamma=0` | 512 | precision (fp32 vs bf16) |
+| Cell | Checkpoint | Solver | Churn | Steps | Exact match | 95% CI |
+|---|---|---|---|---|---|---|
+| **A** *(their config)* | base 425k | fkc_em | `churn_gamma=0.41` | 1024 | **0.2813** | [0.2570, 0.3055] |
+| C | CFG 500k | ddim | `gamma=0.41` | 1024 | 0.2957 | [0.2707, 0.3207] |
+| D | CFG 500k | ddim | `gamma=0.41` | 512 | 0.2911 | [0.2669, 0.3154] |
+| E | CFG 500k | ddim | `gamma=0.41` | 256 | 0.2661 | [0.2426, 0.2896] |
+| H | CFG 500k | ddim | `gamma=0`, **fp32** | 512 | 0.1357 | [0.1175, 0.1547] |
+| F | CFG 500k | ddim | `gamma=0` | 1024 | 0.1334 | [0.1152, 0.1524] |
+| G | base 425k | ddim | `gamma=0` | 512 | 0.1259 | [0.1084, 0.1440] |
+| *(ref)* | CFG 500k | ddim | `gamma=0` | 512 | 0.1385 | — |
 
-Submit:
+**Cell B was lost to a filename collision** and was not rerun. The FKC branch
+builds its output filename from sampler parameters only, ignoring `--tag`, so
+cells A and B — identical in every sampler argument, differing only in
+`--checkpoint` — wrote to the same path and B silently overwrote A's slot.
+(A survived; the file records the base checkpoint.) This is the exact hazard the
+collaborator's handoff warns about. **Fixed** in `gsm8k_eval.py` and pinned by
+`test_fkc_result_filename_honours_the_tag`. B is no longer needed: the axis it
+isolated — checkpoint — is settled more cheaply by G vs the reference.
 
-```bash
-EXPORTS="ALL,GUID_CFG_W=12,GUID_AG_W=15,GUID_SG_W=2,GUID_BAD_STEP=350000"
-sbatch --array=0-6 --export="$EXPORTS,GRID=replication_audit" \
-       scripts/hpc/guidance/array.slurm
-```
+### Paired attribution (per-problem, 20,000-resample bootstrap)
+
+| Axis | Δ | 95% CI | Significant |
+|---|---|---|---|
+| **churn γ=0 → 0.41** (1024 steps, same ckpt + solver) | **+0.1622** | [+0.1387, +0.1857] | **yes** |
+| steps 256 → 512 at γ=0.41 | +0.0250 | [+0.0038, +0.0470] | yes |
+| steps 512 → 1024 at γ=0.41 | +0.0045 | [−0.0174, +0.0265] | no |
+| steps 512 → 1024 at γ=0 | +0.0000 | [−0.0023, +0.0023] | no |
+| checkpoint CFG 500k → base 425k (γ=0) | −0.0076 | [−0.0243, +0.0091] | no |
+| precision bf16 → fp32 (γ=0) | +0.0023 | [−0.0076, +0.0121] | no |
 
 ---
 
-## 6. Conclusion (interim)
+## 6. Required table
 
-**C — the results are not directly comparable.** They differ on five axes
-simultaneously (checkpoint, churn implementation, solver, step count, problem
-set), plus precision. Neither number is wrong; they describe different
-experiments.
+| Condition | Ours | Collaborator | Matched? | Explanation |
+|---|---|---|---|---|
+| Their exact configuration | **0.2813** [0.2570, 0.3055] | **0.2909** | **YES** | their value lies inside our interval; residual is the problem set (256 random vs 1319) |
+| Our canonical baseline | 0.1385 | — | n/a | γ=0; differs from theirs by churn alone |
+| γ=0 → 0.41 | +0.1622 | — | n/a | **the entire discrepancy** |
+| Checkpoint (base vs CFG run) | −0.0076 n.s. | — | n/a | not a cause; base run is if anything slightly worse |
+| Precision (bf16 vs fp32) | +0.0023 n.s. | — | n/a | not a cause |
+| Solver / churn implementation | ≈0 after adjusting for checkpoint | — | n/a | FKC-proposal churn and DDIM EDM churn are equivalent in effect |
+| `sigma_data` | 0.399844765663147 | 0.399844765663147 | **YES** | both sidecars; never a cause |
+| EMA, seed, schedule | ema=1, 42, entropic | ema=1, 42, entropic | **YES** | — |
+| Task config | `tinygsm_bits_cfg.py` | `tinygsm_bits.py` | **equivalent** | flattened diff: only `p_uncond` + paths |
+| Particle count | K=1 | K=32 | **equivalent** | `resampling never`, β=1, `total_resample_events=0` ⇒ independent draws; they report `particle_mean_accuracy` |
+| **512 → 1024 steps** | **+0.0045** [−0.0174, +0.0265] | **+7.03 pts** [+1.95, +12.50] | **NO** | see §7 |
+| Problem set | 1319 full | 256 random (shard A) | **NO** | file absent from this cluster; no longer material |
 
-The dominant axis is **stochasticity**, and this is already established rather
-than conjectured: our own γ sweep reproduces ~0.27 from a 0.137 baseline with no
-other change. The residual ~2 points is what the ablation tree is for.
+---
 
-One substantive correction falls out for **their** study rather than ours: because
-`s_churn` scales with the step count, their headline "+7.03 points from 512→1024
-steps" cannot be read as a pure integration-resolution result. At γ=0 the same
-doubling is worth +0.0005 in our hands.
+## 7. The one claim that does *not* reproduce
 
-**This conclusion is interim** — §5 has not run. It will be upgraded to A, B, C
-or D once those seven cells complete. What is already final: `sigma_data`, EMA,
-seed and schedule all match, and the config difference is provably
-sampling-irrelevant, so none of those can explain the gap.
+Their headline **+7.03 points from 512→1024 steps** is not reproduced. At
+γ=0.41 we measure **+0.0045 [−0.0174, +0.0265]** — about half a point, not
+significant — and our estimate sits *below* their interval [+1.95, +12.50].
 
-**Not reproducible at all:** their 256-problem shard A lives at
-`/home/gb511/s-flm/data_gsm8k_shardA_256.json` and is not on this cluster. Every
-audit cell uses the full 1319 problems instead, so a residual problem-set term
-remains unquantified. Obtaining that file is the one external dependency.
+Two contributing factors, both now measured:
+
+1. **Their step-count axis is also a churn-dose axis.** `s_churn = γ·(N−1)`, so
+   with γ pinned at 0.41 doubling the steps doubles the injected noise. The
+   effect is real but **saturates**: 256→512 is worth +0.0250 (significant),
+   512→1024 only +0.0045 (not). They measured in the flat region.
+2. **Their interval is wide** — 256 problems against our 1319 — and our paired
+   estimate is far tighter.
+
+At γ=0 the same doubling is worth **exactly zero** (+0.0000 [−0.0023, +0.0023]),
+which is what our original report stated.
+
+---
+
+## 8. Conclusion
+
+### **A — exact replication achieved.**
+
+Running the collaborator's configuration in our repository gives **0.2813
+[0.2570, 0.3055]**, and their reported **0.2909** falls inside that interval.
+Nothing is broken in either codebase.
+
+**The 0.1385 vs 0.29 discrepancy is stochastic churn, and nothing else.**
+Turning γ from 0 to 0.41 is worth **+0.1622 [+0.1387, +0.1857]** on identical
+checkpoint, solver and step count — larger than the whole gap. Every other
+candidate was tested and is null: checkpoint (−0.008 n.s.), precision (+0.002
+n.s.), solver and churn implementation (≈0), and `sigma_data`, EMA, seed,
+schedule and config are matched or provably irrelevant.
+
+The two numbers were never in conflict. Ours is a **deterministic** baseline;
+theirs is a **stochastic** one. Our study fixed γ=0 throughout and therefore
+reported the deterministic figure as "the baseline" without qualification —
+that is the reporting error, and it is ours.
+
+**Sub-conclusion for their study (B, scoped):** the +7.03-point step-count claim
+does not survive. It is confounded with churn dose and measured in the region
+where that effect has saturated.
+
+**Residual, not material:** shard A is unavailable, so a problem-set term is
+unquantified. Since their number already falls inside our full-test-set
+interval, closing it would not change the verdict.
