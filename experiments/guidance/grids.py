@@ -120,7 +120,13 @@ class Cell:
         if self.collect_diagnostics:
             a += ["--collect_diagnostics"]
         for k, v in self.extra.items():
-            a += [f"--{k}", str(v)]
+            # An empty value means a store_true flag: emit "--flag" alone.
+            # Emitting an empty argv token instead only works because the
+            # SLURM runner word-splits unquoted, which is too fragile to rely on.
+            if v == "" or v is True:
+                a += [f"--{k}"]
+            else:
+                a += [f"--{k}", str(v)]
         return a
 
 
@@ -560,6 +566,78 @@ def grid_churn_anatomy() -> List[Cell]:
     return out
 
 
+BASE_RUN = "tinigsm_gsm8k/runs/cobit_raw_binary_bits"          # collaborator's run
+BASE_425K = f"{BASE_RUN}/checkpoints/step=000425000.pt"
+
+
+def grid_replication_audit() -> List[Cell]:
+    """Reconcile our 0.1385 baseline with the collaborator's ~0.29 single sample.
+
+    Their canonical cell (results/gsm8k_passk_shardA/cobit.json) differs from
+    ours on FIVE axes at once, so the gap cannot be attributed by inspection:
+
+        axis            collaborator            ours
+        checkpoint      base run, step 425k     CFG run (p_uncond=0.1), 500k
+        churn gamma     0.41                    0
+        sampler         fkc_em (Euler-Maruyama) ddim
+        steps           1024                    512
+        problems        256 random (shard A)    1319 full test set
+
+    This grid starts at their configuration and removes one axis per cell, so
+    each accuracy change is attributable to a single factor. Particle count is
+    NOT an axis: they ran resampling_policy=never at beta=1, which makes the 32
+    particles independent draws, and they report `particle_mean_accuracy` --
+    the mean over particles, whose expectation equals the K=1 accuracy. K is
+    inert here by construction, so paying 32x for it would buy nothing.
+
+    Shard A is not reproducible: the file lives at /home/gb511/s-flm/ and is not
+    on this cluster. Every cell below therefore runs the full 1319 problems, and
+    the problem-set difference is quantified separately rather than matched.
+    """
+    out = []
+    def cell(name, **kw):
+        d = dict(limit=FULL_LIMIT, seed=42)
+        d.update(kw); out.append(Cell(name=name, **d))
+
+    # CRITICAL: --gamma and --churn_gamma are DIFFERENT knobs on DIFFERENT code
+    # paths, and the collaborator command uses only the second.
+    #   --gamma       -> configure_stochastic() -> cfg.evaluation.stochastic,
+    #                    the EDM churn inside the DDIM sampler (what WE varied).
+    #   --churn_gamma -> the FKC edm_churn PROPOSAL's per-step churn.
+    # Their command passes --churn_gamma 0.41 and never passes --gamma, so
+    # --gamma defaults to 0.0 and configure_stochastic disables the DDIM churn
+    # outright ("if mode == deterministic or gamma <= 0.0: enabled = False").
+    # Passing --gamma 0.41 with sampler_kind=fkc_em would therefore reproduce
+    # the OPPOSITE configuration. Cells A/B keep gamma=0 and set churn_gamma.
+    FKC = {"num_particles": 1, "resampling_policy": "never",
+           "final_resample": 0, "beta": 1.0, "proposal": "edm_churn",
+           "churn_gamma": 0.41}
+
+    # A: the collaborator's configuration, as exactly as this repo allows.
+    cell("aud_A_collab", checkpoint=BASE_425K, sampler="stochastic", gamma=0.0,
+         sampler_kind="fkc_em", steps=1024, extra=dict(FKC))
+    # B: same, our checkpoint -> isolates the conditioning-dropout training run.
+    cell("aud_B_ourckpt", sampler="stochastic", gamma=0.0,
+         sampler_kind="fkc_em", steps=1024, extra=dict(FKC))
+    # C: our churn path instead -> isolates FKC-proposal churn vs DDIM churn,
+    #    and EM vs DDIM integration, at the same nominal gamma and step count.
+    cell("aud_C_ddim", sampler="stochastic", gamma=0.41, steps=1024)
+    # D, E: step count at fixed gamma. s_churn = gamma*(N-1), so per-step churn
+    #    is constant and TOTAL injected noise scales with N -- this axis is a
+    #    churn-DOSE axis, not just a resolution axis. That is why the
+    #    collaborator's "+7.03 from 512->1024 steps" is confounded.
+    cell("aud_D_512", sampler="stochastic", gamma=0.41, steps=512)
+    cell("aud_E_256", sampler="stochastic", gamma=0.41, steps=256)
+    # F: gamma=0 at 1024 steps is already measured (0.1390, solver_control).
+    # G: their checkpoint at OUR canonical setting -> checkpoint effect at gamma=0.
+    cell("aud_G_baseckpt_g0", checkpoint=BASE_425K,
+         sampler="deterministic", gamma=0.0, steps=512)
+    # H: precision. We sample under bf16 autocast; their pass@k study ran fp32.
+    cell("aud_H_fp32", sampler="deterministic", gamma=0.0, steps=512,
+         extra={"fp32": ""})
+    return out
+
+
 def grid_solver_control() -> List[Cell]:
     """Is SG-prev guidance, or just a better ODE solver?
 
@@ -688,6 +766,7 @@ GRIDS = {
     "stoch_screen": grid_stoch_screen,
     "stoch_confirm": grid_stoch_confirm,
     "churn_anatomy": grid_churn_anatomy,
+    "replication_audit": grid_replication_audit,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,

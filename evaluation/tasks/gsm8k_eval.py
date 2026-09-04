@@ -368,6 +368,11 @@ def main():
     ap.add_argument("--sg_delta", type=float, default=0.5,
                     help="Reference noise-level offset in LOG-SIGMA units. Also the "
                          "normalisation scale that makes SG-prev comparable across NFE.")
+    ap.add_argument("--fp32", action="store_true",
+                    help="Disable bf16 autocast and sample in full fp32. Our evals "
+                         "default to bf16 (cfg.evaluation.use_amp/amp_dtype); the "
+                         "collaborator's pass@k study ran fp32, so this exists to "
+                         "test precision as a replication axis.")
     ap.add_argument("--null_strategy", default=None,
                     choices=["half", "data_center", "zeros", "random"],
                     help="Override cfg.cond.null_strategy for the CFG unconditional "
@@ -486,6 +491,8 @@ def main():
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    if args.fp32:
+        cfg.evaluation.use_amp = False
     if args.null_strategy is not None:
         # The model trained its unconditional branch with ONE null (this run:
         # "half"). Overriding here evaluates a train/eval MISMATCH -- it probes
