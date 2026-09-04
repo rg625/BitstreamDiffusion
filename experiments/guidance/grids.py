@@ -610,6 +610,47 @@ def grid_regime_b_control() -> List[Cell]:
     ]
 
 
+# Regime B's guidance operating point. The canonical CHECKPOINT cannot be used:
+# the base run trained with cond.p_uncond=0.0, so it has no unconditional branch
+# and CFG is undefined on it. We therefore keep the canonical SAMPLER settings
+# (DDIM + gamma=0.41 + 1024 steps, shown equivalent to FKC-EM by
+# regime_b_control) and use the CFG-trained checkpoint, whose swap cost was
+# measured at -0.0076 [-0.0243,+0.0091] (n.s.). bf16, because fp32 costs 5.2x
+# wall clock (10192s vs 1963s) for a difference of -0.0121 [-0.0311,+0.0061].
+RB = dict(sampler="stochastic", gamma=0.41, steps=1024,
+          limit=EXPLORE_LIMIT, seed=42)
+
+
+def grid_rb_guidance_screen() -> List[Cell]:
+    """Regime B, coarse mechanism screen at the canonical operating point.
+
+    Question is NOT "what is the optimal scale" -- it is "does each mechanism
+    still help at all, once the baseline is the strong stochastic one". The
+    comparator is the SAME-regime baseline (first cell), never a Regime A
+    number and never raw accuracy.
+
+    Scales bracket both regimes' known optima rather than assuming either
+    transfers: Regime A wanted CFG w~12 deterministically and w~2-4 at
+    gamma=0.3, so the screen spans 0.5-8. AG is screened at its Regime A
+    optimum (15) and at a much lower scale, because if stochasticity shifted
+    CFG's optimum down it may shift AG's too -- that was never tested. SG-prev
+    gets its Regime A optimum (2) and the rescue scale (0.125) that failed at
+    gamma=0.3, to see whether gamma=0.41 with 4x the steps behaves differently.
+    """
+    bad = f"{RUN_DIR}/checkpoints/step=000350000.pt"
+    out = [Cell(name="rbs_baseline", **RB)]
+    for w in (0.5, 1.0, 2.0, 4.0, 8.0):
+        out.append(Cell(name=f"rbs_cfg{w:g}", guidance_scale=w, **RB))
+    for w in (4.0, 15.0):
+        out.append(Cell(name=f"rbs_ag{w:g}", ag_scale=w, bad_checkpoint=bad, **RB))
+    for w in (0.125, 2.0):
+        out.append(Cell(name=f"rbs_sgprev{w:g}", sg_scale=w, sg_variant="prev", **RB))
+    out.append(Cell(name="rbs_sgexact1", sg_scale=1.0, sg_variant="exact", **RB))
+    for c in out:
+        c.extra["regime"] = "REGIME_B_CANONICAL"
+    return out
+
+
 def grid_replication_audit() -> List[Cell]:
     """Reconcile our 0.1385 baseline with the collaborator's ~0.29 single sample.
 
@@ -808,6 +849,7 @@ GRIDS = {
     "churn_anatomy": grid_churn_anatomy,
     "replication_audit": grid_replication_audit,
     "regime_b_control": grid_regime_b_control,
+    "rb_guidance_screen": grid_rb_guidance_screen,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,
