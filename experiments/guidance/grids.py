@@ -621,6 +621,35 @@ RB = dict(sampler="stochastic", gamma=0.41, steps=1024,
           limit=EXPLORE_LIMIT, seed=42)
 
 
+def grid_rb_traj() -> List[Cell]:
+    """Per-problem trajectory capture at the canonical operating point.
+
+    Re-runs five already-measured cells with --traj_log_n so their trajectories
+    can be joined to problem ids. The accuracies are known and must reproduce
+    exactly (logging is a verified no-op), which doubles as an integration check.
+
+    64 problems, not 250: the trajectory questions -- when does SG diverge, do
+    CFG's rescues and breaks look different -- are per-trajectory, and 64 gives
+    ~20 baseline-correct and ~44 baseline-wrong trajectories, enough to compare
+    the CFG fix/break groups. Stride 4 keeps 256 of 1024 steps, which resolves a
+    divergence located at step 62 with room to spare.
+    """
+    bad = f"{RUN_DIR}/checkpoints/step=000350000.pt"
+    base = dict(RB); base.update(limit=64)
+    arms = [("traj_baseline", {}),
+            ("traj_cfg2", dict(guidance_scale=2.0)),
+            ("traj_ag15", dict(ag_scale=15.0, bad_checkpoint=bad)),
+            ("traj_sgprev0.125", dict(sg_scale=0.125, sg_variant="prev")),
+            ("traj_sgprev2", dict(sg_scale=2.0, sg_variant="prev"))]
+    out = []
+    for name, kw in arms:
+        c = Cell(name=name, **kw, **base)
+        c.extra.update({"regime": "REGIME_B_CANONICAL",
+                        "traj_log_n": 64, "traj_stride": 4})
+        out.append(c)
+    return out
+
+
 def grid_rb_guidance_screen() -> List[Cell]:
     """Regime B, coarse mechanism screen at the canonical operating point.
 
@@ -850,6 +879,7 @@ GRIDS = {
     "replication_audit": grid_replication_audit,
     "regime_b_control": grid_regime_b_control,
     "rb_guidance_screen": grid_rb_guidance_screen,
+    "rb_traj": grid_rb_traj,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,

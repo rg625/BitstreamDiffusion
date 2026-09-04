@@ -469,6 +469,9 @@ class GuidedDenoiser:
         self.gcfg = gcfg
         self.is_cont_tokens = bool(is_cont_tokens)
         self.collect_diagnostics = bool(collect_diagnostics)
+        # Per-problem trajectory logging. Off by default: it is pure extra
+        # bookkeeping, detached and RNG-free, so a default run is unchanged.
+        self.per_problem_diagnostics = False
         # Ceiling for SG-exact's shifted noise level. sigma*exp(sg_delta) can
         # exceed the largest sigma the model was ever trained on (sigma_max=80
         # for the task configs, and exp(0.5)=1.65x of that is well outside it).
@@ -793,6 +796,14 @@ class GuidedDenoiser:
                 D_branches, base, D_used, direction, delta_used,
                 x_state, sigma_b, prefix_mask, cond_enabled,
             )
+            if self.per_problem_diagnostics:
+                # Stored under a reserved key so summarise_trace, which averages
+                # scalars, never tries to aggregate a [B] tensor.
+                diagnostics["_rows"] = {
+                    k: v.detach().cpu() for k, v in self._per_row_diagnostics(
+                        D_branches, base, D_used, x_state, prefix_mask, cond_enabled
+                    ).items()
+                }
         return GuidedPrediction(D=D_used, D_branches=D_branches, diagnostics=diagnostics)
 
     # -- diagnostics ----------------------------------------------------------
@@ -814,6 +825,79 @@ class GuidedDenoiser:
                 return 0.0
             return float(torch.sqrt((v[free] ** 2).sum() / n))
         return float(torch.sqrt((v ** 2).mean()))
+
+    @staticmethod
+    def _row_stats(g, s, mask, cond_enabled):
+        """Per-batch-row geometry of the guidance displacement g against the
+        unguided drift s, restricted to free (non-prompt) coordinates.
+
+        Both g and s are D-space differences. The map to score-space is the
+        shared scalar 1/sigma^2, so norms *ratios*, cosines and the
+        parallel/orthogonal split are all identical in either space -- which is
+        what makes these comparable across sigma and across mechanisms.
+
+        Returns 1-D float32 tensors of length B. Everything is detached and
+        consumes no RNG, so enabling this cannot change sampling.
+        """
+        g = g.detach().to(torch.float32)
+        s = s.detach().to(torch.float32)
+        if g.dim() > 2:                      # continuous-token mode: flatten trailing dims
+            g = g.reshape(g.shape[0], -1)
+            s = s.reshape(s.shape[0], -1)
+        keep = torch.ones_like(g, dtype=torch.bool)
+        if cond_enabled and mask is not None:
+            m = mask
+            if m.dim() > 2:
+                m = m.reshape(m.shape[0], -1)
+            if m.shape == g.shape:
+                keep = ~m
+        gk, sk = g * keep, s * keep
+        n = keep.sum(dim=1).clamp_min(1).to(torch.float32)
+        gn = torch.sqrt((gk ** 2).sum(1) / n)
+        sn = torch.sqrt((sk ** 2).sum(1) / n)
+        dot = (gk * sk).sum(1) / n
+        eps = 1e-20
+        cos = dot / (gn * sn).clamp_min(eps)
+        par = dot / sn.clamp_min(eps)                     # signed component along s
+        orth = torch.sqrt((gn ** 2 - par ** 2).clamp_min(0.0))
+        return {"g_norm": gn, "s_norm": sn,
+                "ratio": gn / sn.clamp_min(eps),
+                "cos": cos, "parallel": par, "orthogonal": orth}
+
+    def _per_row_diagnostics(self, D_branches, base, D_used, x_state,
+                             prefix_mask, cond_enabled) -> Dict[str, "torch.Tensor"]:
+        """Everything in _diagnostics that is scientifically meaningful per
+        problem, kept per batch row so trajectories can be joined to problem ids.
+
+        The batch-aggregated trace cannot support causal claims: a population
+        mean cannot say whether the trajectory that diverged is the trajectory
+        that got the answer wrong.
+        """
+        g = D_used - D_branches[GOOD_C]          # displacement guidance added
+        s = D_branches[GOOD_C] - x_state         # unguided drift (score * sigma^2)
+        out = self._row_stats(g, s, prefix_mask, cond_enabled)
+        x = x_state.detach().to(torch.float32)
+        if x.dim() > 2:
+            x = x.reshape(x.shape[0], -1)
+        out["x_norm"] = torch.sqrt((x ** 2).mean(dim=1))
+        p = D_branches[GOOD_C].detach().to(torch.float32)
+        if p.dim() > 2:
+            p = p.reshape(p.shape[0], -1)
+        keep = torch.ones_like(p, dtype=torch.bool)
+        if cond_enabled and prefix_mask is not None:
+            m = prefix_mask
+            if m.dim() > 2:
+                m = m.reshape(m.shape[0], -1)
+            if m.shape == p.shape:
+                keep = ~m
+        n = keep.sum(dim=1).clamp_min(1).to(torch.float32)
+        if not self.is_cont_tokens:
+            pc = p.clamp(1e-6, 1 - 1e-6)
+            ent = -(pc * pc.log() + (1 - pc) * (1 - pc).log()) * keep
+            out["bit_entropy"] = ent.sum(1) / n
+            out["sat_lt_001"] = ((p < 0.01) & keep).sum(1).to(torch.float32) / n
+            out["sat_gt_099"] = ((p > 0.99) & keep).sum(1).to(torch.float32) / n
+        return out
 
     def _diagnostics(self, D_branches, base, D_used, direction, delta_used,
                      x_state, sigma_b, prefix_mask, cond_enabled) -> Dict[str, float]:

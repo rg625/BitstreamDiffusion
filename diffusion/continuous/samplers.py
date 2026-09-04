@@ -1725,6 +1725,7 @@ class DDIMSampler:
         guidance: Optional[GuidanceConfig] = None,
         bad_model=None,
         collect_diagnostics: bool = False,
+        per_problem_diagnostics: bool = False,
         schedule: Optional[str] = None,
         num_steps: Optional[int] = None,
         entropic_blend_alpha: Optional[float] = None,
@@ -1824,6 +1825,7 @@ class DDIMSampler:
             # range the model was trained on.
             sigma_hi_cap=float(sigma0),
         )
+        gdn.per_problem_diagnostics = bool(per_problem_diagnostics)
         gdn.reset()
         sc_state = gdn.make_self_cond_state(cond_enabled)
         branches = gdn.branches(cond_enabled)

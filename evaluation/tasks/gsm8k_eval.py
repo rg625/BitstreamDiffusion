@@ -48,6 +48,35 @@ def _ckpt_tag(path: str) -> str:
     return digits or stem.replace("=", "")
 
 
+def _collect_traj_rows(trace, idxs, max_n, stride, out, steps_out):
+    """Reshape a batch trace of per-row tensors into {feature: {problem: series}}.
+
+    `idxs[b]` is the global problem index of batch row b, so the join is exact
+    rather than positional-by-luck.
+    """
+    keep_rows = [(b, gi) for b, gi in enumerate(idxs) if gi < max_n]
+    if not keep_rows:
+        return
+    seen = set(steps_out)
+    for rec in trace:
+        st = rec.get("step")
+        if st == "final" or st is None:
+            continue
+        st = int(st)
+        if st % max(1, int(stride)):
+            continue
+        rows = rec.get("_rows")
+        if not rows:
+            continue
+        if st not in seen:
+            steps_out.append(st); seen.add(st)
+        for feat, vec in rows.items():
+            d = out.setdefault(feat, {})
+            for b, gi in keep_rows:
+                if b < len(vec):
+                    d.setdefault(gi, []).append(float(vec[b]))
+
+
 def _solver_evals_per_step(sampler_kind: str, steps: int) -> float:
     """Denoiser evaluations per step contributed by the SOLVER, not by guidance.
 
@@ -376,6 +405,14 @@ def main():
     ap.add_argument("--sg_delta", type=float, default=0.5,
                     help="Reference noise-level offset in LOG-SIGMA units. Also the "
                          "normalisation scale that makes SG-prev comparable across NFE.")
+    ap.add_argument("--traj_log_n", type=int, default=0,
+                    help="Log PER-PROBLEM trajectory geometry for the first N "
+                         "problems, to <result>.traj.npz. The batch-aggregated "
+                         "per_step trace cannot support causal claims: a "
+                         "population mean cannot say whether the trajectory that "
+                         "diverged is the one that got the answer wrong. 0 = off.")
+    ap.add_argument("--traj_stride", type=int, default=1,
+                    help="Keep every Nth step in the per-problem trajectory log.")
     ap.add_argument("--regime", default=None,
                     help="Explicit experimental-regime identifier recorded in the "
                          "result JSON, e.g. REGIME_A_ORIGINAL or REGIME_B_CANONICAL. "
@@ -598,6 +635,8 @@ def main():
     per_problem_answer = []
     all_texts = []
     guidance_traces = []
+    traj_rows = {}          # feature -> {global_idx: [value per logged step]}
+    traj_steps = []         # step indices actually kept
     batch_secs = []
     t_start = time.time()
     if torch.cuda.is_available():
@@ -618,6 +657,9 @@ def main():
             guidance=gcfg,
             bad_model=bad_model,
             collect_diagnostics=bool(args.collect_diagnostics),
+            # Only pay for per-row geometry on batches that contain a problem we
+            # actually want to log.
+            per_problem_diagnostics=bool(args.traj_log_n > 0 and start < args.traj_log_n),
             posterior_temp=args.posterior_temp,
             posterior_temp_target=args.posterior_temp_target,
             posterior_temp_schedule=args.posterior_temp_schedule,
@@ -632,7 +674,13 @@ def main():
         if args.collect_diagnostics:
             bits, trace = bits
             if trace:
-                guidance_traces.append(trace)
+                if args.traj_log_n > 0 and start < args.traj_log_n:
+                    _collect_traj_rows(trace, idxs, args.traj_log_n,
+                                       args.traj_stride, traj_rows, traj_steps)
+                # Drop the per-row payload before aggregation so summarise_trace
+                # only ever sees scalars.
+                guidance_traces.append([{k: v for k, v in rec.items() if k != "_rows"}
+                                        for rec in trace])
         batch_secs.append(time.time() - t_batch)
         gen_ids = bits_to_token_ids(bits, bpt)  # [B,512]
 
@@ -786,6 +834,26 @@ def main():
             tag += f"_{args.guidance_mode}"
     out_path = out_dir / f"gsm8k_results_{tag}.json"
     out_path.write_text(json.dumps(result, indent=2))
+    if traj_rows and traj_steps:
+        # Per-problem trajectories as a compressed sidecar, never inlined into
+        # the JSON: 250 problems x 1024 steps x ~10 features is millions of
+        # floats and would make every result file unreadable.
+        import numpy as _np
+        probs = sorted({g for d in traj_rows.values() for g in d})
+        steps = sorted(traj_steps)
+        arrs = {"problem_idx": _np.asarray(probs, dtype=_np.int32),
+                "step": _np.asarray(steps, dtype=_np.int32)}
+        for feat, d in traj_rows.items():
+            M = _np.full((len(probs), len(steps)), _np.nan, dtype=_np.float32)
+            for r, g in enumerate(probs):
+                series = d.get(g, [])
+                M[r, :len(series)] = series[:len(steps)]
+            arrs[feat] = M
+        tp = out_dir / f"gsm8k_results_{tag}.traj.npz"
+        _np.savez_compressed(tp, **arrs)
+        print(f"[traj] {len(probs)} problems x {len(steps)} steps x "
+              f"{len(traj_rows)} features -> {tp} "
+              f"({tp.stat().st_size/1e6:.1f} MB)")
     print("\n=== GSM8K RESULT ===")
     print(json.dumps({k: v for k, v in result.items() if k != "sample_records"}, indent=2))
     print(f"saved -> {out_path}")
