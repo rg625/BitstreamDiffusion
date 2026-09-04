@@ -570,6 +570,46 @@ BASE_RUN = "tinigsm_gsm8k/runs/cobit_raw_binary_bits"          # collaborator's 
 BASE_425K = f"{BASE_RUN}/checkpoints/step=000425000.pt"
 
 
+def grid_regime_b_control() -> List[Cell]:
+    """Regime B, step 1: is the canonical churn implementation substitutable?
+
+    The canonical sampler (FKC-EM) CANNOT host the guidance study as specified:
+
+      * `sample_particles()` accepts no `bad_model` and no `sg_scale`, so
+        AutoGuidance and Self-Guidance are simply not implemented there;
+      * its `guidance_scale` is NOT linear CFG. Under DDIM it means
+        D_u + w(D_c - D_u); under FKC it is the exponent of a GEOMETRIC average
+        target q_u^(1-w) q_c^w (Prop 3.1), naturally in [0,1]. "CFG w=12" is
+        therefore a different mathematical object in the two regimes;
+      * FKC refuses EDM churn outright (`cfg.evaluation.stochastic` must be
+        disabled) -- its stochasticity is the proposal's churn_gamma.
+
+    So the guidance study needs a sampler where CFG/AG/SG all exist with the
+    SAME semantics as Regime A, otherwise cross-regime effect sizes compare
+    different operations. DDIM + EDM churn is that sampler. Substituting it is
+    only legitimate if the two churn implementations behave equivalently, which
+    is exactly what this control measures -- evidenced substitution, not silent.
+
+    Matched on everything the audit identified: base 425k checkpoint, 1024
+    steps, seed 42, entropic schedule, sigma_data from the sidecar, 1319
+    problems. The canonical FKC arm already exists (replication_audit cell A,
+    0.2813) and needs no rerun: the FKC eval path has no autocast wrapper, so
+    it already ran fp32 and matches the collaborator's precision.
+    """
+    common = dict(checkpoint=BASE_425K, steps=1024, limit=FULL_LIMIT, seed=42,
+                  extra={"regime": "REGIME_B_CANONICAL"})
+    return [
+        # The control: our churn path, everything else canonical.
+        Cell(name="rB_ddim_churn041_fp32", sampler="stochastic", gamma=0.41,
+             **{**common, "extra": {**common["extra"], "fp32": ""}}),
+        # Precision under stochasticity. The audit's precision null was measured
+        # at gamma=0 only; bf16 rounding could plausibly matter more when noise
+        # is being injected every step.
+        Cell(name="rB_ddim_churn041_bf16", sampler="stochastic", gamma=0.41,
+             **common),
+    ]
+
+
 def grid_replication_audit() -> List[Cell]:
     """Reconcile our 0.1385 baseline with the collaborator's ~0.29 single sample.
 
@@ -767,6 +807,7 @@ GRIDS = {
     "stoch_confirm": grid_stoch_confirm,
     "churn_anatomy": grid_churn_anatomy,
     "replication_audit": grid_replication_audit,
+    "regime_b_control": grid_regime_b_control,
     "compute_control": grid_compute_control,
     "null_ablation": grid_null_ablation,
     "ag_ema": grid_ag_ema,

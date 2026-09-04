@@ -74,3 +74,18 @@ def test_fkc_result_filename_honours_the_tag():
     # The FKC tag assembly must consume args.tag before the path is built.
     fkc = src[src.index('prop_tag = ('):src.index('out_path = out_dir / f"gsm8k_results_{tag}.json"')]
     assert "args.tag" in fkc, "FKC filename ignores --tag; cells will collide"
+
+
+def test_both_result_paths_record_the_regime():
+    """Regime A and Regime B results must never be pooled by accident.
+
+    The eval has two independent result dicts (FKC and non-FKC). If only one
+    records `regime`, half the results become unattributable the moment both
+    regimes are in flight.
+    """
+    from pathlib import Path
+
+    src = Path("evaluation/tasks/gsm8k_eval.py").read_text()
+    assert src.count('"regime": args.regime') == 2, (
+        "both the FKC and non-FKC result dicts must record --regime"
+    )

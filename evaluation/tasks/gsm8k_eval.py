@@ -309,6 +309,7 @@ def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir, out_di
         "invalid_token_rate": n_invalid_tok / max(1, n_gen_tokens),
         "timeout_s": timeout_s,
         "gsm8k_test_path": args.gsm8k_test_path,
+        "regime": args.regime,
         # Per-prompt vectors (index-aligned across cells, since every cell uses the
         # same problems and seed). Required for a PAIRED comparison between betas:
         # the between-prompt variance cancels in the per-prompt difference, which
@@ -375,6 +376,10 @@ def main():
     ap.add_argument("--sg_delta", type=float, default=0.5,
                     help="Reference noise-level offset in LOG-SIGMA units. Also the "
                          "normalisation scale that makes SG-prev comparable across NFE.")
+    ap.add_argument("--regime", default=None,
+                    help="Explicit experimental-regime identifier recorded in the "
+                         "result JSON, e.g. REGIME_A_ORIGINAL or REGIME_B_CANONICAL. "
+                         "Regimes must never be pooled, so every result carries one.")
     ap.add_argument("--fp32", action="store_true",
                     help="Disable bf16 autocast and sample in full fp32. Our evals "
                          "default to bf16 (cfg.evaluation.use_amp/amp_dtype); the "
@@ -729,6 +734,7 @@ def main():
         "invalid_token_rate": n_invalid_tok / max(1, n_gen_tokens),
         "timeout_s": timeout_s,
         "seed": int(args.seed),
+        "regime": args.regime,
         "batch_size": int(args.batch_size),
         # ---- diversity / distributional ----
         "diversity": text_metrics(all_texts),
