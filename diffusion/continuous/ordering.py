@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+import math
+
 import torch
 
 __all__ = ["ordering_ranks", "positional_time", "expand_token_sigma_to_bits"]
@@ -85,3 +87,73 @@ def positional_time(t: torch.Tensor, u: torch.Tensor, w: float) -> torch.Tensor:
 def expand_token_sigma_to_bits(sigma_tok: torch.Tensor, bits_per_token: int) -> torch.Tensor:
     """[B, n_tokens] -> [B, n_tokens*bits_per_token], each token's sigma repeated."""
     return sigma_tok.repeat_interleave(int(bits_per_token), dim=-1)
+
+
+# -----------------------------------------------------------------------------
+# Deterministic ordering sampler
+# -----------------------------------------------------------------------------
+
+@torch.no_grad()
+def sample_ordered(
+    denoise_fn,
+    *,
+    sigmas: torch.Tensor,
+    x_init: torch.Tensor,
+    u: Optional[torch.Tensor] = None,
+    w: float = 0.0,
+    bits_per_token: int = 16,
+    prefix_full: Optional[torch.Tensor] = None,
+    prefix_mask: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    """Deterministic Euler (probability-flow) sampling with per-position sigma.
+
+    Scope, stated plainly: this is the ORDERING path only. It deliberately does
+    NOT implement EDM churn, ATI sigma shifts, FKC or posterior tempering --
+    reimplementing those would duplicate DDIMSampler and invite the two to
+    diverge. At w=0 it is validated to reproduce a deterministic
+    (gamma=0, no-churn) DDIM trajectory exactly; anything stochastic must go
+    through DDIMSampler.
+
+    `denoise_fn(x, sigma_bits) -> D` takes sigma already expanded to bits, so
+    the caller controls how the model is conditioned.
+
+    `sigmas` is the 1-D global schedule [T]. Per-token times come from
+    `positional_time`, which at w=0 gives every token the global sigma, so this
+    reduces to the ordinary Euler loop by construction rather than by a branch.
+    """
+    x = x_init.clone()
+    B = x.shape[0]
+    n_tok = x.shape[1] // int(bits_per_token)
+    if u is None:
+        u = torch.zeros(B, n_tok, device=x.device, dtype=torch.float32)
+
+    # Map the global schedule to a normalised time in [0,1] (1 = noisiest), so
+    # the ordering offset is applied in time, not in sigma -- sigma is highly
+    # non-linear in t and offsetting it directly would not define an ordering.
+    s_hi, s_lo = float(sigmas[0]), float(sigmas[-1])
+    def t_of(sig):
+        if s_hi <= s_lo:
+            return torch.zeros(B, device=x.device)
+        frac = (math.log(max(float(sig), 1e-20)) - math.log(max(s_lo, 1e-20))) / \
+               (math.log(s_hi) - math.log(max(s_lo, 1e-20)))
+        return torch.full((B,), float(min(max(frac, 0.0), 1.0)), device=x.device)
+
+    def sigma_at(t_tok):
+        lg = math.log(max(s_lo, 1e-20)) + t_tok * (math.log(s_hi) - math.log(max(s_lo, 1e-20)))
+        return lg.exp()
+
+    for i in range(len(sigmas) - 1):
+        t_cur = positional_time(t_of(sigmas[i]), u, w)          # [B, n_tok]
+        t_nxt = positional_time(t_of(sigmas[i + 1]), u, w)
+        sig_cur = expand_token_sigma_to_bits(sigma_at(t_cur), bits_per_token)
+        sig_nxt = expand_token_sigma_to_bits(sigma_at(t_nxt), bits_per_token)
+        if prefix_mask is not None and prefix_full is not None:
+            x = torch.where(prefix_mask, prefix_full, x)
+        D = denoise_fn(x, sig_cur)
+        score = (D - x) / (sig_cur ** 2)
+        # probability-flow ODE: dx/dsigma = -sigma * score = (x - D)/sigma
+        d = -sig_cur * score
+        x = x + (sig_nxt - sig_cur) * d
+    if prefix_mask is not None and prefix_full is not None:
+        x = torch.where(prefix_mask, prefix_full, x)
+    return x

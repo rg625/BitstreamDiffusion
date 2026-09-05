@@ -80,3 +80,57 @@ def test_token_sigma_expands_to_bits_blockwise():
     out = expand_token_sigma_to_bits(s, 4)
     assert out.shape == (1, 12)
     assert torch.equal(out[0], torch.tensor([1.]*4 + [2.]*4 + [3.]*4))
+
+
+def test_ordered_sampler_at_w0_equals_a_plain_euler_loop():
+    """The gate for the sampler: at w=0 every token sits at the global sigma,
+    so the loop must reduce EXACTLY to ordinary probability-flow Euler."""
+    from diffusion.continuous.ordering import sample_ordered
+
+    torch.manual_seed(0)
+    B, S, bpt = 2, 64, 16
+    sigmas = torch.tensor([10.0, 5.0, 2.0, 1.0, 0.4, 0.1])
+    x0 = torch.randn(B, S)
+    W = torch.randn(S, S) * 0.01
+    denoise = lambda x, s: torch.sigmoid(x @ W)
+
+    got = sample_ordered(denoise, sigmas=sigmas, x_init=x0, w=0.0, bits_per_token=bpt)
+
+    # reference: the same ODE with one scalar sigma per step
+    x = x0.clone()
+    for i in range(len(sigmas) - 1):
+        sc, sn = sigmas[i], sigmas[i + 1]
+        D = denoise(x, sc)
+        d = -sc * ((D - x) / sc ** 2)
+        x = x + (sn - sc) * d
+    assert torch.allclose(got, x, rtol=0, atol=1e-5), f"max {float((got-x).abs().max()):.2e}"
+
+
+def test_ordered_sampler_respects_the_prompt_clamp():
+    from diffusion.continuous.ordering import sample_ordered
+
+    torch.manual_seed(0)
+    B, S, bpt = 2, 32, 16
+    pm = torch.zeros(B, S, dtype=torch.bool); pm[:, :16] = True
+    pf = torch.full((B, S), 0.5)
+    out = sample_ordered(lambda x, s: torch.rand_like(x), sigmas=torch.tensor([5.0, 1.0, 0.1]),
+                         x_init=torch.randn(B, S), w=0.0, bits_per_token=bpt,
+                         prefix_full=pf, prefix_mask=pm)
+    assert torch.equal(out[pm], pf[pm]), "prompt positions must survive untouched"
+
+
+def test_ordering_changes_the_trajectory_only_when_w_is_nonzero():
+    from diffusion.continuous.ordering import ordering_ranks, sample_ordered
+
+    torch.manual_seed(0)
+    B, S, bpt = 2, 64, 16
+    sig = torch.tensor([10.0, 2.0, 0.4, 0.1])
+    x0 = torch.randn(B, S)
+    W = torch.randn(S, S) * 0.01
+    f = lambda x, s: torch.sigmoid(x @ W)
+    u = ordering_ranks("l2r", S // bpt, B)
+    base = sample_ordered(f, sigmas=sig, x_init=x0, u=u, w=0.0, bits_per_token=bpt)
+    same = sample_ordered(f, sigmas=sig, x_init=x0, u=None, w=0.0, bits_per_token=bpt)
+    diff = sample_ordered(f, sigmas=sig, x_init=x0, u=u, w=0.6, bits_per_token=bpt)
+    assert torch.equal(base, same), "at w=0 the ranks must be irrelevant"
+    assert not torch.allclose(base, diff), "at w>0 the ordering must matter"

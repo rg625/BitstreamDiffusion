@@ -294,6 +294,11 @@ def score_from_D(
         sigma = sigma.to(device=x_t.device)
     if sigma.dim() == 0:
         sigma = sigma.expand(x_t.size(0))
+    if sigma.dim() == 2:
+        # per-position sigma: already aligned with x_t's [B,S]; only pad the
+        # trailing vocab axis in continuous-token mode.
+        s2 = sigma.unsqueeze(-1) if is_cont_tokens else sigma
+        return (D - x_t) / (s2 ** 2)
     view = (-1, 1, 1) if is_cont_tokens else (-1, 1)
     sigma2 = (sigma ** 2).view(*view).to(torch.float32)
     return (D.to(torch.float32) - x_t.to(torch.float32)) / sigma2
@@ -389,16 +394,25 @@ def _zero_mask_(d: torch.Tensor, mask: Optional[torch.Tensor]) -> None:
 
 
 def _as_batch_sigma(sigma, B: int, device, dtype=torch.float32) -> torch.Tensor:
-    """Normalise a scalar/0-dim/[B] sigma to a [B] tensor."""
+    """Normalise sigma to [B], or pass a per-position [B,S] through unchanged.
+
+    [B,S] is the temporal-ordering case: each position sits at its own point on
+    the schedule. Everything downstream broadcasts on the trailing axis, so the
+    two ranks need no separate code path.
+    """
     if not isinstance(sigma, torch.Tensor):
         sigma = torch.tensor(float(sigma), device=device, dtype=dtype)
     sigma = sigma.to(device=device)
+    if sigma.dim() == 2:
+        if sigma.shape[0] != B:
+            raise ValueError(f"per-position sigma must be [B,S] with B={B}, got {tuple(sigma.shape)}")
+        return sigma
     if sigma.dim() == 0:
         return sigma.expand(B)
     if sigma.numel() == 1:
         return sigma.reshape(1).expand(B)
     if sigma.numel() != B:
-        raise ValueError(f"sigma must be scalar or length-{B}, got {tuple(sigma.shape)}")
+        raise ValueError(f"sigma must be scalar, [B] or [B,S]; got {tuple(sigma.shape)}")
     return sigma.reshape(B)
 
 
