@@ -94,14 +94,66 @@ The control arm is not optional: it re-derives the baseline under the pilot's
 reduced step budget, so arm B is compared against a matched short run rather
 than against the 500k-step production checkpoint.
 
-## 5. Cost — needs one measurement first
+## 5. MEASURED: the gradient suppression is real and severe
 
-Production training was 500k steps on **4×A100** with 12 h SLURM jobs. I have
-**not** measured throughput, so I will not quote a firm figure. The first action
-should be a ~10-minute timing probe to get steps/sec, from which the pilot cost
-follows exactly.
+Rather than infer the mechanism from a retraining pilot, it can be measured
+directly at the production checkpoint. The two losses differ by exactly the
+factor `D(1−D)` per bit, so that factor *is* the effect. Measured on real
+TinyGSM data with the EMA weights of `cobit_raw_binary_bits_cfg/last.pt`
+(free/suffix bits only, prompt excluded):
 
-Order-of-magnitude, assuming a 50k-step pilot (10 % of production) per arm:
-**~15–35 GPU-h per arm, ~30–70 GPU-h for the pair.** That range is wide because
-it rests on an unmeasured throughput; treat it as a planning placeholder, not an
-estimate.
+| σ | mean D(1−D) | median | frac < 0.01 | frac < 0.001 | **‖grad‖ sm ÷ ce** |
+|---|---|---|---|---|---|
+| 0.05 | 0.00000 | 0.00000 | 1.000 | 1.000 | **0.000** |
+| 0.20 | 0.00016 | 0.00000 | 0.998 | 0.994 | 0.135 |
+| 1.00 | 0.02446 | 0.00000 | 0.801 | 0.757 | 0.138 |
+| 5.00 | 0.01472 | 0.00003 | 0.803 | 0.713 | 0.075 |
+| 20.0 | 0.00612 | 0.00008 | 0.886 | 0.704 | 0.031 |
+| 80.0 | 0.00697 | 0.00007 | 0.873 | 0.727 | 0.035 |
+
+`D(1−D)` peaks at 0.25 and vanishes as bits saturate. **The median bit has a
+suppression factor of essentially zero at every noise level**, 80–100 % of bits
+sit below 0.01, and in aggregate `binary_sm` delivers **3–14 % of the gradient
+magnitude** that `binary_ce` would — and **none at all** at σ=0.05.
+
+This is the mechanism, measured rather than assumed, for **zero GPU-hours**.
+
+**What it does and does not establish.** It establishes that the suppression is
+real and large *at the operating point the current recipe reaches*. It does
+**not** establish that `binary_ce` trains to a better model: a model trained
+under CE would occupy different `D` values, so this cannot be extrapolated to
+its trajectory. It also plausibly describes a trap — a saturated-but-wrong bit
+receives almost no corrective gradient under `binary_sm`, and the trajectory
+logs independently measure ~80 % saturation — but "trap" is an interpretation,
+not a measurement.
+
+## 6. Cost — measured, and it constrains the design
+
+Throughput probe, 4×A100, 200 steps, capped cache:
+
+| Arm | wall (200 steps) | steps/s | GPU-h per 1k steps |
+|---|---|---|---|
+| `binary_sm` | 350 s | 0.571 | **1.94** |
+| `binary_ce` | 329 s | 0.608 | **1.83** |
+
+The two are within ~6 % — **the loss switch is cost-neutral**, so Branch 1 is not
+paying for its own experiment. (The gap is likely node/startup variance, not a
+real speed difference; it should not be quoted as one.)
+
+Projected arm cost, and the constraint it imposes:
+
+| steps | GPU-h per arm | two arms |
+|---|---|---|
+| 25k | ~49 | ~97 |
+| 50k | ~97 | ~194 |
+| 100k | ~194 | ~389 |
+| **500k (production)** | **~972** | **~1944** |
+
+**Reproducing production scale is impossible**: one 500k arm exceeds the entire
+~889 GPU-h remaining. Any Branch 1 pilot is necessarily a short-run comparison,
+and must be reported as such rather than as a comparison of converged models.
+
+**These figures include startup and `torch.compile` warmup** and therefore
+*overstate* the true cost. A 400-step probe differenced against the 200-step one
+separates the fixed offset, costs ~12 GPU-minutes, and could cut these estimates
+substantially. It should precede any pilot-size decision.
