@@ -42,7 +42,12 @@ export PROBE_STEPS="${PROBE_STEPS:-200}"
 CFG="configs/tasks/tinygsm_bits_probe.py"
 
 echo "[probe] loss=$PROBE_LOSS cap=$PROBE_CAP steps=$PROBE_STEPS"
-nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1
+# NOT piped to `head`: under `set -o pipefail`, head closing the pipe sends
+# SIGPIPE to nvidia-smi and the pipeline returns 141, which `set -e` turns into
+# a dead job. It is a race on how fast nvidia-smi writes, so it kills jobs
+# intermittently -- it took out one of the two 400-step probes and spared the
+# other. Query a single GPU instead, so there is no pipe at all.
+nvidia-smi -i 0 --query-gpu=name,memory.total --format=csv,noheader
 
 # Refuse rather than silently build a cache on a compute node with no network.
 if ! compgen -G "datasets/tinygsm/*cap${PROBE_CAP}*.meta.json" > /dev/null; then

@@ -14,6 +14,8 @@ scored zero for others, the comparison itself would be biased.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from evaluation.tasks.sandbox_gsm8k import _extract_code, evaluate_samples, predict_answer
@@ -110,3 +112,26 @@ def test_hpc_scripts_do_not_rely_on_conda_being_on_path():
             assert "srun torchrun" not in stripped, (
                 f"{p}: use `srun \"$COBIT_PYTHON\" -m torch.distributed.run` instead"
             )
+
+
+def test_hpc_scripts_have_no_sigpipe_races_under_pipefail():
+    """`cmd | head` with `set -o pipefail` fails intermittently with exit 141.
+
+    head closes the pipe, the writer gets SIGPIPE, pipefail propagates 141 and
+    `set -e` kills the job -- but only when the writer is still writing, so it
+    is a race. It killed one of two otherwise-identical throughput probes.
+    """
+    from pathlib import Path
+
+    offenders = []
+    for p in Path("scripts/hpc").rglob("*.slurm"):
+        src = p.read_text()
+        if "pipefail" not in src:
+            continue
+        for n, line in enumerate(src.splitlines(), 1):
+            st = line.strip()
+            if st.startswith("#") or "|" not in st:
+                continue
+            if re.search(r"\|\s*head\b", st) and "|| true" not in st:
+                offenders.append(f"{p}:{n}")
+    assert not offenders, f"unguarded `| head` under pipefail: {offenders}"

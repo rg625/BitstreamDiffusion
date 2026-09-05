@@ -153,7 +153,41 @@ Projected arm cost, and the constraint it imposes:
 ~889 GPU-h remaining. Any Branch 1 pilot is necessarily a short-run comparison,
 and must be reported as such rather than as a comparison of converged models.
 
-**These figures include startup and `torch.compile` warmup** and therefore
+### Steady-state, after differencing — the design space opens up
+
+The 200-step figures are dominated by a **241 s fixed startup/compile cost**.
+Differencing the 200- and 400-step probes removes it:
+
+| | wall @200 | wall @400 | startup | steps/s | GPU-h per 1k |
+|---|---|---|---|---|---|
+| `binary_ce` | 329 s | 417 s | **241 s** | **2.273** | **0.489** |
+
+**The naive figure overstated cost by 3.7×** (1.83 → 0.489 GPU-h/1k). Revised:
+
+| steps | GPU-h per arm | two arms |
+|---|---|---|
+| 25k | 12 | 24 |
+| 50k | **24** | **49** |
+| 100k | 49 | 98 |
+| 250k | 122 | 244 |
+| **500k (production)** | **244** | **489** |
+
+**This reverses the earlier conclusion.** Production-scale training is *not*
+impossible: a full 500k two-arm comparison is ~489 GPU-h against ~889 h
+remaining. It is affordable, though it would consume most of the budget and
+leave nothing for temporal ordering.
+
+The 12 GPU-minutes spent on the differencing probe changed the recommended
+pilot from "necessarily underpowered" to "can be run at a scale where the
+saturation the hypothesis depends on has actually developed".
+
+**Caveat: only `binary_ce` has a 400-step measurement.** The `binary_sm` 400-step
+job died on an unrelated SIGPIPE race in the probe script (now fixed). The two
+arms were within 6 % at 200 steps so the steady-state rates are very likely
+similar, but the `binary_sm` figure above is an assumption, not a measurement,
+until that job is rerun (~7 GPU-min).
+
+**The original 200-step figures include startup and `torch.compile` warmup** and therefore
 *overstate* the true cost. A 400-step probe differenced against the 200-step one
 separates the fixed offset, costs ~12 GPU-minutes, and could cut these estimates
 substantially. It should precede any pilot-size decision.
