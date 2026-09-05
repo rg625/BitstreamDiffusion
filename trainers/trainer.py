@@ -1742,6 +1742,10 @@ class Trainer:
                 mask=loss_mask,
             )
 
+        # Mechanistic telemetry for the objective pilot. Outside the autocast
+        # block and under no_grad, so it cannot perturb the loss or the graph.
+        self._log_objective_probe(model_scores, x0_flat, sigma, loss_mask)
+
         if is_train:
             self.opt.zero_grad(set_to_none=True)
 
@@ -1762,6 +1766,68 @@ class Trainer:
             self.ema.update(self.model)
 
         return loss.item()
+
+    @torch.compiler.disable
+    @torch.no_grad()
+    def _log_objective_probe(self, logits, x0, sigma, loss_mask):
+        """PRIMARY endpoint of the binary_sm vs binary_ce pilot.
+
+        The two objectives differ by exactly the factor D(1-D) per bit:
+
+            dL_ce/d_ell = w(sigma) * (D - x0)
+            dL_sm/d_ell = w(sigma) * (D - x0) * D(1-D)
+
+        so `grad_survival` = sum|dL_sm| / sum|dL_ce| measures how much of the
+        learning signal the score-matching objective retains. It is computed the
+        same way in BOTH arms -- it is a property of the model's D values, not of
+        the loss being optimised -- so the two runs are directly comparable.
+
+        Measured on FREE bits only (loss_mask): prompt positions are clamped and
+        carry no gradient, and including them would dilute every statistic.
+        """
+        probe = getattr(self.cfg.train, "objective_probe", None)
+        if probe is None or not bool(getattr(probe, "enabled", False)):
+            return
+        every = int(getattr(probe, "every_steps", 500))
+        if every <= 0 or int(self.global_step) % every:
+            return
+        if not getattr(self, "is_master", True):
+            return
+
+        D = torch.sigmoid(logits.detach().float().reshape(logits.shape[0], -1))
+        t = x0.detach().float().reshape(D.shape)
+        keep = (loss_mask.detach().float().reshape(D.shape) > 0) if loss_mask is not None \
+            else torch.ones_like(D, dtype=torch.bool)
+        if keep.sum() == 0:
+            return
+        d, tt = D[keep], t[keep]
+        supp = d * (1 - d)
+        err = (d - tt).abs()
+        stats = {
+            "objective/grad_survival": float((err * supp).sum() / err.sum().clamp_min(1e-12)),
+            "objective/median_D1mD": float(supp.median()),
+            "objective/frac_D1mD_lt_0.01": float((supp < 0.01).float().mean()),
+            "objective/frac_D1mD_lt_0.001": float((supp < 0.001).float().mean()),
+            "objective/mean_abs_err": float(err.mean()),
+        }
+        # Stratify by sigma: suppression is strongly sigma-dependent, and an
+        # aggregate over a log-uniform sigma draw hides that.
+        sig = sigma.detach().float().reshape(-1)
+        if sig.numel() == D.shape[0]:
+            per_row_keep = keep.view(D.shape[0], -1)
+            for lo, hi, name in ((0.0, 0.5, "lo"), (0.5, 5.0, "mid"), (5.0, float("inf"), "hi")):
+                sel = (sig >= lo) & (sig < hi)
+                if not sel.any():
+                    continue
+                dr, tr, kr = D[sel], t[sel], per_row_keep[sel]
+                if kr.sum() == 0:
+                    continue
+                dd, ttt = dr[kr], tr[kr]
+                sp = dd * (1 - dd); er = (dd - ttt).abs()
+                stats[f"objective/grad_survival_{name}"] = float(
+                    (er * sp).sum() / er.sum().clamp_min(1e-12))
+        for k, v in stats.items():
+            self.writer.add_scalar(k, v, int(self.global_step))
 
     @torch.compiler.disable
     @torch.no_grad()
