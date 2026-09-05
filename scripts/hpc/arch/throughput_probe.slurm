@@ -56,7 +56,13 @@ fi
 rm -rf "runs/tasks/tinygsm/probe_${PROBE_LOSS}"
 
 START=$(date +%s)
-srun torchrun --standalone --nproc_per_node=4 train.py --config "$CFG"
+# `srun torchrun` fails with "execve(): torchrun: No such file or directory":
+# the conda env is not on PATH inside the srun step (env.sh exports
+# COBIT_PYTHON but never touches PATH, and the production launcher relies on a
+# `conda activate` we do not do here). Invoke the module through the interpreter
+# we already resolved, which needs no PATH at all.
+srun "$COBIT_PYTHON" -m torch.distributed.run \
+     --standalone --nproc_per_node=4 train.py --config "$CFG"
 ELAPSED=$(( $(date +%s) - START ))
 
 echo "[probe] loss=$PROBE_LOSS wall=${ELAPSED}s for ${PROBE_STEPS} steps on 4 GPUs"

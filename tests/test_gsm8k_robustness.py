@@ -89,3 +89,24 @@ def test_both_result_paths_record_the_regime():
     assert src.count('"regime": args.regime') == 2, (
         "both the FKC and non-FKC result dicts must record --regime"
     )
+
+
+def test_hpc_scripts_do_not_rely_on_conda_being_on_path():
+    """srun steps must not invoke bare `torchrun`.
+
+    env.sh exports COBIT_PYTHON but never touches PATH, and unlike the
+    production launcher we do not `conda activate`. A bare `torchrun` under srun
+    therefore dies with "execve(): torchrun: No such file or directory" -- which
+    is exactly how the first throughput probe failed, 38 s in.
+    """
+    from pathlib import Path
+
+    for p in Path("scripts/hpc").rglob("*.slurm"):
+        src = p.read_text()
+        for line in src.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            assert "srun torchrun" not in stripped, (
+                f"{p}: use `srun \"$COBIT_PYTHON\" -m torch.distributed.run` instead"
+            )
