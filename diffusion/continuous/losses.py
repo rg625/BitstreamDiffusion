@@ -30,7 +30,18 @@ _TOKEN_SM_TRITON_WARNED = False
 # ============================================================================
 
 def _sigma_weight(cfg, sigma: torch.Tensor, ndim: int) -> torch.Tensor:
-    sigma2 = (sigma.to(torch.float32) ** 2).view(-1, *([1] * (ndim - 1)))
+    """EDM loss weight. `sigma` is [B] (one level per example, the current
+    model) or [B, S] (per position, for temporal-ordering experiments).
+
+    The [B] path reshapes to [B,1,...] exactly as before; the [B,S] path keeps
+    the position axis and pads only the trailing dims, so a uniform per-position
+    sigma reproduces the scalar weight elementwise.
+    """
+    sig = sigma.to(torch.float32)
+    if sig.dim() == 1:
+        sigma2 = (sig ** 2).view(-1, *([1] * (ndim - 1)))
+    else:
+        sigma2 = (sig ** 2).reshape(*sig.shape, *([1] * max(0, ndim - sig.dim())))
     weighting = str(getattr(cfg.train, "loss_weighting", "edm")).lower()
     sigma_data_f32 = float(cfg.diffusion.continuous.sigma_data)
 

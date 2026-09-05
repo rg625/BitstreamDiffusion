@@ -1496,7 +1496,13 @@ class Trainer:
         # Draw sigma
         # ------------------------------------------------------------------
         sigma = self._draw_sigma(B)
-        sigma_exp = sigma.view(-1, 1, 1) if is_cont_tokens else sigma.view(-1, 1)
+        # sigma is [B] today. Per-position sigma ([B,S], temporal ordering) needs
+        # only the position axis kept and the trailing dims padded; the [B] path
+        # below is byte-for-byte what it was.
+        if sigma.dim() == 1:
+            sigma_exp = sigma.view(-1, 1, 1) if is_cont_tokens else sigma.view(-1, 1)
+        else:
+            sigma_exp = sigma.unsqueeze(-1) if is_cont_tokens else sigma
 
         # ------------------------------------------------------------------
         # Build xt
