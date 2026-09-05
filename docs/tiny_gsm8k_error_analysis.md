@@ -176,3 +176,96 @@ targeted at all.
 4. **Seed variance under churn** — every Regime B cell is one seed.
 5. **Confidence at the answer tokens** — only whole-sequence bit entropy exists,
    so "confident-wrong" cannot be separated from "uncertain-wrong".
+
+
+---
+
+# Part 2 — Completed taxonomy (zero GPU)
+
+## Recoverability of raw output, and a correction
+
+`sample_records` stores **`text[:400]`** — truncated by the recorder — for **100
+of 250** problems. Fraction of stored records sitting *at* the 400-char cap:
+
+| arm | at cap |
+|---|---|
+| baseline | 83/100 |
+| CFG w=2 | 84/100 |
+| AG w=15 | 81/100 |
+| SG-prev 0.125 | 92/100 |
+| **SG-prev w=2** | **100/100** |
+
+**Correction to the earlier analysis.** I previously wrote that SG-prev w=2
+produced "400 characters exactly on every sample, never terminating". The length
+is real, but the *inference* was overstated: **most baseline outputs are also at
+the cap**, so length-at-cap is a storage artefact and cannot demonstrate failure
+to terminate. What survives is that SG-prev w=2 is the only arm where *every*
+record hits it (100/100 vs 83/100), and the `def `/token-degeneration evidence,
+which is unaffected by truncation because it appears at the start of the string.
+
+Consequence: **"premature termination" cannot be separated from "record was
+cut"**, so it stays inside T1 as instructed.
+
+## T1 / T2 / T3 — all 250 problems
+
+T1 and T2 come from `per_problem.answer`, computed on the **full** generation, so
+they are valid for all 250. T3 markers come from the truncated 100.
+
+| arm | acc | **T1** non-exec | **T2** exec-wrong | correct | T3: no `def ` | T3: repeat ≥10 |
+|---|---|---|---|---|---|---|
+| baseline | 0.3160 | **98** | 73 | 79 | 0/100 | 0/100 |
+| CFG w=2 | 0.3200 | 102 | 68 | 80 | 0/100 | 0/100 |
+| AG w=15 | 0.2240 | **126** | 68 | 56 | 1/100 | 2/100 |
+| SG-exact 1 | 0.1680 | **166** | 42 | 42 | 3/100 | 1/100 |
+| SG-prev 0.125 | 0.1560 | **172** | 39 | 39 | 3/100 | 4/100 |
+| SG-prev 2 | 0.0000 | **250** | 0 | 0 | **100/100** | **64/100** |
+
+### The main finding: guidance damage is a code-validity failure
+
+Reading down the T2 column: it **falls** (73 → 68 → 68 → 42 → 39 → 0) while T1
+**rises** (98 → 102 → 126 → 166 → 172 → 250). Take AG w=15 against baseline:
+T2 is essentially flat (68 vs 73) while correct answers drop by 23 and T1 rises
+by 28.
+
+**Guidance does not make CoBit reason worse — it makes it emit invalid programs.**
+Harm is converting *correct* outputs into *non-executing* ones, not into
+*wrong-answer* ones. T1 was already the dominant baseline failure (98/250 = 39 %)
+and every harmful method enlarges exactly that class.
+
+T3 is essentially a **SG-prev w=2 phenomenon** (100/100 lacking `def `, 64/100
+with heavy repetition) with only a trace elsewhere (1–3/100). It is a distinct
+mode, not the tail of a continuum.
+
+## T2 subcategories — computable, but they do not discriminate
+
+Using only what answers plus question numbers can support:
+
+| arm | T2 | unrelated value | scale (×2, ÷2, ×10, ÷10) | near-miss ≤2 % | copied an input |
+|---|---|---|---|---|---|
+| baseline | 73 | 88 % | 7 % | 3 % | 1 % |
+| CFG w=2 | 68 | 90 % | 4 % | 4 % | 1 % |
+| AG w=15 | 68 | 93 % | 5 % | 0 % | 1 % |
+| SG-exact 1 | 42 | 79 % | 9 % | 7 % | 5 % |
+| SG-prev 0.125 | 39 | 87 % | 10 % | 0 % | 3 % |
+
+**This table is a negative result and should be read as one.** ~80–93 % of T2
+errors are "unrelated value" in every arm, and the residual categories are
+1–10 % on counts of 39–73 — differences of two or three problems. There is **no
+evidence of a distinctive arithmetic-slip mode**, and **no method shifts the T2
+composition**. Guidance changes *how many* answers execute, not *what kind* of
+wrong answer emerges.
+
+## What cannot be inferred
+
+* **Semantic reasoning errors.** Judging "arithmetic slip vs wrong approach"
+  needs the full program, and the stored text is truncated at 400 chars with
+  80–100 % of records at the cap. Not attempted; would be fabrication.
+* **Premature termination vs record truncation** — indistinguishable, per above.
+* Anything about the 150 problems with no stored raw output.
+
+## Status
+
+**Complete to the extent supported by available evidence.** The quantitative
+T1/T2 split is solid on all 250. T3 is solid for the one arm that exhibits it.
+Finer semantic subcategories would need the generation stored untruncated —
+a one-line recorder change (`text[:400]`) for any future run, at negligible cost.
