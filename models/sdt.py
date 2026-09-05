@@ -193,11 +193,17 @@ class _SinTimeSigma(nn.Module):
         self.register_buffer("_freq", _build_sinusoidal_table(dim, "cpu"))
 
     def forward(self, sigma: torch.Tensor) -> torch.Tensor:
+        """sigma [B] -> [B,E]  (one noise level per example, the current model)
+           sigma [B,S] -> [B,S,E] (per-position noise, for ordering experiments)
+
+        `unsqueeze(-1)` handles both ranks identically; the [B] path is
+        arithmetically what `[:, None]` did before.
+        """
         freq = self._freq.to(sigma.device)
-        phases = sigma.log()[:, None] * freq
+        phases = sigma.log().unsqueeze(-1) * freq
         emb = torch.empty_like(phases)
-        emb[:, 0::2] = phases[:, 0::2].cos()
-        emb[:, 1::2] = phases[:, 1::2].sin()
+        emb[..., 0::2] = phases[..., 0::2].cos()
+        emb[..., 1::2] = phases[..., 1::2].sin()
         return emb
 
 
@@ -230,10 +236,18 @@ class AdaLNZero(nn.Module):
         nn.init.zeros_(self.mlp[1].bias)
 
     def forward(self, h: torch.Tensor, t_emb: torch.Tensor):
+        """t_emb [B,d]   -> global conditioning, broadcast over tokens (current)
+           t_emb [B,n,d] -> per-token conditioning (per-position sigma)
+
+        The returned gate is already broadcast-ready in both cases, so callers
+        must NOT unsqueeze it.
+        """
         orig_dtype = h.dtype
         s, b, g = self.mlp(t_emb).chunk(3, dim=-1)
+        if s.dim() == 2:
+            s, b, g = s.unsqueeze(1), b.unsqueeze(1), g.unsqueeze(1)
         h_norm = F.layer_norm(h, h.shape[-1:]).to(orig_dtype)
-        h_mod = (1 + s).unsqueeze(1) * h_norm + b.unsqueeze(1)
+        h_mod = (1 + s) * h_norm + b
         return h_mod, g
 
 
@@ -285,11 +299,11 @@ class PreNormBlockAda(nn.Module):
     ) -> torch.Tensor:
         h, gate = self.adaln1(x, t_emb)
         y = self.attn(h, key_padding_mask=key_padding_mask, attn_bias=attn_bias)
-        x = x + self.drop(y) * gate.unsqueeze(1)
+        x = x + self.drop(y) * gate          # AdaLNZero returns it broadcast-ready
 
         h, gate = self.adaln2(x, t_emb)
         y = self.ff(h)
-        x = x + self.drop(y) * gate.unsqueeze(1)
+        x = x + self.drop(y) * gate
         return x
 
 
@@ -493,7 +507,7 @@ class HybridSequenceHeadV2(nn.Module):
 
         h, gate_ff = self.adaln_ff(seq, t_emb)
         y = self.ff(h)
-        seq = seq + self.drop(y) * gate_ff.unsqueeze(1)
+        seq = seq + self.drop(y) * gate_ff      # AdaLNZero returns it broadcast-ready
         logits = self.out(seq)
         return logits
 
@@ -570,7 +584,7 @@ class OptimalSkipMLPHead(nn.Module):
 
         t_emb_proj = self.time_proj(t_emb)
         h_norm, gate = self.adaln(h, t_emb_proj)
-        h_gated = h_norm * gate.unsqueeze(1)
+        h_gated = h_norm * gate                 # AdaLNZero returns it broadcast-ready
         logits = self.mixer(h_gated)
         return logits
 
