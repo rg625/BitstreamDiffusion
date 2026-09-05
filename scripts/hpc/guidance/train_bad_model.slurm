@@ -63,7 +63,11 @@ fi
 echo "[bad-train] target steps=$BAD_TOTAL_STEPS  run_dir=$RUN_DIR"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
-srun torchrun --standalone --nnodes=1 --nproc_per_node=4 --max-restarts=3 \
+# Not bare `torchrun`: the conda env is not on PATH inside the srun step, so it
+# dies with "execve(): torchrun: No such file or directory" (cost the first
+# throughput probe two jobs). Go through the interpreter env.sh already resolved.
+srun "$COBIT_PYTHON" -m torch.distributed.run \
+     --standalone --nnodes=1 --nproc_per_node=4 --max-restarts=3 \
      train.py --config "$CONFIG"
 
 echo "[bad-train] link finished at $(date). Checkpoints:"
