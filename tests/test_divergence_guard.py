@@ -100,3 +100,24 @@ def test_the_actual_pilot_trajectory_would_have_been_caught_early():
     with pytest.raises(SystemExit) as e:
         s.feed(healthy + [30.0] * 1000)
     assert s.global_step < 19540 + 800, f"fired too late: step {s.global_step}"
+
+
+def test_calibrated_against_the_real_5k_smoke_trajectories():
+    """factor=10 must fire on the SM arm's real divergence and never on the
+    healthy CE arm. Measured from the 5k smoke: SM's loss EMA peaked at 53.7x
+    its best, CE's at 1.8x. 20 was too permissive and missed the real event."""
+    sm_best, sm_peak = 0.0327, 0.0327 * 53.7
+    ce_best, ce_peak = 0.1019, 0.1019 * 1.8
+
+    s = _Stub(factor=10.0, patience=10, min_steps=0)
+    with pytest.raises(SystemExit):
+        s.feed([sm_best] * 50 + [sm_peak] * 100)
+
+    s = _Stub(factor=10.0, patience=10, min_steps=0)
+    s.feed([ce_best] * 50 + [ce_peak] * 500)      # healthy arm must survive
+
+
+def test_factor_20_would_have_missed_the_sm_divergence():
+    """Pins why the default changed, so it is not silently raised again."""
+    s = _Stub(factor=20.0, patience=10, min_steps=0)
+    s.feed([0.0327] * 50 + [0.0327 * 15.0] * 500)   # sustained 15x: no abort

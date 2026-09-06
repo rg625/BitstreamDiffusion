@@ -110,6 +110,26 @@ def _binary_cfg(probe_every=1):
     return cfg
 
 
+class _NoOp:
+    def step(self, *a, **k):
+        pass
+
+    def update(self, *a, **k):
+        pass
+
+
+class _NoOpOpt:
+    def __init__(self, params):
+        self._p = list(params)
+
+    def zero_grad(self, set_to_none=True):
+        for p in self._p:
+            p.grad = None
+
+    def step(self, *a, **k):
+        pass
+
+
 class _RecordingWriter:
     def __init__(self):
         self.scalars = {}
@@ -132,9 +152,15 @@ class _StepStub:
         self.global_step = 0
         self.is_master = True
         self.writer = _RecordingWriter()
-        # A trivial "model": logits are a learnable-free linear map of x_t, which
-        # is enough to produce a well-defined D = sigmoid(ell) per bit.
-        self.model = lambda xt, sigma, x0_hat=None, **kw: xt * 2.0
+        # A trivial model with one real parameter, so is_train=True can run a
+        # backward pass and the training path is exercised for real.
+        self._w = torch.nn.Parameter(torch.tensor(2.0))
+        self.model = lambda xt, sigma, x0_hat=None, **kw: xt * self._w
+        self.use_scaler = False
+        self.grad_clip = 0.0
+        self.opt = _NoOpOpt([self._w])
+        self.lr_sched = _NoOp()
+        self.ema = _NoOp()
 
     def _draw_sigma(self, B):
         return torch.full((B,), 0.7)
@@ -147,7 +173,7 @@ def test_probe_is_reachable_from_the_dispatched_continuous_step():
     """The regression test for the dead-call-site bug."""
     stub = _StepStub(_binary_cfg(probe_every=1))
     x0 = (torch.rand(4, 16) > 0.5).float()
-    stub._step_continuous(x0, is_train=False)
+    stub._step_continuous(x0, is_train=True)
     tags = set(stub.writer.scalars)
     assert "objective/grad_survival" in tags, (
         "the primary endpoint was not logged from _step_continuous; "
@@ -173,7 +199,7 @@ def test_probe_measures_only_free_bits_under_prefix_conditioning():
     pm = torch.zeros(4, 16, dtype=torch.bool)
     pm[:, :8] = True  # first half is prompt
 
-    stub._step_continuous(x0, is_train=False, batch_prefix_mask=pm)
+    stub._step_continuous(x0, is_train=True, batch_prefix_mask=pm)
     assert "objective/grad_survival" in stub.writer.scalars
 
     # Same batch, no mask -> the clamped prefix bits now enter the statistic and
@@ -241,16 +267,47 @@ def test_control_arm_matches_the_healthy_production_run():
     assert float(cfg.cond.p_uncond) == 0.1
 
 
-def test_weight_clamp_and_guard_are_on_and_identical_in_both_arms():
+def test_weight_clamp_is_off_by_default_so_the_control_matches_production():
+    """The 5k smoke refuted the clamp: SM broke at step 3,900 WITH it, while
+    that arm differed from the healthy 500k run by this key alone. It is now a
+    variable to test, not a default to assume."""
+    for arm in ("binary_sm", "binary_ce"):
+        cfg = _pilot_cfg(arm)
+        assert not hasattr(cfg.train, "loss_weight_max") or \
+            cfg.train.loss_weight_max is None
+
+
+def test_guard_is_on_and_identical_in_both_arms():
     a, b = _pilot_cfg("binary_sm"), _pilot_cfg("binary_ce")
     for c in (a, b):
-        assert float(c.train.loss_weight_max) == 100.0
         assert bool(c.train.divergence_guard.enabled)
-    assert float(a.train.loss_weight_max) == float(b.train.loss_weight_max)
     assert (float(a.train.divergence_guard.factor)
-            == float(b.train.divergence_guard.factor))
+            == float(b.train.divergence_guard.factor) == 10.0)
 
 
 def test_tag_isolates_smoke_runs_from_the_pilot_directory():
     assert _pilot_cfg("binary_sm").experiment != \
         _pilot_cfg("binary_sm", "smoke").experiment
+
+
+def test_probe_does_not_fire_on_validation_steps():
+    """Validation does not advance global_step, so every validation batch would
+    log at the same step. The 5k smoke wrote 230 extra points at step 5000, on
+    validation data with a different noise draw."""
+    stub = _StepStub(_binary_cfg(probe_every=1))
+    x0 = (torch.rand(4, 16) > 0.5).float()
+    stub._step_continuous(x0, is_train=False)
+    assert stub.writer.scalars == {}, (
+        f"probe logged during validation: {sorted(stub.writer.scalars)}")
+    stub._step_continuous(x0, is_train=True)
+    assert "objective/grad_survival" in stub.writer.scalars
+
+
+def test_repeated_validation_cannot_stack_points_on_one_step():
+    stub = _StepStub(_binary_cfg(probe_every=1))
+    x0 = (torch.rand(4, 16) > 0.5).float()
+    stub._step_continuous(x0, is_train=True)
+    for _ in range(20):
+        stub._step_continuous(x0, is_train=False)
+    steps = [s for s, _ in stub.writer.scalars["objective/grad_survival"]]
+    assert len(steps) == len(set(steps)) == 1

@@ -1656,7 +1656,11 @@ class Trainer:
         # Outside the autocast block and under no_grad, so it cannot perturb the
         # loss or the graph. Binary representation only: the D = sigmoid(ell)
         # parameterisation the probe measures does not exist in tokens mode.
-        if not is_cont_tokens:
+        # is_train only: validation does not advance global_step, so every
+        # validation batch would log at the SAME step -- the 5k smoke wrote 230
+        # extra points at step 5000, on validation data with a different noise
+        # draw. The endpoint must be a training-step series.
+        if is_train and not is_cont_tokens:
             self._log_objective_probe(logits, loss_target, sigma, loss_mask)
 
         # Large intermediates no longer needed before backward bookkeeping.

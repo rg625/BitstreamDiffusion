@@ -44,14 +44,21 @@ def get_config():
         raise SystemExit(f"OBJ_LOSS must be binary_sm or binary_ce, got {loss!r}")
     cfg.train.loss_type = loss
 
-    # Bound the low-sigma amplifier, IDENTICALLY in both arms so loss_type stays
-    # the only variable. Under the production sigma draw the 18% of samples with
-    # sigma<0.1 carry 91% of all weight mass, at sigmas where the Bayes risk is
-    # ~2e-7; unbounded, w(sigma) reaches 2.5e5. Both arms of the first pilot
-    # diverged (CE at step 6,580, SM at 19,540), which no objective-specific
-    # story explains. p90 of the current draw is 246, so this clips a tail.
-    # Derivation: docs/ce_weighting_derivation.md
-    cfg.train.loss_weight_max = float(os.environ.get("OBJ_WMAX", 100.0))
+    # Low-sigma weight clamp: OPT-IN, and OFF by default.
+    #
+    # I proposed this as the fix for the first pilot's divergence and predicted
+    # both arms would then train past 20k. The 5k smoke REFUTED that: with
+    # OBJ_WMAX=100 the SM arm broke at step 3,900 -- earlier than the unclamped
+    # run's 19,540 -- while CE was stable. Since that SM arm differed from the
+    # healthy 500k production run by this key alone, the clamp is now a suspect
+    # rather than a fix, and it must be tested as a variable, not assumed.
+    #
+    # Default off => the SM control reproduces production exactly.
+    # Derivation of why a CE-specific weighting is NOT needed:
+    #   docs/ce_weighting_derivation.md
+    _wmax = os.environ.get("OBJ_WMAX", "").strip().lower()
+    if _wmax not in ("", "none", "off", "0"):
+        cfg.train.loss_weight_max = float(_wmax)
 
     cfg.optim.total_steps = int(os.environ.get("OBJ_STEPS", 100_000))
     # NOTE: the real key is train.checkpointing.interval.every_steps. An earlier
@@ -69,7 +76,10 @@ def get_config():
     # ~55 GPU-h with bit-identical weights after diverging.
     cfg.train.divergence_guard = type(cfg.train.checkpointing)()
     cfg.train.divergence_guard.enabled = True
-    cfg.train.divergence_guard.factor = 20.0
+    # factor=10: on the 5k smoke the SM divergence peaked at 53.7x its best
+    # EMA while the healthy CE arm peaked at 1.8x, so 10 separates them with
+    # margin on both sides. 20 was too permissive and missed the real event.
+    cfg.train.divergence_guard.factor = 10.0
     cfg.train.divergence_guard.patience = 200
     cfg.train.divergence_guard.min_steps = 2500      # = optim.warmup
     cfg.train.divergence_guard.ema_decay = 0.99

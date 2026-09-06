@@ -241,3 +241,84 @@ here, since it barely moves while the low-sigma cell goes to zero.
 
 Caveat: n=16 examples, one noise seed. Cheap to widen and worth widening before
 this is used to justify GPU spend.
+
+---
+
+## 7. The 5k smoke test — my clamp hypothesis is refuted
+
+Two arms, 5k steps, ~5 GPU-h total. Both ran to completion.
+
+### 7.1 What passed
+
+- **The probe fix works.** 50 clean training points per arm of `objective/*`.
+  This was the bug that voided the first pilot; it is closed.
+- **The arms were configured as intended**: `p_uncond=0.1` (production's value),
+  `loss_weight_max=100`, guard armed, `loss_type` the only difference.
+
+### 7.2 What failed — the prediction I made
+
+I wrote: *"If the amplifier story is right, the clamp alone should let both arms
+train past 20k without diverging."*
+
+| arm | loss trajectory | outcome |
+|---|---|---|
+| binary_ce | 2.14 -> 0.10, flat 0.08-0.15 to 5k | **stable** |
+| binary_sm | 0.70 -> 0.024 by 3.8k, then **0.43 at step 3,900**, 1.76 spike at 4,160, climbing to 1.04 at 5k | **diverged** |
+
+**The SM arm broke at step 3,900 — earlier than the unclamped run's 19,540.**
+The clamp did not prevent divergence, and may have brought it forward.
+
+This matters more than it first looks: that SM arm differed from the healthy
+500k production run **by the clamp key alone**. So the evidence now points *at*
+the clamp, not at the low-sigma amplifier it was meant to bound. The clamp has
+been made **opt-in and off by default**; with it off, the SM control reproduces
+production exactly.
+
+### 7.3 The causal direction is the opposite of what I assumed
+
+`grad_survival`, SM vs CE, around the break:
+
+| step | SM loss | SM survival | CE survival |
+|---|---|---|---|
+| 3400 | 0.051 | 0.1717 | 0.1791 |
+| 3700 | 0.024 | 0.1788 | 0.1762 |
+| 3800 | 0.036 | 0.1810 | 0.1845 |
+| **3900** | **0.426** | 0.1398 | 0.1751 |
+| 4200 | 0.756 | 0.0535 | 0.1825 |
+| 4900 | 0.549 | 0.0750 | 0.1840 |
+
+**SM's gradient survival was flat at ~0.18 right up to the break, statistically
+indistinguishable from CE's.** It only degrades *after* the loss breaks.
+
+So within 5k steps, saturation is a **consequence** of divergence, not its
+cause. I had been treating the implication as running the other way. On this
+evidence the difference between the objectives is one of **stability**, not of
+gradient survival — the endpoint the pilot was built around does not separate
+the arms before the event.
+
+Also note both arms saturate similarly (`frac D(1-D)<0.001` reaches ~0.94 in
+each) while only SM loses gradient, which is the section-6 point again:
+saturation fraction and survival are different quantities.
+
+### 7.4 Honest limits
+
+- **One seed per arm.** A single divergence event in one run is not evidence
+  that SM is systematically less stable. It could be the seed.
+- 5k steps is a floor, not a certificate: the previous SM arm survived to 19.5k.
+- The guard did **not** fire, because `factor=20` was too permissive. Replayed
+  on the real losses, SM's EMA peaked at **53.7x** its best and CE's at
+  **1.8x**, so the default is now **10**, which fires on SM at step 4,320 and
+  never on CE. Pinned by tests against those measured numbers.
+
+### 7.5 What the evidence now supports
+
+A 2x2 on `loss_type` x `clamp`, 5k steps each. Two cells are already done:
+
+| | clamp off | clamp = 100 |
+|---|---|---|
+| **binary_sm** | ? (= production recipe exactly) | diverged @3,900 |
+| **binary_ce** | ? | stable to 5k |
+
+The two missing cells cost ~5 GPU-h and decide whether the clamp is the culprit
+or incidental. Running the pilot before knowing that would risk repeating the
+first one.
