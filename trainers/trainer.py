@@ -1647,6 +1647,15 @@ class Trainer:
                 )
                 entropy_metric = None
 
+        # Mechanistic telemetry for the objective pilot (PRIMARY endpoint).
+        # This is the dispatched path for framework == "continuous_score", which
+        # is what every bitstream task uses; see tests/test_objective_probe.py.
+        # Outside the autocast block and under no_grad, so it cannot perturb the
+        # loss or the graph. Binary representation only: the D = sigmoid(ell)
+        # parameterisation the probe measures does not exist in tokens mode.
+        if not is_cont_tokens:
+            self._log_objective_probe(logits, loss_target, sigma, loss_mask)
+
         # Large intermediates no longer needed before backward bookkeeping.
         del logits, xt
         if x0_hat is not None:

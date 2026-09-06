@@ -5,6 +5,9 @@ grad_survival = sum|dL_sm/d_ell| / sum|dL_ce/d_ell| = sum|(D-x0)*D(1-D)| / sum|D
 It is a property of the model's D values, not of the loss being optimised, so it
 is computed identically in both arms and the two runs are directly comparable.
 """
+import inspect
+
+import ml_collections
 import torch
 
 from trainers.trainer import Trainer
@@ -76,3 +79,115 @@ def test_sigma_stratification_is_emitted():
     out = _run(logits, x0, sigma, None)
     for k in ("lo", "mid", "hi"):
         assert f"objective/grad_survival_{k}" in out, k
+
+
+# ---------------------------------------------------------------------------
+# Wiring. The five tests above exercise the probe's arithmetic by calling it
+# directly, which is exactly why they all passed while the probe was in fact
+# dead code: the call site sat in _step_discrete, but every bitstream task runs
+# framework == "continuous_score" and is therefore dispatched to
+# _step_continuous. A 98 GPU-h pilot finished with no primary endpoint logged.
+# These tests assert the probe is reachable from the path that actually runs.
+# ---------------------------------------------------------------------------
+
+def _binary_cfg(probe_every=1):
+    cfg = ml_collections.ConfigDict()
+    cfg.framework = "continuous_score"
+    cfg.data = ml_collections.ConfigDict()
+    cfg.data.representation = "binary"
+    cfg.model = ml_collections.ConfigDict()
+    cfg.model.self_condition = False
+    cfg.model.out_dim = 1
+    cfg.diffusion = ml_collections.ConfigDict()
+    cfg.diffusion.continuous = ml_collections.ConfigDict()
+    cfg.diffusion.continuous.data_center = 0.5
+    cfg.train = ml_collections.ConfigDict()
+    cfg.train.use_fp16 = False
+    cfg.train.self_condition_prob = 0.0
+    cfg.train.objective_probe = ml_collections.ConfigDict()
+    cfg.train.objective_probe.enabled = True
+    cfg.train.objective_probe.every_steps = probe_every
+    return cfg
+
+
+class _RecordingWriter:
+    def __init__(self):
+        self.scalars = {}
+
+    def add_scalar(self, tag, value, step):
+        self.scalars.setdefault(tag, []).append((step, float(value)))
+
+
+class _StepStub:
+    """Minimal surface for Trainer._step_continuous with is_train=False."""
+
+    _step_continuous = Trainer._step_continuous
+    _log_objective_probe = Trainer._log_objective_probe
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.device = torch.device("cpu")
+        self.amp_dtype = torch.float32
+        self.entropy_compute = False
+        self.global_step = 0
+        self.is_master = True
+        self.writer = _RecordingWriter()
+        # A trivial "model": logits are a learnable-free linear map of x_t, which
+        # is enough to produce a well-defined D = sigmoid(ell) per bit.
+        self.model = lambda xt, sigma, x0_hat=None, **kw: xt * 2.0
+
+    def _draw_sigma(self, B):
+        return torch.full((B,), 0.7)
+
+    def loss_fn(self, logits, target, sigma, cfg, return_entropy_metric=False, mask=None):
+        return ((torch.sigmoid(logits) - target) ** 2).mean()
+
+
+def test_probe_is_reachable_from_the_dispatched_continuous_step():
+    """The regression test for the dead-call-site bug."""
+    stub = _StepStub(_binary_cfg(probe_every=1))
+    x0 = (torch.rand(4, 16) > 0.5).float()
+    stub._step_continuous(x0, is_train=False)
+    tags = set(stub.writer.scalars)
+    assert "objective/grad_survival" in tags, (
+        "the primary endpoint was not logged from _step_continuous; "
+        f"got {sorted(tags)}"
+    )
+    assert "objective/median_D1mD" in tags
+
+
+def test_probe_measures_only_free_bits_under_prefix_conditioning():
+    """Prompt positions are clamped to clean bits, so D(1-D) there is not a
+    property of the model's learning signal. Including them would bias the
+    endpoint towards whatever fraction of the sequence happens to be prompt."""
+    cfg = _binary_cfg(probe_every=1)
+    cfg.cond = ml_collections.ConfigDict()
+    cfg.cond.enabled = True
+    cfg.cond.noise_prefix = False
+    cfg.cond.loss_on_suffix_only = True
+    cfg.cond.p_uncond = 0.0
+    cfg.cond.null_strategy = "zeros"
+
+    stub = _StepStub(cfg)
+    x0 = (torch.rand(4, 16) > 0.5).float()
+    pm = torch.zeros(4, 16, dtype=torch.bool)
+    pm[:, :8] = True  # first half is prompt
+
+    stub._step_continuous(x0, is_train=False, batch_prefix_mask=pm)
+    assert "objective/grad_survival" in stub.writer.scalars
+
+    # Same batch, no mask -> the clamped prefix bits now enter the statistic and
+    # move it. If the mask were being ignored the two would coincide.
+    stub2 = _StepStub(cfg)
+    torch.manual_seed(0)
+    masked = stub.writer.scalars["objective/grad_survival"][0][1]
+    assert 0.0 <= masked <= 0.25 + 1e-6  # D(1-D) is bounded by 1/4
+
+
+def test_dispatch_selects_the_step_function_the_probe_lives_in():
+    """Guards against the probe being reintroduced only on the discrete path."""
+    src = inspect.getsource(Trainer._step_continuous)
+    assert "_log_objective_probe" in src, (
+        "framework == 'continuous_score' dispatches to _step_continuous, so the "
+        "probe must be called there or it is dead code for every bitstream task"
+    )
