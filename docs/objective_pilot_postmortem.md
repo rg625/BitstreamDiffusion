@@ -152,3 +152,57 @@ Do **not** simply resubmit.
    norm and `frac(D(1-D) < 1e-3)` every 500 steps. The run should stop at 20k,
    not burn 55 GPU-h frozen.
 4. Validate at 5k steps (~2.5 GPU-h) before committing 98.
+
+---
+
+## 6. The one valid measurement: the production run
+
+Ran the offline probe against the **healthy** production checkpoints
+(250k/350k/425k/500k, the run that trained normally). 16 fixed validation
+examples, ~120k free bits per sigma cell, identical noise across checkpoints.
+
+`grad_survival` — the fraction of CE's gradient magnitude that SM retains:
+
+| step | s=0.05 | s=0.2 | s=0.4 | s=1 | s=3 | s=10 | s=40 |
+|---|---|---|---|---|---|---|---|
+| 250k | 0.131 | 0.089 | 0.121 | 0.164 | 0.188 | 0.186 | 0.186 |
+| 350k | **0.000** | 0.098 | 0.133 | 0.173 | 0.185 | 0.184 | 0.189 |
+| 425k | **0.000** | 0.149 | 0.155 | 0.167 | 0.174 | 0.187 | 0.188 |
+| 500k | **0.000** | 0.134 | 0.153 | 0.186 | 0.185 | 0.188 | 0.189 |
+
+Fraction of free bits with `D(1-D) < 0.001` (saturated):
+
+| step | s=0.05 | s=0.2 | s=0.4 | s=1 | s=3 | s=10 | s=40 |
+|---|---|---|---|---|---|---|---|
+| 250k | 0.999 | 0.994 | 0.882 | 0.664 | 0.642 | 0.491 | 0.434 |
+| 500k | 1.000 | 0.996 | 0.923 | 0.650 | 0.650 | 0.478 | 0.403 |
+
+Three things follow, and they sharpen the hypothesis rather than confirming the
+version of it I started with:
+
+1. **Aggregate survival is stable, not collapsing.** ~0.13-0.19 from 250k to
+   500k. There is no progressive global death in a healthy run, so "SM slowly
+   strangles itself everywhere" is *not* supported.
+
+2. **At low sigma it collapses completely, and it gets worse with training.**
+   At `sigma = 0.05`, survival goes 0.131 (250k) -> **exactly 0.000** (350k
+   onward), with 100% of free bits saturated. This is the strongest evidence for
+   the CE hypothesis, and it is localised: low sigma is exactly where the final
+   denoising steps run, i.e. the steps that fix the emitted bits.
+
+3. **A saturated majority does not imply a dead gradient.** At `sigma = 0.2`,
+   99.4% of bits are saturated yet survival is still ~0.13 — the small
+   unsaturated minority carries essentially the entire learning signal. So
+   saturation fraction and gradient survival must be reported separately; one
+   does not stand in for the other.
+
+Measured in fp32. Training runs bf16, which saturates `sigmoid` at a smaller
+`|ell|`, so true training-time survival is a **lower** bound on these numbers.
+
+**Revised hypothesis for the re-run:** CE's advantage, if any, should appear as
+retained gradient at *low sigma* specifically. Any re-run must resolve the
+endpoint by sigma; a scalar aggregate would have hidden the only real effect
+here, since it barely moves while the low-sigma cell goes to zero.
+
+Caveat: n=16 examples, one noise seed. Cheap to widen and worth widening before
+this is used to justify GPU spend.
