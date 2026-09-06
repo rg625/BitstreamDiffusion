@@ -1117,6 +1117,9 @@ class Trainer:
 
         # ── resume ──────────────────────────────────────────────────────────
         self.global_step = 0
+        self._div_ema = None
+        self._div_best = None
+        self._div_strikes = 0
         self.resume_mode = "scratch"  # one of: scratch | init_from | resume
         self.start_epoch = self._resume()
 
@@ -1776,6 +1779,58 @@ class Trainer:
 
         return loss.item()
 
+    def _check_divergence(self, loss: float) -> None:
+        """Abort a run that has diverged, instead of letting it burn the budget.
+
+        The first CE/SM pilot diverged (CE at step 6,580, SM at 19,540) and then
+        sat with bit-identical weights for ~55k further steps -- roughly 55 GPU-h
+        that computed nothing, and which no one noticed until the checkpoints
+        were diffed afterwards.
+
+        Rule: track an EMA of the training loss, remember its best value, and
+        abort once the EMA has stayed above `factor * best` for `patience`
+        consecutive steps. Comparing against the BEST-so-far (not a fixed
+        baseline) means a legitimately decreasing loss can never trigger it, and
+        the patience window means a single bad batch cannot either.
+
+        Off unless cfg.train.divergence_guard.enabled is set.
+        """
+        g = getattr(self.cfg.train, "divergence_guard", None)
+        if g is None or not bool(getattr(g, "enabled", False)):
+            return
+        if not math.isfinite(loss):
+            raise SystemExit(
+                f"[divergence-guard] non-finite loss ({loss}) at step "
+                f"{self.global_step}; aborting.")
+
+        decay = float(getattr(g, "ema_decay", 0.99))
+        self._div_ema = loss if self._div_ema is None \
+            else decay * self._div_ema + (1.0 - decay) * loss
+
+        # Do not arm during warmup: the loss is still falling fast and the EMA
+        # has not settled, so "best so far" is not yet meaningful.
+        if self.global_step < int(getattr(g, "min_steps", 2000)):
+            return
+        if self._div_best is None or self._div_ema < self._div_best:
+            self._div_best = self._div_ema
+            self._div_strikes = 0
+            return
+
+        factor = float(getattr(g, "factor", 20.0))
+        if self._div_ema > factor * self._div_best:
+            self._div_strikes += 1
+        else:
+            self._div_strikes = 0
+
+        patience = int(getattr(g, "patience", 200))
+        if self._div_strikes >= patience:
+            raise SystemExit(
+                f"[divergence-guard] loss EMA {self._div_ema:.6g} has exceeded "
+                f"{factor}x its best ({self._div_best:.6g}) for {patience} "
+                f"consecutive steps, at step {self.global_step}. Aborting rather "
+                f"than burning the remaining budget. Set "
+                f"cfg.train.divergence_guard.enabled=False to override.")
+
     @torch.compiler.disable
     @torch.no_grad()
     def _log_objective_probe(self, logits, x0, sigma, loss_mask):
@@ -2075,6 +2130,8 @@ class Trainer:
                     self.global_step += 1
                     train_loss += loss
                     num_train_batches += 1
+
+                    self._check_divergence(loss)
 
                     # ----------------------------------------------------------
                     # PATCH: refresh online entropy schedule during training

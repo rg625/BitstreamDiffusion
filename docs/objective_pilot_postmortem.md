@@ -6,6 +6,40 @@ The primary endpoint was never logged, because of a bug I introduced.**
 Nothing below reinterprets or replaces any earlier result. The guidance study
 (Regimes A and B) is untouched.
 
+## 0. Framing correction — read this first
+
+An earlier draft of this document, and my earlier reporting, framed the finding
+as **global SM gradient starvation**. *That framing is not supported and is
+withdrawn.*
+
+On the healthy production run, aggregate gradient survival is **stable at
+0.13-0.19 from 250k to 500k**. SM does not progressively strangle itself across
+the sigma range.
+
+What IS demonstrated is a **localised low-sigma saturation**:
+
+| | sigma = 0.05 | sigma >= 0.2 |
+|---|---|---|
+| survival @250k | 0.131 | 0.089 - 0.188 |
+| survival @350k | **0.000** | 0.098 - 0.189 |
+| survival @500k | **0.000** | 0.134 - 0.189 |
+
+The collapse is total, it worsens with training, and it is confined to the
+sigma band where the final denoising steps fix the emitted bits. Everywhere
+else the gradient is healthy and stays healthy.
+
+Two further corrections of my own claims:
+
+- **Saturation fraction is not a proxy for gradient survival.** At sigma=0.2,
+  99.4% of free bits are saturated yet survival is ~0.13: the unsaturated
+  minority carries essentially the whole signal. The two must be reported
+  separately, and this document now does.
+- **The pilot's divergence is not an objective-specific effect.** Both arms
+  diverged. See `docs/ce_weighting_derivation.md` section 2: the EDM
+  sigma-weighting puts 91% of its mass on the 18% of draws below sigma=0.1,
+  where the Bayes risk is ~2e-7. That is a latent 2.5e5 amplifier that applies
+  to both arms.
+
 ---
 
 ## 1. What was supposed to happen
@@ -93,13 +127,14 @@ At the frozen checkpoints the logits have blown up to `|ell| ~ 1e3`
 zero**, and `dL_sm/d_ell = w(D-x0)*D(1-D)` is exactly zero. EDM samples sigma
 log-normally around ~0.3, which is precisely where the SM gradient vanishes.
 
-This is the sharpest possible form of the original hypothesis: the `D(1-D)`
-factor is not merely a 3-14% attenuation — **once logits saturate it is an
-absorbing state from which SM cannot recover, because the gradient is
-identically zero rather than small.**
+So for a model whose logits have already blown up, the SM gradient is
+identically zero rather than merely small, and the state is absorbing.
 
-That claim is now *demonstrated* for binary_sm. It is **not** demonstrated as a
-*differential* advantage for CE, because CE froze too.
+**Scope of that claim — deliberately narrow.** It is demonstrated *only* for a
+model that has already diverged. It is **not** evidence that SM reaches this
+state in normal training: the production run sat at survival 0.13-0.19 for
+250k steps without approaching it, except at low sigma (section 0). And it is
+**not** a differential advantage for CE, which froze too.
 
 ## 3. Confounds — what I checked and ruled out
 

@@ -49,9 +49,35 @@ def _sigma_weight(cfg, sigma: torch.Tensor, ndim: int) -> torch.Tensor:
         return torch.ones_like(sigma2)
 
     if weighting in {"edm", "karras"}:
-        return (sigma2 + sigma_data_f32**2) / (sigma2 * (sigma_data_f32**2))
+        w = (sigma2 + sigma_data_f32**2) / (sigma2 * (sigma_data_f32**2))
+        return _clamp_weight(w, cfg)
 
     raise ValueError(f"Unknown cfg.train.loss_weighting='{weighting}'")
+
+
+def _clamp_weight(w: torch.Tensor, cfg) -> torch.Tensor:
+    """Optional upper bound on the sigma-weight. Default: OFF (returns w).
+
+    EDM's lambda(sigma) = 1/c_out^2 is derived for continuous Gaussian data,
+    where the residual scale really is c_out(sigma). For BINARY data the Bayes
+    risk collapses like the bit-error probability exp(-1/(8 sigma^2)), so the
+    1/sigma^2 growth multiplies a vanishing target: under the production draw
+    (lognormal, p_mean=-1.2, p_std=1.2) the 18% of samples with sigma<0.1 carry
+    91% of all weight mass, at sigmas where the Bayes risk is ~2e-7.
+
+    Harmless while the model is calibrated; a 2.5e5 amplifier on any error once
+    it is not. See docs/ce_weighting_derivation.md.
+
+    Left at None by default so every existing run stays bit-identical.
+    """
+    w_max = getattr(cfg.train, "loss_weight_max", None)
+    if w_max is None:
+        return w
+    w_max = float(w_max)
+    if not (w_max > 0.0):
+        raise ValueError(
+            f"cfg.train.loss_weight_max must be positive, got {w_max!r}")
+    return w.clamp_max(w_max)
 
 
 # ============================================================================

@@ -1,0 +1,102 @@
+"""Divergence guard: abort a diverged run instead of burning the budget.
+
+The first CE/SM pilot diverged and then trained with bit-identical weights for
+~55k steps, wasting ~55 GPU-h. These tests pin the rule that stops that.
+"""
+import ml_collections
+import pytest
+
+from trainers.trainer import Trainer
+
+
+class _Stub:
+    _check_divergence = Trainer._check_divergence
+
+    def __init__(self, **kw):
+        self.cfg = ml_collections.ConfigDict()
+        self.cfg.train = ml_collections.ConfigDict()
+        if kw.pop("enabled", True):
+            g = ml_collections.ConfigDict()
+            g.enabled = True
+            g.factor = kw.pop("factor", 20.0)
+            g.patience = kw.pop("patience", 10)
+            g.min_steps = kw.pop("min_steps", 0)
+            g.ema_decay = kw.pop("ema_decay", 0.0)   # 0 => EMA is the raw loss
+            self.cfg.train.divergence_guard = g
+        self.global_step = 0
+        self._div_ema = self._div_best = None
+        self._div_strikes = 0
+
+    def feed(self, losses):
+        for v in losses:
+            self.global_step += 1
+            self._check_divergence(v)
+
+
+def test_off_by_default():
+    s = _Stub(enabled=False)
+    s.feed([0.01] * 50 + [1e9] * 5000)     # would trip any enabled guard
+
+
+def test_steadily_decreasing_loss_never_trips():
+    s = _Stub(patience=5)
+    s.feed([1.0 / (i + 1) for i in range(2000)])
+
+
+def test_noisy_but_healthy_loss_never_trips():
+    """Real training is spiky; a guard that fires on spikes is useless."""
+    s = _Stub(factor=20.0, patience=200, ema_decay=0.99)
+    losses = []
+    for i in range(5000):
+        base = 0.05
+        losses.append(base * (30.0 if i % 500 == 0 else 1.0))   # periodic spikes
+    s.feed(losses)
+
+
+def test_sustained_blowup_aborts():
+    s = _Stub(factor=20.0, patience=10)
+    with pytest.raises(SystemExit, match="divergence-guard"):
+        s.feed([0.02] * 100 + [50.0] * 200)
+
+
+def test_non_finite_loss_aborts_immediately():
+    s = _Stub()
+    with pytest.raises(SystemExit, match="non-finite"):
+        s.feed([0.02] * 10 + [float("nan")])
+
+
+def test_transient_spike_shorter_than_patience_is_tolerated():
+    s = _Stub(factor=20.0, patience=50)
+    s.feed([0.02] * 100 + [50.0] * 20 + [0.02] * 100)
+
+
+def test_guard_is_not_armed_during_warmup():
+    """Early loss falls fast; 'best so far' is not meaningful yet, so a large
+    early swing must not abort. Once past min_steps the guard behaves normally."""
+    s = _Stub(factor=2.0, patience=1, min_steps=500)
+    s.feed([10.0] * 400 + [0.01] * 50)          # swings 1000x, still unarmed
+    assert s._div_best is None
+    s.feed([0.01] * 100)                        # arms, best settles at ~0.01
+    assert s._div_best is not None
+    with pytest.raises(SystemExit):
+        s.feed([100.0] * 200)
+
+
+def test_best_is_seeded_from_the_first_armed_step_not_from_warmup():
+    """If a run is already bad when the guard arms, the guard cannot know that:
+    it anchors on what it sees. Pins the semantics so it is not mistaken for a
+    bug later."""
+    s = _Stub(factor=20.0, patience=5, min_steps=100)
+    s.feed([0.001] * 99)                        # never seen by the guard
+    s.feed([50.0] * 50)                         # arms here; 50.0 becomes "best"
+    assert s._div_best == pytest.approx(50.0)
+
+
+def test_the_actual_pilot_trajectory_would_have_been_caught_early():
+    """binary_sm: ~0.024 through 19.5k, then >1 and rising. The guard must fire
+    within a few hundred steps of the real onset, not 65k steps later."""
+    s = _Stub(factor=20.0, patience=200, ema_decay=0.99, min_steps=2000)
+    healthy = [0.024] * 19540
+    with pytest.raises(SystemExit) as e:
+        s.feed(healthy + [30.0] * 1000)
+    assert s.global_step < 19540 + 800, f"fired too late: step {s.global_step}"

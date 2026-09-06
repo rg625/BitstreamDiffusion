@@ -191,3 +191,66 @@ def test_dispatch_selects_the_step_function_the_probe_lives_in():
         "framework == 'continuous_score' dispatches to _step_continuous, so the "
         "probe must be called there or it is dead code for every bitstream task"
     )
+
+
+# ---------------------------------------------------------------------------
+# Pilot config invariants. The first pilot was voided by a dead probe and by
+# an unvalidated control arm; these pin both so neither recurs silently.
+# ---------------------------------------------------------------------------
+
+def _pilot_cfg(arm, tag=""):
+    import importlib.util
+    import os
+    old = {k: os.environ.get(k) for k in ("OBJ_LOSS", "OBJ_TAG")}
+    os.environ["OBJ_LOSS"], os.environ["OBJ_TAG"] = arm, tag
+    try:
+        spec = importlib.util.spec_from_file_location(
+            f"pilot_{arm}_{tag}", "configs/tasks/tinygsm_bits_objective.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.get_config()
+    finally:
+        for k, v in old.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+
+
+def _flat(c, pre=""):
+    out = {}
+    for k, v in dict(c).items():
+        if hasattr(v, "items"):
+            try:
+                out.update(_flat(v, pre + k + "."))
+                continue
+            except Exception:
+                pass
+        out[pre + k] = v
+    return out
+
+
+def test_arms_differ_only_by_loss_type_and_output_paths():
+    a, b = _flat(_pilot_cfg("binary_sm")), _flat(_pilot_cfg("binary_ce"))
+    diff = {k for k in set(a) | set(b) if str(a.get(k)) != str(b.get(k))}
+    assert diff == {"train.loss_type", "experiment",
+                    "evaluation.checkpoint_path", "evaluation.out_dir"}, diff
+
+
+def test_control_arm_matches_the_healthy_production_run():
+    """The previous control ran p_uncond=0.0 while the run that trained
+    healthily to 500k used 0.1 -- so it was never a validated baseline."""
+    cfg = _pilot_cfg("binary_sm")
+    assert float(cfg.cond.p_uncond) == 0.1
+
+
+def test_weight_clamp_and_guard_are_on_and_identical_in_both_arms():
+    a, b = _pilot_cfg("binary_sm"), _pilot_cfg("binary_ce")
+    for c in (a, b):
+        assert float(c.train.loss_weight_max) == 100.0
+        assert bool(c.train.divergence_guard.enabled)
+    assert float(a.train.loss_weight_max) == float(b.train.loss_weight_max)
+    assert (float(a.train.divergence_guard.factor)
+            == float(b.train.divergence_guard.factor))
+
+
+def test_tag_isolates_smoke_runs_from_the_pilot_directory():
+    assert _pilot_cfg("binary_sm").experiment != \
+        _pilot_cfg("binary_sm", "smoke").experiment
