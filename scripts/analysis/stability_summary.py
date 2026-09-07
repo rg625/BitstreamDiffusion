@@ -15,6 +15,7 @@ import argparse
 import collections
 import glob
 import json
+import re
 import statistics
 from pathlib import Path
 
@@ -82,6 +83,38 @@ def time_to_divergence(loss, factor=4.0, patience=200, min_steps=2500,
     return brk, best, peak
 
 
+GUARD_RE = re.compile(
+    r"\[divergence-guard\][^\n]*?at step (\d+)")
+HDR_RE = re.compile(r"\[stab\] arm=(\S+) seed=(\S+)")
+
+
+def scan_job_logs(log_glob="logs/arch/cobit_objstab_*.log"):
+    """Map (arm, seed) -> break step reported by the LIVE guard.
+
+    This is the authoritative measurement, not the TB replay. An aborting run
+    stops at the break, so TensorBoard loses its final flush: for one seed the
+    event file ends 481 steps BEFORE the guard fired, leaving no offline
+    evidence at all. Replaying truncated series would report 0/6 diverged while
+    the guard aborted 6/6 -- a silent disagreement between the detector and the
+    thing it is meant to measure.
+    """
+    out = {}
+    for f in sorted(glob.glob(log_glob)):
+        try:
+            txt = Path(f).read_text(errors="ignore")
+        except OSError:
+            continue
+        h = HDR_RE.search(txt)
+        if not h:
+            continue
+        steps = [int(m) for m in GUARD_RE.findall(txt)]
+        out[(h.group(1), h.group(2))] = {
+            "log": Path(f).name,
+            "guard_break_step": min(steps) if steps else None,
+        }
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-root", default="runs/tasks/tinygsm")
@@ -89,8 +122,10 @@ def main():
     ap.add_argument("--factor", type=float, default=4.0)
     ap.add_argument("--patience", type=int, default=200)
     ap.add_argument("--out", default="results/objective/stability_summary.json")
+    ap.add_argument("--job-logs", default="logs/arch/cobit_objstab_*.log")
     args = ap.parse_args()
 
+    jobs = scan_job_logs(args.job_logs)
     rows = []
     for d in sorted(glob.glob(f"{args.runs_root}/{args.pattern}")):
         name = Path(d).name
@@ -100,8 +135,14 @@ def main():
         if not loss:
             print(f"[stab] {name}: no loss series, skipping")
             continue
-        brk, best, peak = time_to_divergence(
+        replay_brk, best, peak = time_to_divergence(
             loss, args.factor, args.patience)
+        job = jobs.get((arm, seed), {})
+        guard_brk = job.get("guard_break_step")
+        # The live guard wins where it spoke; the replay only covers runs that
+        # ran to completion without aborting.
+        brk = guard_brk if guard_brk is not None else replay_brk
+        source = "live-guard" if guard_brk is not None else "tb-replay"
         surv = series(d, "objective/grad_survival")
         logit = series(d, "objective/logit_abs_mean")
         upd = series(d, "optim/update_rms")
@@ -110,6 +151,9 @@ def main():
             "last_step": loss[-1][0],
             "diverged": brk is not None,
             "break_step": brk,
+            "break_source": source,
+            "guard_break_step": guard_brk,
+            "tb_replay_break_step": replay_brk,
             "best_loss_ema": best,
             "peak_ratio": peak,
             "survival_final": surv[-1][1] if surv else None,
@@ -117,14 +161,19 @@ def main():
             "update_rms_final": upd[-1][1] if upd else None,
         })
 
-    print(f"{'run':40s} {'diverged':>9} {'break':>8} {'last':>7} "
-          f"{'peak/best':>10} {'|ell|':>9} {'upd_rms':>10}")
+    print(f"{'run':32s} {'diverged':>9} {'break':>7} {'src':>11} {'tb_last':>8} "
+          f"{'|ell|':>8} {'upd_rms':>9}")
     for r in rows:
-        print(f"{r['run']:40s} {str(r['diverged']):>9} "
-              f"{str(r['break_step']):>8} {r['last_step']:>7} "
-              f"{(r['peak_ratio'] or 0):>10.2f} "
-              f"{(r['logit_abs_mean_final'] or float('nan')):>9.3g} "
-              f"{(r['update_rms_final'] or float('nan')):>10.3g}")
+        print(f"{r['run']:32s} {str(r['diverged']):>9} "
+              f"{str(r['break_step']):>7} {r['break_source']:>11} "
+              f"{r['last_step']:>8} "
+              f"{(r['logit_abs_mean_final'] or float('nan')):>8.3g} "
+              f"{(r['update_rms_final'] or float('nan')):>9.3g}")
+        if (r["guard_break_step"] is not None
+                and r["tb_replay_break_step"] is None):
+            print(f"{'':32s}   (TB series ends at {r['last_step']}, "
+                  f"{r['guard_break_step'] - r['last_step']} steps before the "
+                  f"guard fired: final flush lost on abort)")
 
     print()
     for arm in ("binary_sm", "binary_ce"):

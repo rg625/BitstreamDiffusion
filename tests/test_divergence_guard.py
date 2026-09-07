@@ -136,3 +136,35 @@ def test_factor_5_would_miss_the_unclamped_sm_break():
     for f in (5.0, 10.0, 20.0):
         s = _Stub(factor=f, patience=10, min_steps=0)
         s.feed([best] * 50 + [level] * 500)      # no abort
+
+
+# --- Calibration against the known-good production run ------------------------
+# Measured from the full 500k production history (all event files merged):
+#   max EMA/best = 6.29, stable plateau ~5.4x for the last 450k steps.
+# The rise starts at entropy_warmup_steps=40000 over entropy_transition_steps
+# =10000 -- the sigma-schedule handover changes the loss scale. It is not a
+# divergence, and a guard that fires on it is useless.
+PRODUCTION_MAX_RATIO = 6.29
+# Smallest ratio among the six measured 20k divergences (ce seed 44).
+SMALLEST_REAL_DIVERGENCE = 17.2
+
+
+def test_guard_would_not_have_aborted_the_production_run():
+    """The previous default of 4 would have killed a run that went on to train
+    successfully to 500k. This is the regression that matters most."""
+    s = _Stub(factor=4.0, patience=10, min_steps=0)
+    with pytest.raises(SystemExit):
+        s.feed([0.023] * 50 + [0.023 * PRODUCTION_MAX_RATIO] * 500)
+
+    s = _Stub(factor=10.0, patience=10, min_steps=0)
+    s.feed([0.023] * 50 + [0.023 * PRODUCTION_MAX_RATIO] * 5000)   # must survive
+
+
+def test_guard_still_catches_the_smallest_measured_divergence():
+    s = _Stub(factor=10.0, patience=10, min_steps=0)
+    with pytest.raises(SystemExit):
+        s.feed([0.065] * 50 + [0.065 * SMALLEST_REAL_DIVERGENCE] * 300)
+
+
+def test_threshold_sits_between_the_two_populations():
+    assert PRODUCTION_MAX_RATIO < 10.0 < SMALLEST_REAL_DIVERGENCE

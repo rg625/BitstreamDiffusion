@@ -310,7 +310,7 @@ def test_guard_is_on_and_identical_in_both_arms():
     for c in (a, b):
         assert bool(c.train.divergence_guard.enabled)
     assert (float(a.train.divergence_guard.factor)
-            == float(b.train.divergence_guard.factor) == 4.0)
+            == float(b.train.divergence_guard.factor) == 10.0)
 
 
 def test_tag_isolates_smoke_runs_from_the_pilot_directory():

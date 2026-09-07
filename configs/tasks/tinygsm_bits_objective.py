@@ -76,18 +76,19 @@ def get_config():
     # ~55 GPU-h with bit-identical weights after diverging.
     cfg.train.divergence_guard = type(cfg.train.checkpointing)()
     cfg.train.divergence_guard.enabled = True
-    # factor=4, bracketed empirically against all four 5k smoke runs. BOTH SM
-    # arms break (clamped at step 3,900; unclamped at 4,720) and neither CE arm
-    # does. Replayed on the measured losses:
-    #     f=4  fires SM@4100 and SM_noclamp@4920, never on either CE arm
-    #     f=5  MISSES the unclamped SM break entirely
-    #     f=10 (the previous default) misses it too
-    # so 4 is the largest value that catches both observed events. Healthy CE
-    # sustains ~1.1x its best (transient peak 1.9x), leaving ~2x headroom.
-    # CAVEAT: bracketed on 5k runs only. The entropy schedule transitions at
-    # 40k (entropy_warmup_steps) and that regime is unexercised here, so revisit
-    # this before trusting it on a long run.
-    cfg.train.divergence_guard.factor = 4.0
+    # factor=10, bracketed against the KNOWN-GOOD production run and against
+    # six measured divergences.
+    #
+    #   production, 500k steps, trained successfully: max EMA/best = 6.29,
+    #     sitting at a stable ~5.4x plateau for its last 450k steps. The rise
+    #     begins exactly at entropy_warmup_steps=40000 and ramps over
+    #     entropy_transition_steps=10000: it is the sigma-schedule handover
+    #     changing the loss scale, not a divergence.
+    #   our six 20k runs, all genuinely diverging: 17.2x to 2942x.
+    #
+    # 10 sits between them with ~1.6x margin below and ~1.7x above. The previous
+    # default of 4 WOULD HAVE ABORTED PRODUCTION at ~step 48,000.
+    cfg.train.divergence_guard.factor = 10.0
     cfg.train.divergence_guard.patience = 200
     cfg.train.divergence_guard.min_steps = 2500      # = optim.warmup
     cfg.train.divergence_guard.ema_decay = 0.99

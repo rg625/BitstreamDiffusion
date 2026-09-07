@@ -1899,6 +1899,13 @@ class Trainer:
 
         patience = int(getattr(g, "patience", 200))
         if self._div_strikes >= patience:
+            # Flush first: the abort truncates the event file, and on one run
+            # TensorBoard lost the final 481 steps -- the entire record of the
+            # break it was aborting for.
+            try:
+                self.writer.flush()
+            except Exception:
+                pass
             raise SystemExit(
                 f"[divergence-guard] loss EMA {self._div_ema:.6g} has exceeded "
                 f"{factor}x its best ({self._div_best:.6g}) for {patience} "

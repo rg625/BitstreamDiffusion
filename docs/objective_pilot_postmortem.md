@@ -367,3 +367,109 @@ not to separate the arms. Before spending it, the design should change:
   compounds. Both smoke runs ended within 300 steps of the break.
 - The divergence guard (now factor 4) makes a longer run cheap to attempt: a
   diverged arm aborts in ~400 steps instead of burning the remaining budget.
+
+---
+
+## 8. The multi-seed stability result (20k, clamp off, production-matched)
+
+Six runs: 2 arms x 3 seeds, `cond.p_uncond=0.1`, clamp OFF, 20k step budget,
+divergence guard armed. **All six diverged.** Every one aborted; none reached
+20k. Actual cost ~19 GPU-h against a 58.7 GPU-h worst case, because the guard
+stopped each run at the break.
+
+| arm | seed 42 | seed 43 | seed 44 | median |
+|---|---|---|---|---|
+| binary_sm | 6,356 | 9,872 | 4,481 | **6,356** |
+| binary_ce | 11,444 | 18,909 | 9,911 | **11,444** |
+
+**CE survives 1.80x longer, with perfect rank separation**: max(SM)=9,872 <
+min(CE)=9,911. Exact one-sided Wilcoxon rank-sum, n=3 vs 3: the SM rank sum is
+6, the minimum attainable, giving **p = 1/20 = 0.05** — the smallest p this
+design can produce.
+
+### 8.1 CE is not stable, it is slower to fail
+
+This overturns section 7. The 5k smoke's "CE stable, SM breaks" was an artefact
+of stopping at 5k: **all three CE breaks fall after step 9,900.** A 5k budget
+could not have seen them.
+
+### 8.2 My guard threshold would have killed the production run
+
+Merging *all* of production's event files (I had previously read only the last,
+which covers 495k-500k) gives its full 500k history:
+
+- loss falls to **0.0233 at ~41,680**
+- rises to **~0.103 by ~83,000** and stays there for the remaining 420k steps
+- lifetime max EMA/best = **6.29**, sitting at a stable ~5.4x plateau
+
+The rise begins exactly at `entropy_warmup_steps=40000` and ramps over
+`entropy_transition_steps=10000`. It is the **sigma-schedule handover changing
+the loss scale** — the floor of 0.023 is measured under the initial log-normal
+sigma draw and 0.103 under the entropy-adapted one — not a divergence.
+
+So `factor=4` **would have aborted production at ~step 48,000**. That default
+was wrong, and it is now **10**, bracketed by two measured populations:
+
+| | ratio |
+|---|---|
+| production, 500k, trained successfully | max **6.29** |
+| our six 20k runs, all diverging | **17.2** to **2942** |
+
+10 sits between with ~1.6x margin below and ~1.7x above, and is pinned by a
+regression test that replays production's measured ratio.
+
+Consequences for what is already reported:
+
+- **The six 20k breaks are unaffected.** Every one was at 17.2x-2942x when the
+  guard stopped it, far past production's benign 6.29x. They are real
+  divergences; `factor=4` merely happened to be what tripped first.
+- **One earlier call was wrong.** The 5k `sm_smoke_noclamp` "break" peaked at
+  only 4.75x — inside production's benign band. I over-called it. At factor=10
+  only the *clamped* SM smoke arm (21.8x) diverged at 5k. The clamp nevertheless
+  stays exonerated: all six 20k runs had it OFF and all six diverged.
+
+### 8.3 Two measurement bugs found and fixed
+
+- **The offline detector and the live guard disagreed 6/6.** An aborting run
+  truncates its event file; for seed 44 TensorBoard ended **481 steps before**
+  the guard fired, leaving no offline evidence at all. The summary now takes the
+  live guard's message as authoritative and uses the replay only for runs that
+  completed, reporting both so a disagreement can never pass silently. The
+  trainer now also flushes TensorBoard before aborting.
+
+### 8.4 The open question this exposes
+
+**Production trained to 500k. Our runs, whose SM arm differs from it by zero
+config keys, diverge before 19k.** Ruled out so far:
+
+| hypothesis | check | result |
+|---|---|---|
+| corpus differs from production's | `sigma_data` fingerprint | 0.39984477 vs 0.39984480 — matches to ~8 s.f. |
+| data config drift | full key diff | identical on all 22 keys |
+| per-position-sigma refactor | fixed-seed fwd+loss+bwd vs `872674f` | bit-identical gradients |
+
+Remaining candidates: code changes since production was trained (Aug 2026) other
+than the sigma refactor, and the software/hardware stack. **Until this is
+resolved, the SM-vs-CE comparison is internally valid — matched conditions, one
+variable — but its external validity is unclear: it may be measuring which
+objective better tolerates a defect that production did not have.**
+
+### 8.5 Is a longer CE-vs-SM run justified?
+
+**No — not yet.** Reasons:
+
+1. A longer run measures nothing new. Both arms diverge; extending the budget
+   only moves the breaks later. All six runs already ended before 19k with a 20k
+   budget available.
+2. The 1.80x CE advantage is at p=0.05, the floor of a 3v3 design. More seeds
+   would sharpen it, but sharpening an effect measured inside a setup that
+   itself contradicts the reference run is premature.
+3. Section 8.4 is the blocking question. If our stack has a defect production
+   lacked, "CE tolerates it 1.8x longer" is a statement about the defect.
+
+The cheap next step is diagnostic, not another arm: bisect what changed between
+the production-era code and now, by re-running the production recipe at the
+production-era commit for ~10k steps (~5 GPU-h). If it is stable there and
+diverges at HEAD, the cause is in our changes and is findable. If it diverges
+there too, the recipe was always marginal, production got a lucky seed, and the
+CE result becomes considerably more interesting.
