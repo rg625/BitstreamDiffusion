@@ -95,6 +95,12 @@ def _load_weights(model, ckpt_path: Path, cfg, device, apply_ema: bool):
     return step, used_ema
 
 
+def _step_from_name(ck: Path):
+    """Parse the step out of 'step=000250000.pt' without loading 2.1 GB."""
+    m = re.match(r"step=(\d+)\.pt$", ck.name)
+    return int(m.group(1)) if m else None
+
+
 def _gen(*parts) -> torch.Generator:
     """Deterministic generator from a tuple of ints/strings.
 
@@ -266,6 +272,8 @@ def main():
                     default=[0.05, 0.2, 0.4, 1.0, 3.0, 10.0, 40.0])
     ap.add_argument("--bin-edges", nargs="+", type=float,
                     default=[0.002, 0.075, 0.15, 0.30, 0.50, 1.0, 3.0, 10.0, 40.0])
+    ap.add_argument("--no-resume", action="store_true",
+                    help="overwrite the output file instead of extending it")
     ap.add_argument("--ema", action="store_true",
                     help="probe EMA weights (default: raw, which is what the "
                          "optimiser's gradient is actually computed from)")
@@ -284,6 +292,20 @@ def main():
 
     model = create_model(cfg).to(device).eval()
 
+    # Resume: this runs on a login node with one core, and the watchdog has
+    # killed it twice mid-sweep (~35 min per checkpoint). Each checkpoint's
+    # results are written as soon as it finishes, and an existing output file is
+    # loaded and extended rather than overwritten, so progress is never lost and
+    # a rerun costs only the checkpoints still missing.
+    out_path = Path(args.out)
+    prior = {}
+    if out_path.exists() and not args.no_resume:
+        try:
+            prior = json.loads(out_path.read_text())
+        except Exception as e:
+            print(f"[probe] could not read {out_path} ({e}); starting fresh")
+            prior = {}
+
     results = {"meta": {
         "n_grid": args.n_grid, "n_bins": args.n_bins,
         "data_seed": args.data_seed, "noise_seeds": args.noise_seeds,
@@ -291,7 +313,11 @@ def main():
         "weights": "ema" if args.ema else "raw",
         "grid_design": "fully paired: every example at every sigma",
         "bin_design": "per-example log-uniform sigma within the band",
-    }, "arms": {}}
+    }, "arms": prior.get("arms", {})}
+    done = {a: {e["global_step"] for e in v} for a, v in results["arms"].items()}
+    if done:
+        print("[probe] resuming; already have "
+              + ", ".join(f"{a}:{sorted(v)}" for a, v in done.items()))
 
     for spec in args.arms:
         if "=" in spec:
@@ -305,10 +331,22 @@ def main():
         if not cks:
             print(f"[probe] WARNING: no checkpoints under {ckdir}")
             continue
-        results["arms"][arm] = []
+        results["arms"].setdefault(arm, [])
         for ck in cks:
+            # Cheap check first: reading global_step needs the file, but skipping
+            # an already-finished checkpoint should not cost a full sweep.
+            step_hint = _step_from_name(ck)
+            if step_hint is not None:
+                if args.only_steps and step_hint not in args.only_steps:
+                    continue
+                if step_hint in done.get(arm, set()):
+                    print(f"[probe] {arm}: step {step_hint} already done, skipping")
+                    continue
             step, used_ema = _load_weights(model, ck, cfg, device, args.ema)
             if args.only_steps and step not in args.only_steps:
+                continue
+            if step in done.get(arm, set()):
+                print(f"[probe] {arm}: step {step} already done, skipping")
                 continue
             grid = probe_grid(model, cfg, xg, pg, args.sigmas, device,
                               args.micro_bs, args.noise_seeds)
@@ -322,8 +360,9 @@ def main():
             print(f"[probe] {arm:11s} step={step:>7d}  "
                   f"survival@s={lo['sigma']}: {lo['grad_survival']:.4f}  "
                   f"sat@s={lo['sigma']}: {lo['frac_D1mD_lt_0.001']:.4f}")
-            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-            Path(args.out).write_text(json.dumps(results, indent=2))
+            done.setdefault(arm, set()).add(step)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(results, indent=2))
 
     print(f"[probe] wrote {args.out}")
 
