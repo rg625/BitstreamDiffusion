@@ -473,3 +473,66 @@ production-era commit for ~10k steps (~5 GPU-h). If it is stable there and
 diverges at HEAD, the cause is in our changes and is findable. If it diverges
 there too, the recipe was always marginal, production got a lucky seed, and the
 CE result becomes considerably more interesting.
+
+---
+
+## 9. Is the low-sigma saturation result robust? Yes — and it is narrower than I said
+
+Offline probe, production checkpoints, **n=128 evaluations** (64 fixed examples
+x 2 noise seeds), fully paired: identical examples, noise and sigma at both
+checkpoints. Bootstrap CIs are percentile over examples.
+
+### 9.1 Gradient survival
+
+| sigma | 250k | CI95 | seeds | 500k | CI95 | seeds |
+|---|---|---|---|---|---|---|
+| 0.05 | 0.1475 | [0.127, 0.163] | .151/.145 | **0.00000** | **[0, 0]** | 0/0 |
+| 0.2 | 0.0899 | [0.080, 0.102] | .094/.085 | 0.1380 | [0.132, 0.145] | .142/.134 |
+| 0.4 | 0.1281 | [0.121, 0.135] | .129/.127 | 0.1520 | [0.150, 0.154] | .151/.153 |
+| 1 | 0.1669 | [0.160, 0.173] | .167/.167 | 0.1855 | [0.184, 0.187] | .186/.185 |
+| 3 | 0.1906 | [0.187, 0.194] | .189/.192 | 0.1874 | [0.184, 0.191] | .186/.189 |
+| 40 | 0.1912 | [0.188, 0.194] | .191/.191 | 0.1931 | [0.190, 0.196] | .193/.193 |
+
+**Robust on every axis.** The two noise seeds agree to <=0.01 everywhere and
+sit inside each other's CI; CIs are +-0.01 or tighter.
+
+At sigma=0.05 the 500k value is **exactly zero** — both seeds, and a degenerate
+bootstrap interval, because every resample of every example gives zero.
+
+### 9.2 Saturation is the most robust quantity measured
+
+| sigma | 250k | per-example range | 500k | per-example range |
+|---|---|---|---|---|
+| 0.05 | 0.9995 | 0.9973 - 1.0000 | **1.0000** | **1.0000 - 1.0000** |
+| 0.2 | 0.9932 | 0.9808 - 0.9988 | 0.9946 | 0.9741 - 0.9987 |
+| 1 | 0.6576 | 0.097 - 0.876 | 0.6505 | 0.088 - 0.842 |
+| 40 | 0.4089 | 0.035 - 0.710 | 0.3808 | 0.032 - 0.673 |
+
+At sigma=0.05 and 500k, **every one of 128 evaluations has 100.00% of its free
+bits saturated** — zero spread. At sigma=40 the same statistic ranges 0.03-0.67
+across examples, so the low-sigma consistency is a property of the model, not an
+artefact of a narrow sample.
+
+### 9.3 Corrections to how I described this earlier
+
+- **The collapse is confined to sigma < ~0.075, and everywhere else training
+  IMPROVES survival.** From 250k to 500k: sigma=0.2 rises 0.090 -> 0.138,
+  sigma=0.4 rises 0.128 -> 0.152, sigma=1 rises 0.167 -> 0.185, sigma>=3 flat at
+  ~0.19. Only sigma<0.075 goes to zero. "Survival degrades with training" is
+  true *only* in that one band and false everywhere else.
+- **The profile is not monotonic in sigma at 250k.** The minimum sits at
+  sigma=0.2 (0.0899), *above* sigma=0.05 (0.1475). I described the collapse as
+  monotonic in sigma; it is not. By 500k the profile is monotonic increasing,
+  because the sigma=0.05 point has dropped out of it entirely.
+- **The cliff is sharp and its edge is locatable.** Band 0.002-0.075 is exactly
+  0 at 500k; band 0.075-0.15 is 0.126 with a wide CI [0.068, 0.175] — the widest
+  in the whole table, because it straddles the cliff; band 0.15-0.3 is a tight
+  0.1396 [0.135, 0.144]. So the transition lies between sigma ~0.05 and ~0.15.
+
+### 9.4 Status of this finding
+
+Per the brief, it stays a **real but causally unlinked observation**. It is now
+well measured — n=128, two seeds, tight or degenerate intervals — but nothing
+connects it to the divergences in section 8: those runs broke at 4.5k-19k, long
+before their models could resemble a 250k-500k checkpoint, and the 5k arms
+showed no survival decline before breaking.
