@@ -76,10 +76,18 @@ def get_config():
     # ~55 GPU-h with bit-identical weights after diverging.
     cfg.train.divergence_guard = type(cfg.train.checkpointing)()
     cfg.train.divergence_guard.enabled = True
-    # factor=10: on the 5k smoke the SM divergence peaked at 53.7x its best
-    # EMA while the healthy CE arm peaked at 1.8x, so 10 separates them with
-    # margin on both sides. 20 was too permissive and missed the real event.
-    cfg.train.divergence_guard.factor = 10.0
+    # factor=4, bracketed empirically against all four 5k smoke runs. BOTH SM
+    # arms break (clamped at step 3,900; unclamped at 4,720) and neither CE arm
+    # does. Replayed on the measured losses:
+    #     f=4  fires SM@4100 and SM_noclamp@4920, never on either CE arm
+    #     f=5  MISSES the unclamped SM break entirely
+    #     f=10 (the previous default) misses it too
+    # so 4 is the largest value that catches both observed events. Healthy CE
+    # sustains ~1.1x its best (transient peak 1.9x), leaving ~2x headroom.
+    # CAVEAT: bracketed on 5k runs only. The entropy schedule transitions at
+    # 40k (entropy_warmup_steps) and that regime is unexercised here, so revisit
+    # this before trusting it on a long run.
+    cfg.train.divergence_guard.factor = 4.0
     cfg.train.divergence_guard.patience = 200
     cfg.train.divergence_guard.min_steps = 2500      # = optim.warmup
     cfg.train.divergence_guard.ema_decay = 0.99

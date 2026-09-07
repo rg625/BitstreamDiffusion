@@ -102,22 +102,37 @@ def test_the_actual_pilot_trajectory_would_have_been_caught_early():
     assert s.global_step < 19540 + 800, f"fired too late: step {s.global_step}"
 
 
-def test_calibrated_against_the_real_5k_smoke_trajectories():
-    """factor=10 must fire on the SM arm's real divergence and never on the
-    healthy CE arm. Measured from the 5k smoke: SM's loss EMA peaked at 53.7x
-    its best, CE's at 1.8x. 20 was too permissive and missed the real event."""
-    sm_best, sm_peak = 0.0327, 0.0327 * 53.7
-    ce_best, ce_peak = 0.1019, 0.1019 * 1.8
+# Measured from the four 5k smoke runs: (best EMA, sustained post-break level).
+# Both SM arms break; neither CE arm does.
+_SMOKE = {
+    "sm_clamped":   (0.0327, 0.0327 * 15.0),   # broke at step 3,900
+    "sm_noclamp":   (0.0337, 0.0337 * 4.9),    # broke at step 4,720
+    "ce_clamped":   (0.1019, 0.1019 * 1.1),    # healthy
+    "ce_noclamp":   (0.1025, 0.1025 * 1.1),    # healthy
+}
 
-    s = _Stub(factor=10.0, patience=10, min_steps=0)
+
+@pytest.mark.parametrize("arm", ["sm_clamped", "sm_noclamp"])
+def test_default_factor_catches_both_observed_sm_breaks(arm):
+    best, level = _SMOKE[arm]
+    s = _Stub(factor=4.0, patience=10, min_steps=0)
     with pytest.raises(SystemExit):
-        s.feed([sm_best] * 50 + [sm_peak] * 100)
-
-    s = _Stub(factor=10.0, patience=10, min_steps=0)
-    s.feed([ce_best] * 50 + [ce_peak] * 500)      # healthy arm must survive
+        s.feed([best] * 50 + [level] * 300)
 
 
-def test_factor_20_would_have_missed_the_sm_divergence():
-    """Pins why the default changed, so it is not silently raised again."""
-    s = _Stub(factor=20.0, patience=10, min_steps=0)
-    s.feed([0.0327] * 50 + [0.0327 * 15.0] * 500)   # sustained 15x: no abort
+@pytest.mark.parametrize("arm", ["ce_clamped", "ce_noclamp"])
+def test_default_factor_never_fires_on_a_healthy_ce_arm(arm):
+    best, level = _SMOKE[arm]
+    s = _Stub(factor=4.0, patience=10, min_steps=0)
+    s.feed([best] * 50 + [level] * 1000)
+    # even the transient 1.9x peak must not trip it
+    s.feed([best * 1.9] * 50)
+
+
+def test_factor_5_would_miss_the_unclamped_sm_break():
+    """Pins why the default is 4 and not higher: the unclamped SM arm settles at
+    only ~4.9x its best, so 5 and 10 both miss a real divergence."""
+    best, level = _SMOKE["sm_noclamp"]
+    for f in (5.0, 10.0, 20.0):
+        s = _Stub(factor=f, patience=10, min_steps=0)
+        s.feed([best] * 50 + [level] * 500)      # no abort

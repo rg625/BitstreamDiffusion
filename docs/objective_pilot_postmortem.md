@@ -310,15 +310,60 @@ saturation fraction and survival are different quantities.
   **1.8x**, so the default is now **10**, which fires on SM at step 4,320 and
   never on CE. Pinned by tests against those measured numbers.
 
-### 7.5 What the evidence now supports
+### 7.5 The completed 2x2 — the clamp is exonerated, the objective is not
 
-A 2x2 on `loss_type` x `clamp`, 5k steps each. Two cells are already done:
+All four cells, 5k steps each, ~10 GPU-h total:
 
 | | clamp off | clamp = 100 |
 |---|---|---|
-| **binary_sm** | ? (= production recipe exactly) | diverged @3,900 |
-| **binary_ce** | ? | stable to 5k |
+| **binary_sm** | **breaks @4,720** (0.030 -> 0.428, settles ~0.16) | **breaks @3,900** (0.026 -> 0.426, settles ~0.5 and climbing) |
+| **binary_ce** | stable (0.07-0.19 throughout) | stable (0.08-0.15 throughout) |
 
-The two missing cells cost ~5 GPU-h and decide whether the clamp is the culprit
-or incidental. Running the pilot before knowing that would risk repeating the
-first one.
+**Both SM arms break. Neither CE arm does.** So the clamp is *not* the cause --
+my section 7.2 suspicion was also wrong. It shifted the break by ~800 steps,
+which is well within what one seed can tell us. The clamp remains off by
+default (it buys nothing and the unclamped arm reproduces production exactly).
+
+The break signature is near-identical in both SM runs: an abrupt jump from
+~0.03 to **0.428** inside a single 20-step logging interval, then a partial
+recovery to a plateau several times above the old floor. The coincidence of the
+peak value across two independent runs suggests a shared mechanism with a
+characteristic scale, not a random spike.
+
+### 7.6 The pilot's primary endpoint does not separate the arms
+
+`grad_survival`, all four arms:
+
+| arm | 3.0-3.8k (pre-break) | >= 4.6k (post-break) |
+|---|---|---|
+| sm, clamped | 0.1785 | 0.1119 |
+| sm, no clamp | 0.1810 | **0.1765** |
+| ce, clamped | 0.1832 | 0.1820 |
+| ce, no clamp | 0.1816 | 0.1803 |
+
+All four sit at **~0.18 before any event**. The unclamped SM arm breaks at 4,720
+and its survival is *still* 0.1765 afterwards — it breaks **without** a survival
+collapse, in either direction.
+
+**This is the central negative result.** The pilot was designed around the
+hypothesis that CE's advantage would appear as retained gradient survival. At 5k
+that endpoint does not discriminate the arms at all. What discriminates them is
+**stability**: SM breaks, CE does not, under both weightings.
+
+Anyone reading the earlier sections should carry that forward: the low-sigma
+survival collapse measured on the production run (section 6) is real, but it is
+not the mechanism behind these divergences, and it is not what separates the
+objectives here.
+
+### 7.7 Where this leaves the 98 GPU-h pilot
+
+The pilot as specified would measure a primary endpoint that has now been shown
+not to separate the arms. Before spending it, the design should change:
+
+- **Endpoint**: time-to-divergence / stability, not gradient survival.
+- **Seeds**: 3+ per arm. The whole result currently rests on 2 SM runs breaking
+  and 2 CE runs not, one seed each -- suggestive, not conclusive.
+- **Length**: long enough to see whether SM's post-break plateau recovers or
+  compounds. Both smoke runs ended within 300 steps of the break.
+- The divergence guard (now factor 4) makes a longer run cheap to attempt: a
+  diverged arm aborts in ~400 steps instead of burning the remaining budget.
