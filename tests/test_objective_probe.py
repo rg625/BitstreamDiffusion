@@ -8,6 +8,7 @@ is computed identically in both arms and the two runs are directly comparable.
 import inspect
 
 import ml_collections
+import pytest
 import torch
 
 from trainers.trainer import Trainer
@@ -77,8 +78,32 @@ def test_sigma_stratification_is_emitted():
     logits = torch.zeros(4, 8); x0 = torch.zeros(4, 8)
     sigma = torch.tensor([0.1, 1.0, 10.0, 0.2])
     out = _run(logits, x0, sigma, None)
-    for k in ("lo", "mid", "hi"):
+    for k in ("s075_150", "s150_300", "s1_3", "s10_up"):
         assert f"objective/grad_survival_{k}" in out, k
+
+
+def test_low_sigma_band_resolves_below_the_production_collapse_point():
+    """The old (0, 0.5) 'lo' band pooled sigma=0.05 -- where production survival
+    is exactly 0 -- with sigma=0.4, where it is ~0.15. That average hid the only
+    real effect, so 0.05 and 0.4 must land in DIFFERENT bands."""
+    from trainers.trainer import SIGMA_BANDS
+
+    def band_of(s):
+        return next(n for lo, hi, n in SIGMA_BANDS if lo <= s < hi)
+
+    assert band_of(0.05) != band_of(0.4)
+    assert band_of(0.05) != band_of(0.1)          # 0.075 boundary is resolved
+    edges = [lo for lo, _, _ in SIGMA_BANDS]
+    assert edges == sorted(edges) and len(set(edges)) == len(edges)
+
+
+def test_logit_magnitude_is_reported():
+    """|ell| ~ 1e3 was the state of the diverged pilot; it must be visible live
+    rather than only by loading checkpoints afterwards."""
+    logits = torch.full((2, 8), 900.0)
+    out = _run(logits, torch.zeros(2, 8), torch.tensor([0.4, 0.4]), None)
+    assert out["objective/logit_abs_mean"] == pytest.approx(900.0)
+    assert out["objective/logit_abs_max"] == pytest.approx(900.0)
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +168,7 @@ class _StepStub:
 
     _step_continuous = Trainer._step_continuous
     _log_objective_probe = Trainer._log_objective_probe
+    _log_optim_diagnostics = Trainer._log_optim_diagnostics
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -159,6 +185,8 @@ class _StepStub:
         self.use_scaler = False
         self.grad_clip = 0.0
         self.opt = _NoOpOpt([self._w])
+        self.cfg.optim = ml_collections.ConfigDict()
+        self.cfg.optim.eps = 1e-8
         self.lr_sched = _NoOp()
         self.ema = _NoOp()
 

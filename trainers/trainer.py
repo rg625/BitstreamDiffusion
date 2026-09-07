@@ -107,6 +107,22 @@ def _ddp_is_on() -> bool:
     return dist.is_available() and dist.is_initialized()
 
 
+# Sigma bands for the objective probe. The original (0, 0.5) "lo" band pooled
+# sigma=0.05 -- where the production run's gradient survival is exactly 0 --
+# with sigma=0.4, where it is a healthy 0.15. That average hid the only real
+# effect, so the low end is resolved finely.
+SIGMA_BANDS = (
+    (0.0, 0.075, "s000_075"),
+    (0.075, 0.15, "s075_150"),
+    (0.15, 0.30, "s150_300"),
+    (0.30, 0.50, "s300_500"),
+    (0.50, 1.0, "s500_1k"),
+    (1.0, 3.0, "s1_3"),
+    (3.0, 10.0, "s3_10"),
+    (10.0, float("inf"), "s10_up"),
+)
+
+
 def _maybe_set_seed(cfg):
     """Set Python/NumPy/Torch seeds for reproducibility if cfg.train.seed is provided."""
     seed = getattr(cfg.train, "seed", None)
@@ -1676,22 +1692,26 @@ class Trainer:
         # ------------------------------------------------------------------
         if is_train:
             self.opt.zero_grad(set_to_none=True)
+            gnorm = None
 
             if self.use_scaler:
                 self.scaler.scale(loss).backward()
                 if self.grad_clip > 0:
                     self.scaler.unscale_(self.opt)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+                    gnorm = torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), self.grad_clip)
                 self.scaler.step(self.opt)
                 self.scaler.update()
             else:
                 loss.backward()
                 if self.grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+                    gnorm = torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), self.grad_clip)
                 self.opt.step()
 
             self.lr_sched.step()
             self.ema.update(self.model)
+            self._log_optim_diagnostics(gnorm)
 
         # ------------------------------------------------------------------
         # Entropy buffer update
@@ -1783,6 +1803,57 @@ class Trainer:
 
         return loss.item()
 
+    @torch.compiler.disable
+    @torch.no_grad()
+    def _log_optim_diagnostics(self, grad_norm=None) -> None:
+        """Secondary diagnostics for the stability study.
+
+        The first pilot froze with bit-identical weights for ~55k steps and
+        nobody could tell from the logs; it took diffing checkpoints afterwards.
+        Adam's exp_avg_sq had decayed to 1e-29, which IS visible live -- so log
+        it. `update_rms` is the actual parameter step size: it goes to exactly
+        zero in a frozen run even while the loss keeps fluctuating from the data
+        draw, which is the signal that was missing.
+        """
+        probe = getattr(self.cfg.train, "objective_probe", None)
+        if probe is None or not bool(getattr(probe, "enabled", False)):
+            return
+        every = int(getattr(probe, "every_steps", 500))
+        if every <= 0 or int(self.global_step) % every:
+            return
+        if not getattr(self, "is_master", True):
+            return
+
+        if grad_norm is not None and math.isfinite(float(grad_norm)):
+            self.writer.add_scalar("optim/grad_norm_preclip",
+                                   float(grad_norm), int(self.global_step))
+
+        st = getattr(self.opt, "state", None)
+        if not st:
+            return
+        v_max = 0.0
+        m_abs = 0.0
+        n = 0
+        upd = 0.0
+        eps = float(getattr(self.cfg.optim, "eps", 1e-8))
+        for p, sd in st.items():
+            v = sd.get("exp_avg_sq")
+            m = sd.get("exp_avg")
+            if v is None or m is None:
+                continue
+            v = v.float()
+            m = m.float()
+            v_max = max(v_max, float(v.max()))
+            m_abs += float(m.abs().sum())
+            upd += float((m / (v.sqrt() + eps)).pow(2).sum())
+            n += v.numel()
+        if n == 0:
+            return
+        self.writer.add_scalar("optim/exp_avg_sq_max", v_max, int(self.global_step))
+        self.writer.add_scalar("optim/exp_avg_abs_mean", m_abs / n, int(self.global_step))
+        self.writer.add_scalar("optim/update_rms", (upd / n) ** 0.5,
+                               int(self.global_step))
+
     def _check_divergence(self, loss: float) -> None:
         """Abort a run that has diverged, instead of letting it burn the budget.
 
@@ -1871,7 +1942,15 @@ class Trainer:
         d, tt = D[keep], t[keep]
         supp = d * (1 - d)
         err = (d - tt).abs()
+        # Logit magnitude: the diverged pilot sat at |ell| ~ 1e3, where sigmoid
+        # saturates exactly and D(1-D) is identically zero. Cheap to watch, and
+        # it is the quantity that actually distinguishes "confident" from "broken".
+        ell = logits.detach().float().reshape(D.shape)[keep]
         stats = {
+            "objective/logit_abs_mean": float(ell.abs().mean()),
+            "objective/logit_abs_p99": float(torch.quantile(
+                ell.abs()[:100000].float(), 0.99)) if ell.numel() else 0.0,
+            "objective/logit_abs_max": float(ell.abs().max()),
             "objective/grad_survival": float((err * supp).sum() / err.sum().clamp_min(1e-12)),
             "objective/median_D1mD": float(supp.median()),
             "objective/frac_D1mD_lt_0.01": float((supp < 0.01).float().mean()),
@@ -1883,7 +1962,7 @@ class Trainer:
         sig = sigma.detach().float().reshape(-1)
         if sig.numel() == D.shape[0]:
             per_row_keep = keep.view(D.shape[0], -1)
-            for lo, hi, name in ((0.0, 0.5, "lo"), (0.5, 5.0, "mid"), (5.0, float("inf"), "hi")):
+            for lo, hi, name in SIGMA_BANDS:
                 sel = (sig >= lo) & (sig < hi)
                 if not sel.any():
                     continue

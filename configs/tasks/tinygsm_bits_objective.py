@@ -60,7 +60,7 @@ def get_config():
     if _wmax not in ("", "none", "off", "0"):
         cfg.train.loss_weight_max = float(_wmax)
 
-    cfg.optim.total_steps = int(os.environ.get("OBJ_STEPS", 100_000))
+    cfg.optim.total_steps = int(os.environ.get("OBJ_STEPS", 20_000))
     # NOTE: the real key is train.checkpointing.interval.every_steps. An earlier
     # draft of this file set `cfg.train.checkpoint_every_steps`, which nothing
     # reads -- it would have silently produced no extra checkpoints.
@@ -96,9 +96,14 @@ def get_config():
     # it a 5k smoke would overwrite the 100k arm's checkpoints under the same
     # experiment name -- the same class of silent collision as the FKC filename
     # bug. Empty tag => the canonical pilot path, unchanged.
+    # Seed is the replication axis of the stability study. The whole current
+    # result rests on 2 SM runs breaking and 2 CE runs not, one seed each; a
+    # single divergence event is not evidence of a systematic difference.
+    cfg.train.seed = int(os.environ.get("OBJ_SEED", 42))
+
     tag = os.environ.get("OBJ_TAG", "").strip()
-    suffix = f"_{tag}" if tag else ""
-    cfg.experiment = f"tasks/tinygsm/obj_{loss}{suffix}"
+    parts = [p for p in (tag, f"s{cfg.train.seed}") if p]
+    cfg.experiment = f"tasks/tinygsm/obj_{loss}_" + "_".join(parts)
     cfg.evaluation.checkpoint_path = f"runs/{cfg.experiment}/checkpoints/last.pt"
     cfg.evaluation.out_dir = f"runs/{cfg.experiment}/gsm8k_eval"
     return cfg

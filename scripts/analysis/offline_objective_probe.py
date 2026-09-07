@@ -115,12 +115,31 @@ def _fixed_examples(cfg, n: int, seed: int):
 
 class _Acc:
     """Pooled accumulator. The ratio is sum/sum over bits, never a mean of
-    per-batch ratios, which would weight small batches equally with large ones."""
+    per-batch ratios, which would weight small batches equally with large ones.
+
+    Also keeps the per-example (num, den) pairs so the pooled figure can be
+    given an uncertainty: a bootstrap over EXAMPLES, plus a seed-vs-seed split.
+    Without those a single pooled number cannot be called robust.
+    """
 
     def __init__(self):
         self.num = self.den = self.supp = 0.0
         self.bits = 0
         self.sat = {t: 0.0 for t in SAT_THRESHOLDS}
+        self.per_example = []          # (num, den, sat_lt_0.001, n_bits)
+        self.per_seed = {}             # seed -> [num, den]
+
+    def add_rows(self, d_rows, t_rows, seed):
+        """Per-example bookkeeping; d_rows/t_rows are lists of 1-D tensors."""
+        for d, t in zip(d_rows, t_rows):
+            supp = d * (1 - d)
+            err = (d - t).abs()
+            n, q = float((err * supp).sum()), float(err.sum())
+            self.per_example.append(
+                (n, q, float((supp < 0.001).sum()), int(d.numel())))
+            acc = self.per_seed.setdefault(int(seed), [0.0, 0.0])
+            acc[0] += n
+            acc[1] += q
 
     def add(self, d, t):
         supp = d * (1 - d)
@@ -138,10 +157,36 @@ class _Acc:
             "grad_survival": self.num / max(self.den, 1e-12),
             "mean_D1mD": self.supp / n,
             "n_free_bits": self.bits,
+            "n_examples": len(self.per_example),
         }
         for th in SAT_THRESHOLDS:
             out[f"frac_D1mD_lt_{th}"] = self.sat[th] / n
+        out["per_seed_grad_survival"] = {
+            str(k): (v[0] / max(v[1], 1e-12)) for k, v in sorted(self.per_seed.items())}
+        lo, hi = self._bootstrap_ci()
+        out["grad_survival_ci95"] = [lo, hi]
+        out["sat_0.001_per_example_min_max"] = self._sat_range()
         return out
+
+    def _bootstrap_ci(self, n_boot=2000, seed=0):
+        """Percentile bootstrap over examples, resampling the (num, den) pairs
+        and re-forming the POOLED ratio each time -- not a mean of per-example
+        ratios, which would be a different (and wrong) estimator."""
+        if len(self.per_example) < 2:
+            return (float("nan"), float("nan"))
+        num = torch.tensor([e[0] for e in self.per_example])
+        den = torch.tensor([e[1] for e in self.per_example])
+        g = torch.Generator().manual_seed(seed)
+        idx = torch.randint(len(num), (n_boot, len(num)), generator=g)
+        r = num[idx].sum(1) / den[idx].sum(1).clamp_min(1e-12)
+        q = torch.quantile(r, torch.tensor([0.025, 0.975]))
+        return (float(q[0]), float(q[1]))
+
+    def _sat_range(self):
+        if not self.per_example:
+            return [float("nan"), float("nan")]
+        f = [e[2] / max(e[3], 1) for e in self.per_example]
+        return [min(f), max(f)]
 
 
 @torch.no_grad()
@@ -151,7 +196,9 @@ def _forward_D(model, cfg, xb, mb, sigma, device):
     ell = _model_logits_continuous(model, cfg, xt, sigma, None)
     D = torch.sigmoid(ell.float().reshape(xb.shape[0], -1))
     keep = ~mb.reshape(D.shape)
-    return D[keep], xb.reshape(D.shape)[keep]
+    x0f = xb.reshape(D.shape)
+    rows = [(D[i][keep[i]], x0f[i][keep[i]]) for i in range(D.shape[0])]
+    return D[keep], x0f[keep], rows
 
 
 @torch.no_grad()
@@ -165,10 +212,11 @@ def probe_grid(model, cfg, x0, pm, sigmas, device, micro_bs, seeds):
                 xb, mb = x0[s:s + micro_bs].to(device), pm[s:s + micro_bs].to(device)
                 _forward_D.eps = torch.randn(
                     xb.shape, generator=_gen("grid", seed, si, s)).to(device)
-                d, t = _forward_D(model, cfg, xb, mb,
-                                  torch.full((xb.shape[0],), float(sig), device=device),
-                                  device)
+                d, t, per_row = _forward_D(
+                    model, cfg, xb, mb,
+                    torch.full((xb.shape[0],), float(sig), device=device), device)
                 acc.add(d, t)
+                acc.add_rows([r[0] for r in per_row], [r[1] for r in per_row], seed)
         rows.append({"sigma": float(sig), **acc.as_dict()})
     return rows
 
@@ -190,8 +238,9 @@ def probe_bins(model, cfg, x0, pm, edges, device, micro_bs, seeds):
                                      torch.log(torch.tensor(lo)))).to(device)
                 _forward_D.eps = torch.randn(
                     xb.shape, generator=_gen("binnoise", seed, bi, s)).to(device)
-                d, t = _forward_D(model, cfg, xb, mb, sig, device)
+                d, t, per_row = _forward_D(model, cfg, xb, mb, sig, device)
                 acc.add(d, t)
+                acc.add_rows([r[0] for r in per_row], [r[1] for r in per_row], seed)
         rows.append({"sigma_lo": lo, "sigma_hi": hi, **acc.as_dict()})
     return rows
 
