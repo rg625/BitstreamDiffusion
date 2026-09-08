@@ -258,3 +258,45 @@ def test_suffix_sigma_still_varies_when_a_prompt_is_present():
                    bits_per_token=BPT, prefix_full=torch.zeros(B, S), prefix_mask=pm)
     spreads = [float(s[0, 3 * BPT:].max() / s[0, 3 * BPT:].min()) for s in seen]
     assert max(spreads) > 2.0, f"suffix sigma should still spread: {spreads}"
+
+
+# --- the guidance guard must fire on ACTIVE guidance, not on its mere presence
+class _FakeG:
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
+def _mk_sampler():
+    """A sampler whose guard we can exercise without loading a real model."""
+    from diffusion.continuous.ordered_sampler import OrderedSampler
+    s = OrderedSampler.__new__(OrderedSampler)
+    s.order_w, s.order_mode, s.order_seed = 0.0, "l2r", None
+    return s
+
+
+@pytest.mark.parametrize("guidance", [
+    None,
+    {"cfg_scale": 0.0, "ag_scale": 0.0, "sg_scale": 0.0,
+     "sg_variant": None, "sg_delta": None, "sg_mf_mode": None},
+    _FakeG(cfg_scale=0.0, ag_scale=0.0, sg_scale=0.0),
+])
+def test_inactive_guidance_is_accepted(guidance):
+    """The task evals ALWAYS pass a guidance config with zero scales. Rejecting
+    on its presence made every ordering cell fail with a NotImplementedError."""
+    s = _mk_sampler()
+    with pytest.raises(AttributeError):   # gets past the guard, dies later on the stub
+        s.sample(1, 16, guidance=guidance, guidance_scale=0.0)
+
+
+@pytest.mark.parametrize("kw", [
+    {"guidance_scale": 3.0},
+    {"guidance": {"cfg_scale": 2.0}},
+    {"guidance": _FakeG(ag_scale=1.5)},
+    {"guidance": _FakeG(sg_scale=0.5)},
+    {"bad_model": object()},
+])
+def test_active_guidance_is_refused(kw):
+    s = _mk_sampler()
+    with pytest.raises(NotImplementedError, match="guidance"):
+        s.sample(1, 16, **kw)

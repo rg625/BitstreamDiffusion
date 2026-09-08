@@ -41,6 +41,20 @@ SEED="${OBJ_EVAL_SEED:-0}"
 echo "[objeval] commit $(git rev-parse --short HEAD) limit=$LIMIT steps=$STEPS seed=$SEED"
 nvidia-smi -i 0 --query-gpu=name --format=csv,noheader
 
+# ANCHOR: the healthy 500k production checkpoint under the IDENTICAL evaluation
+# settings. Without it, "both arms scored 0" cannot be distinguished from "the
+# evaluation is broken".
+if [ "${OBJ_EVAL_ANCHOR:-1}" = "1" ]; then
+  echo "[objeval] ---- anchor: production 500k"
+  "$COBIT_PYTHON" evaluation/tasks/gsm8k_eval.py \
+      --config configs/tasks/tinygsm_bits_cfg.py \
+      --checkpoint tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg/checkpoints/last.pt \
+      --ema 1 --schedule karras --sampler_kind ddim --gamma 0.0 \
+      --steps "$STEPS" --limit "$LIMIT" --seed "$SEED" \
+      --out_dir results/objective/eval \
+      --regime objective_5k --tag "production_500k" || echo "[objeval] anchor FAILED"
+fi
+
 for ARM in binary_sm binary_ce; do
   CK="runs/tasks/tinygsm/obj_${ARM}_stab_s42/checkpoints/step=000005000.pt"
   if [ ! -f "$CK" ]; then echo "[objeval] MISSING $CK" >&2; continue; fi

@@ -76,12 +76,28 @@ class OrderedSampler(DDIMSampler):
                collect_diagnostics=False,
                return_sigma_trace=False,
                **ignored):
-        for name, val in (("guidance_scale", guidance_scale), ("guidance", guidance),
-                          ("bad_model", bad_model)):
-            if val:
-                raise NotImplementedError(
-                    f"OrderedSampler does not implement {name}; the ordering study "
-                    "is deliberately guidance-free (the guidance study is closed).")
+        # Reject only when guidance is ACTUALLY ACTIVE. The task evals always
+        # construct a guidance config and pass it, with every scale at 0.0; a
+        # truthiness check on the object itself rejected every ordering cell.
+        # (Same distinction as sample_bits' tempering guard: a companion object
+        # being present is not a switch being on.)
+        def _scale(g, k):
+            if g is None:
+                return 0.0
+            v = g.get(k, 0.0) if isinstance(g, dict) else getattr(g, k, 0.0)
+            try:
+                return abs(float(v or 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+        active = abs(float(guidance_scale or 0.0)) > 0.0
+        active = active or any(_scale(guidance, k) > 0.0
+                               for k in ("cfg_scale", "ag_scale", "sg_scale",
+                                         "guidance_scale", "scale"))
+        active = active or (bad_model is not None)
+        if active:
+            raise NotImplementedError(
+                "OrderedSampler does not implement guidance; the ordering study "
+                "is deliberately guidance-free (the guidance study is closed).")
         if collect_diagnostics:
             raise NotImplementedError(
                 "OrderedSampler has no guidance trace to collect.")
