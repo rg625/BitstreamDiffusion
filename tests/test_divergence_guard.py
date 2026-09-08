@@ -26,6 +26,12 @@ class _Stub:
         self.global_step = 0
         self._div_ema = self._div_best = None
         self._div_strikes = 0
+        import collections
+        self._spike_ring = collections.deque(maxlen=2000)
+        self._last_grad_norm = None
+
+    def _dump_spike_ring(self, reason):   # no-op unless a test overrides it
+        pass
 
     def feed(self, losses):
         for v in losses:
@@ -168,3 +174,67 @@ def test_guard_still_catches_the_smallest_measured_divergence():
 
 def test_threshold_sits_between_the_two_populations():
     assert PRODUCTION_MAX_RATIO < 10.0 < SMALLEST_REAL_DIVERGENCE
+
+
+# --- per-step ring buffer -----------------------------------------------------
+# The 100-step scalar logs cannot see a spike: the production-era break went
+# 0.033 -> 13.7 inside one 20-step interval and the spike step itself was never
+# sampled. The ring keeps every step at full resolution.
+
+def _ring_stub(tmp_path, ring_steps=50, **kw):
+    import collections
+    s = _Stub(**kw)
+    s.cfg.train.divergence_guard.ring_steps = ring_steps
+    s.cfg.evaluation = ml_collections.ConfigDict()
+    s.cfg.evaluation.checkpoint_path = str(tmp_path / "run" / "checkpoints" / "last.pt")
+    s._spike_ring = collections.deque(maxlen=ring_steps)
+    s.is_master = True
+    s._last_grad_norm = 0.5
+    from trainers.trainer import Trainer
+    s._dump_spike_ring = Trainer._dump_spike_ring.__get__(s)
+    return s
+
+
+def test_ring_records_every_step_not_every_hundredth(tmp_path):
+    s = _ring_stub(tmp_path, ring_steps=500, factor=10.0, patience=10, min_steps=0)
+    s.feed([0.03] * 200)
+    steps = [r[0] for r in s._spike_ring]
+    assert steps == sorted(steps) and len(steps) == 200
+    assert steps[1] - steps[0] == 1, "ring must be per-step"
+
+
+def test_ring_is_bounded_and_keeps_the_most_recent(tmp_path):
+    s = _ring_stub(tmp_path, ring_steps=50, factor=10.0, patience=10, min_steps=0)
+    s.feed([0.03] * 400)
+    assert len(s._spike_ring) == 50
+    assert s._spike_ring[-1][0] == 400
+
+
+def test_ring_is_dumped_on_abort_and_contains_the_spike(tmp_path):
+    import json
+    s = _ring_stub(tmp_path, ring_steps=500, factor=10.0, patience=10, min_steps=0)
+    with pytest.raises(SystemExit):
+        s.feed([0.03] * 100 + [50.0] * 60)
+    out = tmp_path / "run" / "spike_ring.json"
+    assert out.exists(), "ring buffer was not written on abort"
+    d = json.loads(out.read_text())
+    assert d["reason"] == "divergence"
+    losses = [r[1] for r in d["rows"]]
+    assert max(losses) >= 50.0, "the spike itself must be in the dump"
+    assert d["columns"] == ["step", "loss", "grad_norm_preclip"]
+
+
+def test_ring_is_dumped_on_a_non_finite_loss(tmp_path):
+    import json
+    s = _ring_stub(tmp_path, ring_steps=500, factor=10.0, patience=10, min_steps=0)
+    with pytest.raises(SystemExit, match="non-finite"):
+        s.feed([0.03] * 20 + [float("nan")])
+    d = json.loads((tmp_path / "run" / "spike_ring.json").read_text())
+    assert d["reason"] == "non_finite"
+
+
+def test_dump_failure_never_masks_the_abort(tmp_path):
+    s = _ring_stub(tmp_path, ring_steps=50, factor=10.0, patience=10, min_steps=0)
+    s.cfg.evaluation.checkpoint_path = "/proc/definitely/not/writable/x/y.pt"
+    with pytest.raises(SystemExit, match="divergence-guard"):
+        s.feed([0.03] * 100 + [50.0] * 60)

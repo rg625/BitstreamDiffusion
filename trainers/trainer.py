@@ -6,6 +6,7 @@ os.environ.setdefault("TORCHINDUCTOR_DISABLE_CUDAGRAPHS", "1")
 
 import math
 import random
+import collections
 import json
 import shutil
 from pathlib import Path
@@ -1136,6 +1137,13 @@ class Trainer:
         self._div_ema = None
         self._div_best = None
         self._div_strikes = 0
+        # Per-STEP ring buffer. The 100-step scalar logs cannot see a spike:
+        # the production-era break went 0.033 -> 13.7 inside one 20-step
+        # interval and the spike step itself was never sampled. This keeps the
+        # last N steps at full resolution and dumps them when the guard fires.
+        self._spike_ring = collections.deque(maxlen=int(
+            getattr(getattr(self.cfg.train, "divergence_guard", object()),
+                    "ring_steps", 2000)))
         self.resume_mode = "scratch"  # one of: scratch | init_from | resume
         self.start_epoch = self._resume()
 
@@ -1711,6 +1719,7 @@ class Trainer:
 
             self.lr_sched.step()
             self.ema.update(self.model)
+            self._last_grad_norm = (float(gnorm) if gnorm is not None else None)
             self._log_optim_diagnostics(gnorm)
 
         # ------------------------------------------------------------------
@@ -1854,6 +1863,30 @@ class Trainer:
         self.writer.add_scalar("optim/update_rms", (upd / n) ** 0.5,
                                int(self.global_step))
 
+    def _dump_spike_ring(self, reason: str) -> None:
+        """Write the per-step ring buffer next to the checkpoints.
+
+        Only the master writes, and failure here must never mask the abort it is
+        reporting on.
+        """
+        if not getattr(self, "is_master", True) or not self._spike_ring:
+            return
+        try:
+            out = Path(self.cfg.evaluation.checkpoint_path).parent.parent / "spike_ring.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            rows = list(self._spike_ring)
+            out.write_text(json.dumps({
+                "reason": reason,
+                "global_step": int(self.global_step),
+                "n_steps": len(rows),
+                "columns": ["step", "loss", "grad_norm_preclip"],
+                "rows": rows,
+            }, indent=2))
+            print(f"[divergence-guard] wrote per-step ring buffer "
+                  f"({len(rows)} steps) to {out}")
+        except Exception as e:  # pragma: no cover
+            print(f"[divergence-guard] could not write ring buffer: {e}")
+
     def _check_divergence(self, loss: float) -> None:
         """Abort a run that has diverged, instead of letting it burn the budget.
 
@@ -1874,10 +1907,16 @@ class Trainer:
         if g is None or not bool(getattr(g, "enabled", False)):
             return
         if not math.isfinite(loss):
+            self._spike_ring.append((int(self.global_step), float("nan"), float("nan")))
+            self._dump_spike_ring("non_finite")
             raise SystemExit(
                 f"[divergence-guard] non-finite loss ({loss}) at step "
                 f"{self.global_step}; aborting.")
 
+        self._spike_ring.append((int(self.global_step), float(loss),
+                                 float(self._last_grad_norm)
+                                 if getattr(self, "_last_grad_norm", None) is not None
+                                 else float("nan")))
         decay = float(getattr(g, "ema_decay", 0.99))
         self._div_ema = loss if self._div_ema is None \
             else decay * self._div_ema + (1.0 - decay) * loss
@@ -1906,6 +1945,7 @@ class Trainer:
                 self.writer.flush()
             except Exception:
                 pass
+            self._dump_spike_ring("divergence")
             raise SystemExit(
                 f"[divergence-guard] loss EMA {self._div_ema:.6g} has exceeded "
                 f"{factor}x its best ({self._div_best:.6g}) for {patience} "
