@@ -185,3 +185,64 @@ def sample_ordered(
     if prefix_mask is not None and prefix_full is not None:
         x = torch.where(prefix_mask, prefix_full, x)
     return x
+
+
+# -----------------------------------------------------------------------------
+# Training-time ordering
+# -----------------------------------------------------------------------------
+
+def sigma_to_time(sigma: torch.Tensor, sigma_min: float, sigma_max: float) -> torch.Tensor:
+    """Map sigma -> normalised time t in [0,1], 1 = noisiest.
+
+    Log-linear, and deliberately the SAME map `sample_ordered` uses, so an
+    ordering applied during training means the same thing as one applied during
+    sampling. Using two different maps would make the train/eval convention
+    silently inconsistent, which is the easiest way to get a meaningless result.
+    """
+    lo, hi = math.log(max(sigma_min, 1e-20)), math.log(max(sigma_max, 1e-20))
+    t = (sigma.clamp_min(1e-20).log() - lo) / max(hi - lo, 1e-12)
+    return t.clamp(0.0, 1.0)
+
+
+def time_to_sigma(t: torch.Tensor, sigma_min: float, sigma_max: float) -> torch.Tensor:
+    lo, hi = math.log(max(sigma_min, 1e-20)), math.log(max(sigma_max, 1e-20))
+    return (lo + t * (hi - lo)).exp()
+
+
+def training_position_sigma(
+    sigma_global: torch.Tensor,      # [B]
+    *,
+    n_bits: int,
+    bits_per_token: int,
+    mode: str,
+    w: float,
+    sigma_min: float,
+    sigma_max: float,
+    prefix_mask=None,                # [B, n_bits] bool, True = prompt
+    generator=None,
+) -> torch.Tensor:
+    """[B] global sigma -> [B, n_bits] per-position sigma for TRAINING.
+
+    Ordering acts on the generated SUFFIX only; prompt positions keep the global
+    sigma, exactly as at sampling time. At w == 0 this returns the global sigma
+    broadcast to every position, which is bit-identical to the scalar path.
+
+    `random` draws a fresh permutation per example on every call, so a
+    permutation can never become a memorisable property of an example.
+    """
+    B = sigma_global.shape[0]
+    n_tok = n_bits // int(bits_per_token)
+    dev = sigma_global.device
+    suffix_tok = None
+    if prefix_mask is not None:
+        suffix_tok = ~prefix_mask.view(B, n_tok, int(bits_per_token)).all(dim=-1)
+    u = ordering_ranks(mode, n_tok, B, suffix_mask=suffix_tok,
+                       generator=generator, device=dev)
+    t = sigma_to_time(sigma_global, sigma_min, sigma_max)
+    t_pos = positional_time(t, u, float(w))
+    sig_tok = time_to_sigma(t_pos, sigma_min, sigma_max)
+    sig_bits = expand_token_sigma_to_bits(sig_tok, int(bits_per_token))
+    if prefix_mask is not None:
+        sig_bits = torch.where(prefix_mask, sigma_global.view(-1, 1).expand_as(sig_bits),
+                               sig_bits)
+    return sig_bits

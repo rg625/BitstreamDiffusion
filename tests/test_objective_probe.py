@@ -169,6 +169,7 @@ class _StepStub:
     _step_continuous = Trainer._step_continuous
     _log_objective_probe = Trainer._log_objective_probe
     _log_optim_diagnostics = Trainer._log_optim_diagnostics
+    _apply_training_ordering = Trainer._apply_training_ordering
 
     def __init__(self, cfg):
         self.cfg = cfg

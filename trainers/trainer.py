@@ -1523,6 +1523,11 @@ class Trainer:
         # Draw sigma
         # ------------------------------------------------------------------
         sigma = self._draw_sigma(B)
+        # Keep the GLOBAL (per-example) sigma: the entropy schedule and the
+        # objective probe are about the trajectory's noise level, not about any
+        # one token's, so they must not see the per-position form.
+        sigma_global = sigma
+        sigma = self._apply_training_ordering(sigma, S, prefix_mask, is_cont_tokens)
         # sigma is [B] today. Per-position sigma ([B,S], temporal ordering) needs
         # only the position axis kept and the trailing dims padded; the [B] path
         # below is byte-for-byte what it was.
@@ -1685,7 +1690,7 @@ class Trainer:
         # extra points at step 5000, on validation data with a different noise
         # draw. The endpoint must be a training-step series.
         if is_train and not is_cont_tokens:
-            self._log_objective_probe(logits, loss_target, sigma, loss_mask)
+            self._log_objective_probe(logits, loss_target, sigma_global, loss_mask)
 
         # Large intermediates no longer needed before backward bookkeeping.
         del logits, xt
@@ -1729,9 +1734,9 @@ class Trainer:
             if cond_enabled and (drop_mask is not None):
                 keep = ~drop_mask
                 if keep.any():
-                    self._update_entropy_buffer(sigma[keep], entropy_metric[keep])
+                    self._update_entropy_buffer(sigma_global[keep], entropy_metric[keep])
             else:
-                self._update_entropy_buffer(sigma, entropy_metric)
+                self._update_entropy_buffer(sigma_global, entropy_metric)
 
         return loss.item()
 
@@ -1811,6 +1816,40 @@ class Trainer:
             self.ema.update(self.model)
 
         return loss.item()
+
+    def _apply_training_ordering(self, sigma, n_bits, prefix_mask, is_cont_tokens):
+        """[B] -> [B, n_bits] per-position sigma when temporal ordering is on.
+
+        TRAINING-time ordering: the model is taught to denoise the suffix in an
+        order, rather than merely being asked to at inference. Disabled by
+        default, and at w == 0 it returns `sigma` untouched, so every existing
+        run is bit-identical.
+
+        The random permutation is redrawn on every call, i.e. per example PER
+        STEP, so a fixed order can never be memorised for a given example.
+        """
+        cfg_o = getattr(self.cfg.train, "ordering", None)
+        if cfg_o is None or not bool(getattr(cfg_o, "enabled", False)):
+            return sigma
+        w = float(getattr(cfg_o, "w", 0.0))
+        if w == 0.0:
+            return sigma
+        if is_cont_tokens:
+            raise NotImplementedError(
+                "training-time ordering is implemented for binary bitstreams only")
+        from diffusion.continuous.ordering import training_position_sigma
+        cont = self.cfg.diffusion.continuous
+        return training_position_sigma(
+            sigma,
+            n_bits=int(n_bits),
+            bits_per_token=int(getattr(self.cfg.data, "bits_per_token", 16)),
+            mode=str(getattr(cfg_o, "mode", "l2r")),
+            w=w,
+            sigma_min=float(cont.sigma_min),
+            sigma_max=float(cont.sigma_max),
+            prefix_mask=prefix_mask,
+            generator=None,          # follow global RNG: reseeded per run, fresh per step
+        )
 
     @torch.compiler.disable
     @torch.no_grad()
