@@ -50,6 +50,12 @@ def get_config():
     cfg.train.init_from = os.environ.get(
         "ORD_INIT", "tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg/checkpoints/last.pt")
 
+    # Fine-tuning learning rate. The from-scratch value (3e-4) applied to
+    # ALREADY-CONVERGED weights kicked every arm out of its minimum: the CONTROL
+    # diverged first, at step 2,323, which is a defect of the setup and not a
+    # property of ordering. A converged model needs a smaller step.
+    cfg.optim.lr = float(os.environ.get("ORD_LR", cfg.optim.lr))
+
     cfg.train.seed = int(os.environ.get("ORD_SEED", 42))
     cfg.optim.total_steps = int(os.environ.get("ORD_STEPS", 30000))
     cfg.train.checkpointing.interval.every_steps = int(
