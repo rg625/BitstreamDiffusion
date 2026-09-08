@@ -28,8 +28,8 @@ def test_ranks_cover_the_suffix_only():
     sm = torch.zeros(2, 8, dtype=torch.bool); sm[:, 3:] = True
     u = ordering_ranks("l2r", 8, 2, suffix_mask=sm)
     assert torch.equal(u[0, :3], torch.zeros(3))          # prompt pinned at 0
-    assert u[0, 3] == 0.0 and u[0, -1] == 1.0             # suffix spans the full range
-    assert torch.all(u[0, 3:].diff() > 0)                 # and is strictly increasing
+    assert u[0, 3] == 1.0 and u[0, -1] == 0.0             # suffix spans the full range
+    assert torch.all(u[0, 3:].diff() < 0)                 # priority DECREASES l2r
 
 
 def test_l2r_and_r2l_are_mirror_images():
@@ -38,13 +38,15 @@ def test_l2r_and_r2l_are_mirror_images():
     assert torch.allclose(u_l, 1.0 - u_r, atol=1e-6)
 
 
-def test_lower_rank_resolves_earlier():
-    """The stated convention: lower u reaches low sigma first."""
+def test_higher_priority_resolves_earlier():
+    """Convention: u=1 denoises FIRST. An earlier version of this test asserted
+    the opposite and its comment reasoned backwards -- larger t_j means MORE
+    noise remaining, not 'further along' -- so 'l2r' was in fact denoising
+    right-to-left. Pinned here in terms of sigma, which is unambiguous."""
     u = ordering_ranks("l2r", 6, 1)
     tp = positional_time(torch.tensor([0.5]), u, 0.6)
-    # t_j is LARGER for small u; with sigma increasing in t that means the
-    # low-rank token is further along, i.e. resolves first.
-    assert tp[0, 0] > tp[0, -1]
+    assert tp[0, 0] < tp[0, -1], "first token must have the SMALLER time (less noise)"
+    assert u[0, 0] == 1.0 and u[0, -1] == 0.0
 
 
 def test_random_ordering_is_resampled_not_fixed():

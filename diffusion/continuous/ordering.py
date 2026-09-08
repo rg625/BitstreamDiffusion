@@ -39,7 +39,14 @@ def ordering_ranks(
     generator: Optional[torch.Generator] = None,
     device=None,
 ) -> torch.Tensor:
-    """Normalised rank u in [0,1] per (example, token). Shape [B, n_tokens].
+    """Normalised DENOISING PRIORITY u in [0,1] per (example, token). [B, n_tokens].
+
+    CONVENTION, and it is easy to get backwards: in
+    `t_j(t) = clip(t(1+w) - w*u_j, 0, 1)` a LARGER u_j subtracts more, giving a
+    SMALLER per-token time and therefore a LOWER sigma. So **u = 1 means
+    denoised FIRST**, u = 0 means denoised last. u is a priority, not a
+    position. "l2r" therefore assigns u = 1 to the first suffix token and u = 0
+    to the last.
 
     `suffix_mask` [B, n_tokens] marks the positions that are actually generated.
     Ranking is over the SUFFIX ONLY: prompt tokens are clamped clean and never
@@ -63,9 +70,10 @@ def ordering_ranks(
         if k == 0:
             continue
         if mode == "l2r":
-            order = torch.arange(k, device=dev, dtype=torch.float32)
-        elif mode == "r2l":
+            # First suffix token gets the HIGHEST priority so it denoises first.
             order = torch.arange(k - 1, -1, -1, device=dev, dtype=torch.float32)
+        elif mode == "r2l":
+            order = torch.arange(k, device=dev, dtype=torch.float32)
         elif mode == "random":
             order = torch.randperm(k, generator=generator, device=dev).float()
         elif mode in ("none", "simultaneous"):
@@ -74,6 +82,15 @@ def ordering_ranks(
             raise ValueError(f"unknown ordering mode {mode!r}")
         u[b, idx] = order / max(k - 1, 1)
     return u
+
+
+def _apply_prompt_sigma(sigma_tok, sigma_global, prefix_mask, bits_per_token):
+    """Expand per-token sigma to bits, pinning prompt bits to the global sigma."""
+    sig = expand_token_sigma_to_bits(sigma_tok, bits_per_token)
+    if prefix_mask is None:
+        return sig
+    g = sigma_global.reshape(-1, 1).expand_as(sig)
+    return torch.where(prefix_mask, g, sig)
 
 
 def positional_time(t: torch.Tensor, u: torch.Tensor, w: float) -> torch.Tensor:
@@ -145,8 +162,15 @@ def sample_ordered(
     for i in range(len(sigmas) - 1):
         t_cur = positional_time(t_of(sigmas[i]), u, w)          # [B, n_tok]
         t_nxt = positional_time(t_of(sigmas[i + 1]), u, w)
-        sig_cur = expand_token_sigma_to_bits(sigma_at(t_cur), bits_per_token)
-        sig_nxt = expand_token_sigma_to_bits(sigma_at(t_nxt), bits_per_token)
+        # Prompt positions keep the GLOBAL sigma, i.e. exactly what they get at
+        # w=0 and exactly how the model was trained (clean prefix clamped into a
+        # globally-noised state). Letting the ordering move them would change the
+        # conditioning the model sees at prompt positions, which is a second
+        # intervention on top of the one under test.
+        sig_cur = _apply_prompt_sigma(sigma_at(t_cur), sigma_at(t_of(sigmas[i])),
+                                      prefix_mask, bits_per_token)
+        sig_nxt = _apply_prompt_sigma(sigma_at(t_nxt), sigma_at(t_of(sigmas[i + 1])),
+                                      prefix_mask, bits_per_token)
         if prefix_mask is not None and prefix_full is not None:
             x = torch.where(prefix_mask, prefix_full, x)
         D = denoise_fn(x, sig_cur)

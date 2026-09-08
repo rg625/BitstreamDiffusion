@@ -130,7 +130,10 @@ def apply_continuous_logit_postprocessing(
                 raise ValueError(
                     f"Continuous binary matched-filter expects x_t [B,S], got {tuple(x_t.shape)}"
                 )
-            sigma2 = sigma.to(torch.float32).square().view(-1, 1).clamp_min(1e-12)
+            _s = sigma.to(torch.float32)
+            # per-bit sigma [B,S] (temporal ordering) already has the right shape
+            sigma2 = (_s.square() if _s.dim() == 2
+                      else _s.square().view(-1, 1)).clamp_min(1e-12)
 
         mf = matched_filter_scale * (x_f32 - center) / sigma2
 
@@ -186,7 +189,8 @@ def _matched_filter_binary(cfg, x_t: torch.Tensor, sigma: torch.Tensor) -> Optio
     )
     scale = float(getattr(cfg.model, "matched_filter_scale", 1.0))
     clip = getattr(cfg.model, "matched_filter_clip", None)
-    sigma2 = sigma.to(torch.float32).square().view(-1, 1).clamp_min(1e-12)
+    _s = sigma.to(torch.float32)
+    sigma2 = (_s.square() if _s.dim() == 2 else _s.square().view(-1, 1)).clamp_min(1e-12)
     mf = scale * (x_t.to(torch.float32) - center) / sigma2
     if clip is not None:
         c = float(clip)

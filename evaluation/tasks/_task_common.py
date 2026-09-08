@@ -90,7 +90,10 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
                            fkc_prior_mode: str = "sampler_gaussian",
                            fkc_proposal: str = "em",
                            fkc_churn_gamma: float = 0.0,
-                           fkc_resample_entropy_frac=None):
+                           fkc_resample_entropy_frac=None,
+                           order_w: float = 0.0,
+                           order_mode: str = "l2r",
+                           order_seed=None):
     """Return (model, sampler). Applies EMA shadow weights if present.
 
     sampler_kind='ddim' (default) -> DDIMSampler, the CoBit 'ddim_entropic'
@@ -119,6 +122,14 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
     kind = str(sampler_kind).lower()
     if kind in {"ddim", "ddim_entropic", "entropic"}:
         sampler = DDIMSampler(model, proc, cfg)
+    elif kind in {"ordered", "ordering"}:
+        # Per-position-sigma deterministic Euler. order_w=0 is the control and
+        # is a plain uniform-sigma run, so control and intervention differ by
+        # exactly one number.
+        from diffusion.continuous.ordered_sampler import OrderedSampler
+        sampler = OrderedSampler(model, proc, cfg,
+                                 order_w=order_w, order_mode=order_mode,
+                                 order_seed=order_seed)
     elif kind in {"heun", "karras"}:
         sampler = HeunSampler(model, proc, cfg)
     elif kind in {"em", "euler_maruyama"}:

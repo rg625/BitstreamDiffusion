@@ -1,0 +1,260 @@
+"""OrderedSampler: the eval-facing per-position-sigma path.
+
+The invariant that matters most: at order_w=0 this must reproduce the uniform-
+sigma model exactly, so the ordering experiment's control arm is the current
+model and not a subtly different one.
+"""
+import math
+
+import ml_collections
+import pytest
+import torch
+
+from diffusion.continuous.ordering import (
+    expand_token_sigma_to_bits,
+    ordering_ranks,
+    positional_time,
+    sample_ordered,
+)
+from diffusion.continuous.ordered_sampler import token_prefix_mask_from_bits
+
+BPT = 4
+
+
+def _sig(n=6, hi=8.0, lo=0.05):
+    return torch.tensor([hi * (lo / hi) ** (i / (n - 1)) for i in range(n)])
+
+
+def _recording_denoise(seen):
+    def fn(x, sigma_bits):
+        seen.append(sigma_bits.clone())
+        return torch.sigmoid(x * 0.5)
+    return fn
+
+
+# --------------------------------------------------------------- w = 0 exactness
+def test_w0_reproduces_a_handwritten_scalar_sigma_euler_loop():
+    torch.manual_seed(0)
+    B, n_tok = 2, 5
+    S = n_tok * BPT
+    sig = _sig()
+    x0 = torch.randn(B, S)
+    u = ordering_ranks("l2r", n_tok, B)
+
+    got = sample_ordered(lambda x, s: torch.sigmoid(x * 0.5), sigmas=sig,
+                         x_init=x0.clone(), u=u, w=0.0, bits_per_token=BPT)
+
+    # Independent scalar-sigma Euler, written from the ODE directly.
+    x = x0.clone()
+    s_hi, s_lo = float(sig[0]), float(sig[-1])
+    for i in range(len(sig) - 1):
+        sc, sn = float(sig[i]), float(sig[i + 1])
+        D = torch.sigmoid(x * 0.5)
+        d = -sc * (D - x) / (sc ** 2)
+        x = x + (sn - sc) * d
+    assert torch.allclose(got, x, atol=1e-5), (got - x).abs().max()
+
+
+def test_w0_gives_every_token_the_same_sigma():
+    seen = []
+    B, n_tok = 3, 6
+    sample_ordered(_recording_denoise(seen), sigmas=_sig(), x_init=torch.zeros(B, n_tok * BPT),
+                   u=ordering_ranks("random", n_tok, B, generator=torch.Generator().manual_seed(1)),
+                   w=0.0, bits_per_token=BPT)
+    for s in seen:
+        assert torch.allclose(s, s.flatten()[0].expand_as(s)), "w=0 must be uniform in sigma"
+
+
+def test_w0_is_invariant_to_the_ranks_themselves():
+    """If ranks could leak in at w=0 the control arm would silently depend on
+    the ordering mode, and 'ordering off' would not mean what it says."""
+    B, n_tok = 2, 5
+    x0 = torch.randn(B, n_tok * BPT)
+    outs = []
+    for mode in ("l2r", "r2l", "random", "none"):
+        g = torch.Generator().manual_seed(7)
+        u = ordering_ranks(mode, n_tok, B, generator=g)
+        outs.append(sample_ordered(lambda x, s: torch.sigmoid(x * 0.5), sigmas=_sig(),
+                                   x_init=x0.clone(), u=u, w=0.0, bits_per_token=BPT))
+    for o in outs[1:]:
+        assert torch.equal(outs[0], o)
+
+
+# --------------------------------------------------- the intervention is ACTIVE
+def test_w_positive_actually_spreads_sigma_across_positions():
+    """The experiment is worthless if ordering does not change per-position sigma.
+    This is the causal-activity check, asserted rather than eyeballed."""
+    seen = []
+    B, n_tok = 1, 8
+    sample_ordered(_recording_denoise(seen), sigmas=_sig(n=8),
+                   x_init=torch.zeros(B, n_tok * BPT),
+                   u=ordering_ranks("l2r", n_tok, B), w=1.0, bits_per_token=BPT)
+    spreads = [float(s.max() / s.min()) for s in seen]
+    assert max(spreads) > 2.0, f"sigma barely varies across positions: {spreads}"
+
+
+def test_l2r_denoises_earlier_tokens_first():
+    """Left-to-right must mean earlier tokens reach LOW sigma sooner."""
+    seen = []
+    B, n_tok = 1, 8
+    sample_ordered(_recording_denoise(seen), sigmas=_sig(n=8),
+                   x_init=torch.zeros(B, n_tok * BPT),
+                   u=ordering_ranks("l2r", n_tok, B), w=1.0, bits_per_token=BPT)
+    mid = seen[len(seen) // 2][0].view(n_tok, BPT)[:, 0]
+    assert mid[0] < mid[-1], f"token 0 should be cleaner than token n-1: {mid}"
+
+
+def test_r2l_is_the_mirror_of_l2r():
+    def first_last(mode):
+        seen = []
+        sample_ordered(_recording_denoise(seen), sigmas=_sig(n=8),
+                       x_init=torch.zeros(1, 8 * BPT),
+                       u=ordering_ranks(mode, 8, 1), w=1.0, bits_per_token=BPT)
+        m = seen[len(seen) // 2][0].view(8, BPT)[:, 0]
+        return float(m[0]), float(m[-1])
+    a0, a1 = first_last("l2r")
+    b0, b1 = first_last("r2l")
+    assert (a0 < a1) and (b0 > b1)
+
+
+def test_larger_w_spreads_sigma_more():
+    def spread(w):
+        seen = []
+        sample_ordered(_recording_denoise(seen), sigmas=_sig(n=8),
+                       x_init=torch.zeros(1, 8 * BPT),
+                       u=ordering_ranks("l2r", 8, 1), w=w, bits_per_token=BPT)
+        return max(float(s.max() / s.min()) for s in seen)
+    assert spread(0.25) < spread(1.0) < spread(2.0)
+
+
+# ------------------------------------------------------------------- ranks
+def test_ranks_cover_the_suffix_only_and_prompt_is_excluded():
+    B, n_tok = 2, 10
+    suffix = torch.zeros(B, n_tok, dtype=torch.bool)
+    suffix[:, 4:] = True                       # first 4 tokens are prompt
+    u = ordering_ranks("l2r", n_tok, B, suffix_mask=suffix)
+    assert torch.all(u[:, :4] == 0)
+    su = u[0, 4:]
+    assert su.min() == pytest.approx(0.0) and su.max() == pytest.approx(1.0)
+    # u is denoising PRIORITY: l2r gives the first suffix token the highest.
+    assert su[0] == pytest.approx(1.0) and su[-1] == pytest.approx(0.0)
+    assert torch.all(su[1:] <= su[:-1]), "l2r priority must be non-increasing"
+
+
+def test_prompt_length_does_not_compress_the_suffix_ordering():
+    """Ranking over the whole sequence would let a long prompt eat the ordering
+    range and turn 'left-to-right' into 'prompt-first'."""
+    B, n_tok = 1, 20
+    for cut in (2, 10, 18):
+        suffix = torch.zeros(B, n_tok, dtype=torch.bool)
+        suffix[:, cut:] = True
+        u = ordering_ranks("l2r", n_tok, B, suffix_mask=suffix)
+        su = u[0, cut:]
+        assert su.min() == pytest.approx(0.0)
+        assert su.max() == pytest.approx(1.0)
+
+
+def test_random_ranks_are_per_example_permutations():
+    B, n_tok = 4, 12
+    u = ordering_ranks("random", n_tok, B, generator=torch.Generator().manual_seed(3))
+    for b in range(B):
+        assert torch.allclose(torch.sort(u[b]).values, torch.sort(u[0]).values)
+    assert not torch.equal(u[0], u[1]), "ranks must be resampled per example"
+
+
+def test_random_ranks_are_not_accidentally_fixed_across_calls():
+    a = ordering_ranks("random", 12, 4, generator=torch.Generator().manual_seed(3))
+    b = ordering_ranks("random", 12, 4, generator=torch.Generator().manual_seed(4))
+    assert not torch.equal(a, b)
+
+
+def test_random_ranks_are_seed_reproducible():
+    a = ordering_ranks("random", 12, 4, generator=torch.Generator().manual_seed(11))
+    b = ordering_ranks("random", 12, 4, generator=torch.Generator().manual_seed(11))
+    assert torch.equal(a, b)
+
+
+# ------------------------------------------------------------------ mechanics
+def test_positional_time_matches_the_documented_formula():
+    t = torch.tensor([0.4])
+    u = torch.tensor([[0.0, 0.5, 1.0]])
+    w = 0.8
+    got = positional_time(t, u, w)
+    want = torch.clamp(0.4 * (1 + w) - w * u, 0.0, 1.0)
+    assert torch.allclose(got, want)
+
+
+def test_positional_time_is_clipped_into_the_unit_interval():
+    out = positional_time(torch.tensor([0.9]), torch.tensor([[0.0, 1.0]]), 3.0)
+    assert float(out.min()) >= 0.0 and float(out.max()) <= 1.0
+
+
+def test_sigma_expansion_is_blockwise_per_token():
+    sig = torch.tensor([[1.0, 2.0, 3.0]])
+    out = expand_token_sigma_to_bits(sig, 4)
+    assert out.shape == (1, 12)
+    assert torch.equal(out[0], torch.tensor([1.] * 4 + [2.] * 4 + [3.] * 4))
+
+
+def test_token_prefix_mask_requires_all_bits_of_a_token():
+    pm = torch.zeros(1, 12, dtype=torch.bool)
+    pm[0, :4] = True          # token 0 fully prompt
+    pm[0, 4:6] = True         # token 1 only partly
+    got = token_prefix_mask_from_bits(pm, 4)
+    assert got.tolist() == [[True, False, False]]
+
+
+def test_prompt_positions_survive_the_whole_trajectory():
+    B, n_tok = 2, 6
+    S = n_tok * BPT
+    pm = torch.zeros(B, S, dtype=torch.bool)
+    pm[:, :2 * BPT] = True
+    pf = torch.zeros(B, S)
+    pf[pm] = 1.0
+    out = sample_ordered(lambda x, s: torch.sigmoid(x), sigmas=_sig(),
+                         x_init=torch.randn(B, S), u=ordering_ranks("l2r", n_tok, B),
+                         w=1.5, bits_per_token=BPT, prefix_full=pf, prefix_mask=pm)
+    assert torch.all(out[pm] == 1.0)
+
+
+def test_prompt_positions_keep_the_global_sigma_under_ordering():
+    """The ordering must act on the generated suffix only. If prompt positions
+    inherited an ordered sigma, the model would be told its clean, clamped
+    prompt is noisy -- a second intervention on top of the one under test, and
+    a train/test mismatch the control does not have."""
+    seen = []
+    B, n_tok = 1, 8
+    S = n_tok * BPT
+    pm = torch.zeros(B, S, dtype=torch.bool)
+    pm[:, :3 * BPT] = True
+    pf = torch.zeros(B, S)
+    suffix = ~token_prefix_mask_from_bits(pm, BPT)
+    sample_ordered(_recording_denoise(seen), sigmas=_sig(n=8), x_init=torch.randn(B, S),
+                   u=ordering_ranks("l2r", n_tok, B, suffix_mask=suffix), w=1.5,
+                   bits_per_token=BPT, prefix_full=pf, prefix_mask=pm)
+    for s in seen:
+        prompt_sig = s[0, :3 * BPT]
+        assert torch.allclose(prompt_sig, prompt_sig[0].expand_as(prompt_sig)), \
+            "prompt sigma must be uniform"
+    # and it must equal the w=0 (global) sigma at every step
+    seen0 = []
+    sample_ordered(_recording_denoise(seen0), sigmas=_sig(n=8), x_init=torch.randn(B, S),
+                   u=ordering_ranks("l2r", n_tok, B, suffix_mask=suffix), w=0.0,
+                   bits_per_token=BPT, prefix_full=pf, prefix_mask=pm)
+    for a, b in zip(seen, seen0):
+        assert torch.allclose(a[0, :3 * BPT], b[0, :3 * BPT], atol=1e-6)
+
+
+def test_suffix_sigma_still_varies_when_a_prompt_is_present():
+    """Guard against the prompt pin accidentally flattening the whole sequence."""
+    seen = []
+    B, n_tok = 1, 10
+    S = n_tok * BPT
+    pm = torch.zeros(B, S, dtype=torch.bool)
+    pm[:, :3 * BPT] = True
+    suffix = ~token_prefix_mask_from_bits(pm, BPT)
+    sample_ordered(_recording_denoise(seen), sigmas=_sig(n=8), x_init=torch.randn(B, S),
+                   u=ordering_ranks("l2r", n_tok, B, suffix_mask=suffix), w=1.0,
+                   bits_per_token=BPT, prefix_full=torch.zeros(B, S), prefix_mask=pm)
+    spreads = [float(s[0, 3 * BPT:].max() / s[0, 3 * BPT:].min()) for s in seen]
+    assert max(spreads) > 2.0, f"suffix sigma should still spread: {spreads}"
