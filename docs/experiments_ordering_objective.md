@@ -144,3 +144,78 @@ environment first.
 
 **Environment-limited.** Marked as such: Python 3.9 here versus the
 collaborator's ≥3.10, and every training run diverges before ~12k steps.
+
+---
+
+## Experiment E1 — environment validation (Python 3.10). **PREDICTION CONFIRMED: NOT FIXED.**
+
+**Hypothesis under test (from the brief).** Python >= 3.10 is the environmental
+difference responsible for the early divergences; the corrected environment
+should let the production recipe survive past 20k.
+
+**My pre-registered counter-prediction.** It would diverge anyway, because the
+interpreter is not a plausible mechanism: CPU gradients are **bit-identical**
+between the two environments (`gradhash 026d7bd7a5d3...` in both) and every
+bundled CUDA library is the **same version** (cuBLAS 12.8.4.1, cuDNN 9.10.2.21,
+NCCL 2.27.3, Triton 3.4.0). Same compute stack, different interpreter wrapper.
+
+**Setup.** `sedd310` (Python 3.10.21, torch 2.8.0+cu128), production recipe,
+`binary_sm`, `p_uncond=0.1`, clamp OFF, seed 42, 20k budget, guard at factor 10.
+One variable: the interpreter.
+
+**Result.** **Diverged at step 5,346**, EMA 0.3287 vs best 0.0247 (13.3x).
+
+| environment | seed | break step |
+|---|---|---|
+| Python 3.9 | 42 | 6,356 |
+| **Python 3.10** | 42 | **5,346** |
+
+**Verdict.** The interpreter is **exonerated**. The environment hypothesis, as
+stated, is falsified. My earlier reporting overstated the case: what was
+actually established is that production's environment *differed* (proved by the
+module-scope `mauve` import and by PEP 604 in a signature, unimportable on 3.9);
+inferring that the interpreter was *causally responsible* did not follow, and is
+now shown to be wrong.
+
+**What this leaves.** The divergence cause remains open. Remaining candidates,
+in order of plausibility:
+1. the collaborator's **working tree** (their directory is permission-denied,
+   so uncommitted differences cannot be excluded);
+2. a different torch **build**, driver or GPU generation than we pin;
+3. the recipe being genuinely marginal, with production lucky over 500k --
+   argued against by 8/8 divergences here but not excluded.
+
+**Consequence for the objective branch.** Item 2 of the brief made the corrected
+environment a precondition for interpreting objective results. That precondition
+is **not met**, so no strong objective-training claim can be made in either
+environment, and the CE-vs-SM stability difference stays environment-limited.
+
+---
+
+## Experiment A3 — training-time ordering, smoke (400 steps, 4 arms)
+
+All four arms initialised from the production 500k checkpoint and completed.
+
+| arm | loss @start | loss @400 | throughput |
+|---|---|---|---|
+| control (none, w=0) | 0.0082 | 0.0399 | 5.09 it/s |
+| l2r w=0.25 | 0.1615 | **0.0106** | 3.59 it/s |
+| r2l w=0.25 | 0.1929 | **0.2479** | 3.61 it/s |
+| random w=0.25 | 0.1659 | 0.1582 | 3.55 it/s |
+
+Two things worth noting before the full runs:
+
+- **The ordering arms start ~20x above the control.** Expected: the model has
+  never seen per-position sigma, so the ordered arms begin out-of-distribution.
+  l2r adapts quickly (0.16 -> 0.011), r2l gets *worse*, random is flat.
+- **Losses are NOT comparable across arms.** Each arm's sigma field differs, so
+  the loss is computed under a different noise distribution. Only the GSM8K
+  accuracy comparison is meaningful, and that is the declared endpoint.
+- Ordering costs ~30% throughput (3.6 vs 5.1 it/s), recorded as compute.
+
+**Confound recorded:** the control starts at loss 0.0082 while production's own
+`iter_train` at 500k was ~0.103. This is the entropy schedule: a fresh run uses
+the base log-normal sigma draw until `entropy_warmup_steps=40000`, whereas
+production had switched to its entropy-adapted draw. It is **matched across all
+four arms**, so the comparison holds, but the arms are not directly comparable
+to production's own loss curve.
