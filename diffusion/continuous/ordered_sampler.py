@@ -132,10 +132,25 @@ class OrderedSampler(DDIMSampler):
                            suffix_mask=suffix_tok, generator=gen).to(self.device)
 
         last = {}
+        # Self-conditioning carry, matching DDIMSampler's sc_refresh_mode="carry",
+        # which is what the task evals request. This checkpoint was trained with
+        # model.self_condition=True (p=0.5), so a sampler that never supplies the
+        # previous estimate is running the model in a weaker mode than the
+        # baseline it is being compared against.
+        sc = {"x0_hat": None}
 
         def denoise_fn(x_in, sigma_bits):
-            logits = _model_logits_continuous(self.model, self.cfg, x_in, sigma_bits, None)
+            x0_hat = None
+            if self.sc_enabled:
+                x0_hat = sc["x0_hat"]
+                if x0_hat is None:
+                    x0_hat = torch.zeros_like(x_in)
+                if prefix_mask is not None and prefix_full is not None:
+                    x0_hat = torch.where(prefix_mask, prefix_full, x0_hat)
+            logits = _model_logits_continuous(self.model, self.cfg, x_in, sigma_bits, x0_hat)
             D = torch.sigmoid(logits.float())
+            if self.sc_enabled:
+                sc["x0_hat"] = D.detach()
             last["D"] = D
             last["sigma"] = sigma_bits
             return D
@@ -144,7 +159,17 @@ class OrderedSampler(DDIMSampler):
             denoise_fn, sigmas=sigmas, x_init=x, u=u, w=self.order_w,
             bits_per_token=bpt, prefix_full=prefix_full, prefix_mask=prefix_mask,
         )
-        probs = last.get("D", torch.full_like(x, 0.5))
+
+        # FINAL denoise at the smallest sigma, exactly as DDIMSampler does before
+        # returning probs. Without it the decoded bits come from the denoise at
+        # sigmas[-2] -- a far noisier level -- which is not what the baseline
+        # returns and is not a fair control. Costs one forward, the same one
+        # DDIM spends, so NFE stays matched at num_steps + 1.
+        sig_final = torch.full_like(x, float(sigmas[-1]))
+        probs = denoise_fn(x, sig_final)
+        if prefix_mask is not None and prefix_full is not None:
+            probs = torch.where(prefix_mask, prefix_full, probs)
+
         if return_sigma_trace:
             return x, probs, last.get("sigma")
         return (x, probs) if return_probs else x

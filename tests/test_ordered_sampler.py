@@ -300,3 +300,40 @@ def test_active_guidance_is_refused(kw):
     s = _mk_sampler()
     with pytest.raises(NotImplementedError, match="guidance"):
         s.sample(1, 16, **kw)
+
+
+def test_returned_probs_come_from_the_FINAL_sigma_not_the_second_to_last():
+    """DDIMSampler does an extra denoise at the smallest sigma and returns that
+    D. Returning the trajectory's last in-loop D instead decodes bits from a far
+    noisier level -- which scored 0.0000 on GSM8K against the baseline's 0.164.
+    """
+    from diffusion.continuous.ordered_sampler import OrderedSampler
+    seen = []
+
+    class _Stub(OrderedSampler):
+        def __init__(self):
+            self.order_w, self.order_mode, self.order_seed = 0.0, "none", None
+            self.bits_per_token, self.data_center = BPT, 0.5
+            self.sc_enabled, self.is_cont_tokens = False, False
+            self.device = torch.device("cpu")
+            self.cfg = None
+            self.model = None
+            sig = _sig(n=5)
+
+            class _S:
+                def prepare(self_inner, **kw):
+                    return sig
+            self.sigmas = _S()
+            self._sig = sig
+
+    s = _Stub()
+    import diffusion.continuous.ordered_sampler as mod
+    orig = mod._model_logits_continuous
+    mod._model_logits_continuous = lambda m, c, x, sg, xh: (seen.append(sg.clone()) or x * 0.0 + sg.mean())
+    try:
+        _, probs = s.sample(1, 4 * BPT, num_steps=4, return_probs=True)
+    finally:
+        mod._model_logits_continuous = orig
+    assert torch.allclose(seen[-1], torch.full_like(seen[-1], float(s._sig[-1]))), \
+        f"final denoise must use sigmas[-1]={float(s._sig[-1])}, got {seen[-1].flatten()[0]}"
+    assert len(seen) == 5, f"expected num_steps + 1 = 5 forwards, got {len(seen)}"
