@@ -112,4 +112,35 @@ sigma schedule. DDIM, gamma=0, 256 steps, EMA=1, seed 0, same problems.
 legitimate result — the task-performance question is then **unanswerable at the
 budget this environment permits** — and will be reported as such, not rescued.
 
-**Result.** _pending_
+**Result — the pre-registered null. Both arms score exactly 0.**
+
+| arm | n | accuracy | correct | T1 non-executing | T2 wrong number | invalid-token rate | samples/s |
+|---|---|---|---|---|---|---|---|
+| binary_sm @5k | 250 | **0.0000** | 0/250 | **250** | 0 | 0.2602 | 2.66 |
+| binary_ce @5k | 250 | **0.0000** | 0/250 | **250** | 0 | 0.2613 | 2.72 |
+
+Every single generation is a **non-executing program** (T1) in both arms. There
+is no T2 population at all, so there is not even a wrong-arithmetic class to
+compare. The invalid-token rates differ by 0.001 — noise. The two arms are
+undifferentiated on every measured axis.
+
+**Verdict: CE does not improve task performance at this budget — and neither
+does SM, because at 5,000 steps neither objective produces a model that can
+emit runnable code.** This is 1% of the 500k steps production needed. The
+comparison is uninformative about the objectives, not evidence against CE.
+
+**Why no more seeds or a longer budget.** More seeds cannot separate 0 from 0.
+A longer matched budget does not exist: `binary_sm` broke at step 6,356, so 5k
+is the last checkpoint both arms share. Extending would require fixing the
+environment first.
+
+**Distinguishing the two questions the brief asks to keep apart:**
+- *better optimization/stability* — CE lasts **1.80× longer** before diverging
+  (median 11,444 vs 6,356, perfect rank separation, p=0.05). Measured, real,
+  but environment-limited and with an effect size comparable to run-to-run
+  spread across code versions.
+- *better final task performance* — **no evidence either way.** Not measurable
+  in this environment.
+
+**Environment-limited.** Marked as such: Python 3.9 here versus the
+collaborator's ≥3.10, and every training run diverges before ~12k steps.
