@@ -337,3 +337,20 @@ def test_returned_probs_come_from_the_FINAL_sigma_not_the_second_to_last():
     assert torch.allclose(seen[-1], torch.full_like(seen[-1], float(s._sig[-1]))), \
         f"final denoise must use sigmas[-1]={float(s._sig[-1])}, got {seen[-1].flatten()[0]}"
     assert len(seen) == 5, f"expected num_steps + 1 = 5 forwards, got {len(seen)}"
+
+
+def test_random_ranks_accept_a_cpu_generator_regardless_of_target_device():
+    """A CPU generator with a CUDA target raised 'Expected a cuda device type
+    for generator', which killed both random cells of the first screen."""
+    sm = torch.zeros(2, 8, dtype=torch.bool)
+    sm[:, 2:] = True
+    u = ordering_ranks("random", 8, 2, suffix_mask=sm,
+                       generator=torch.Generator().manual_seed(3))
+    assert u.shape == (2, 8) and u.device.type == sm.device.type
+
+
+def test_random_ranks_are_device_independent_for_a_given_seed():
+    a = ordering_ranks("random", 16, 3, generator=torch.Generator().manual_seed(9))
+    b = ordering_ranks("random", 16, 3, generator=torch.Generator().manual_seed(9),
+                       device="cpu")
+    assert torch.equal(a, b)

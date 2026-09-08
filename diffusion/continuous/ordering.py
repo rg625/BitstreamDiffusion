@@ -75,7 +75,11 @@ def ordering_ranks(
         elif mode == "r2l":
             order = torch.arange(k, device=dev, dtype=torch.float32)
         elif mode == "random":
-            order = torch.randperm(k, generator=generator, device=dev).float()
+            # Always draw on CPU, then move. A CUDA generator cannot be used with
+            # a CPU one and vice versa, and drawing on CPU additionally makes the
+            # permutation reproducible across devices for a given seed -- which
+            # the paired design depends on.
+            order = torch.randperm(k, generator=generator, device="cpu").float().to(dev)
         elif mode in ("none", "simultaneous"):
             order = torch.zeros(k, device=dev, dtype=torch.float32)
         else:
