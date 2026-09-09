@@ -25,15 +25,28 @@ def load(path):
     pp = d.get("per_problem") or {}
     if not pp.get("idx"):
         return None
-    tag = str(d.get("tag") or Path(path).stem)
-    m = re.match(r"(?P<run>.+?)__(?P<decode>matched|uniform)__s(?P<seed>\d+)", tag)
-    if not m:
+    # Identify the arm from the RECORDED fields, not the filename: this result
+    # schema does not store `tag`, so filename parsing silently collapsed every
+    # arm to the same truncated string and made the whole table unreadable.
+    ck = str(d.get("checkpoint") or "")
+    mrun = re.search(r"runs/tasks/tinygsm/([^/]+)/checkpoints/(.+)$", ck)
+    if not mrun:
         return None
+    run, ckpt = mrun.group(1), mrun.group(2)
+    decode = "uniform" if float(d.get("order_w") or 0.0) == 0.0 else "matched"
+    if "__uniform__" in Path(path).stem:
+        decode = "uniform"
+    elif "__matched__" in Path(path).stem:
+        decode = "matched"
+    seed = int(d.get("seed") or 0)
+    fields = {"run": run, "decode": decode, "seed": seed, "ckpt": ckpt}
     ans = pp.get("answer") or []
     cor = np.asarray(pp["correct"], dtype=float)
     recs = d.get("sample_records") or []
     return {
-        "run": m.group("run"), "decode": m.group("decode"), "seed": int(m.group("seed")),
+        "run": fields["run"], "decode": fields["decode"], "seed": fields["seed"],
+        "ckpt": fields["ckpt"], "train_mode": d.get("order_mode"),
+        "decode_w": d.get("order_w"),
         "idx": np.asarray(pp["idx"]), "correct": cor,
         "accuracy": d.get("accuracy"),
         "T1": sum(1 for a in ans if a is None),

@@ -24,6 +24,15 @@
 #
 # 3 seeds each. Identical sampler, schedule, steps, EMA and problem set
 # throughout, so every comparison is paired.
+#
+# SCHEDULE = KARRAS, NOT ENTROPIC, and this matters. The entropic schedule is
+# fitted per run from that run's OWN entropy tables, and gsm8k_eval takes them
+# from the checkpoint's directory. Each fine-tuned arm therefore refitted its
+# own sampling schedule: measured max|cdf - production| was 0.024 (l2r), 0.175
+# (control), 0.200 (random), 0.545 (r2l). Evaluating that way compares arms
+# that differ in BOTH training ordering and sampling schedule, which is what
+# produced an apparently catastrophic 0.0000 for the control. Karras is
+# analytic and identical for every arm by construction.
 set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-/rds/user/rg625/hpc-work/BitstreamDiffusion}"
 export COBIT_PYTHON="${COBIT_PYTHON:-/home/rg625/miniforge3/envs/sedd310/bin/python}"
@@ -45,7 +54,7 @@ echo "[ev] run=$EV_RUN ckpt=$EV_CKPT train_mode=$EV_MODE w=$EV_W"
 run_one () {   # $1=order_mode $2=order_w $3=seed $4=label
   "$COBIT_PYTHON" evaluation/tasks/gsm8k_eval.py \
     --config configs/tasks/tinygsm_bits_cfg.py --checkpoint "$CK" --ema 1 \
-    --schedule entropic --sampler_kind ordered \
+    --schedule karras --sampler_kind ordered \
     --order_w "$2" --order_mode "$1" --order_seed $((1234 + $3)) \
     --steps "$EV_STEPS" --limit "$EV_LIMIT" --seed "$3" \
     --out_dir results/ordering/train_eval \
