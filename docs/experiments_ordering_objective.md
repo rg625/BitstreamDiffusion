@@ -219,3 +219,36 @@ the base log-normal sigma draw until `entropy_warmup_steps=40000`, whereas
 production had switched to its entropy-adapted draw. It is **matched across all
 four arms**, so the comparison holds, but the arms are not directly comparable
 to production's own loss curve.
+
+
+---
+
+## Learning rate: what 3e-5 does and does not establish
+
+The from-scratch validation runs `binary_sm` at **lr = 3e-5**, not production's
+3e-4, because 3e-4 diverges in **8/8** from-scratch runs measured in this
+environment -- including the production-era commit `036a2b5` itself -- while
+3e-5 carried all four ordering arms to 15k with zero divergence, where the
+3e-4 control had already broken at step 2,323.
+
+**What a surviving 20k run would establish:** that a *stable training regime
+exists* in this environment.
+
+**What it would NOT establish:** that 3e-5 is the *right* learning rate for the
+objective comparison. It is 10x below the value the production recipe was tuned
+around, and no tuning has been done at it.
+
+**Consequence for CE vs SM.** The comparison remains valid, because the two arms
+are perfectly matched -- identical init, seed, data, optimiser, EDM weighting,
+`p_uncond=0.1`, precision and step budget, with `train.loss_type` the only
+difference. But:
+
+- the learning rate is **reported explicitly** on every result;
+- absolute accuracies are compared **only against the matched control in the
+  same regime**, never against production's 3e-4 trajectory (0.2024 at 200k,
+  0.164 at 500k under the karras/DDIM setting). Those numbers come from a
+  different optimisation regime and putting them in the same column would
+  invite exactly the wrong comparison;
+- a lower absolute accuracy at a given step count than production is
+  **expected** at a 10x smaller learning rate and is not evidence about either
+  objective.
