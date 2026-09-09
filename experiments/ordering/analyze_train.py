@@ -101,7 +101,7 @@ def main():
         return
     by = defaultdict(dict)
     for r in runs:
-        by[(r["run"], r["decode"])][r["seed"]] = r
+        by[(r["run"], r["ckpt"], r["decode"])][r["seed"]] = r
 
     ctrl_run = args.control or next(
         (n for (n, dec) in by if "none" in n), None)
@@ -109,25 +109,27 @@ def main():
         print("[ord] no control arm found"); return
     print(f"[ord] control = {ctrl_run}\n")
 
-    print(f"{'arm':30s} {'decode':8s} {'seed':>4} {'acc':>7} {'delta':>8} "
+    print(f"{'arm':26s} {'ckpt':>10s} {'decode':8s} {'seed':>4} {'acc':>7} {'delta':>8} "
           f"{'95% CI':>19} {'p':>7} {'T1':>5} {'T2':>5}")
     out = []
-    for (run, dec), seeds in sorted(by.items()):
+    for (run, ckpt, dec), seeds in sorted(by.items()):
         for sd, r in sorted(seeds.items()):
-            c = by.get((ctrl_run, "uniform"), {}).get(sd) or \
-                by.get((ctrl_run, "matched"), {}).get(sd)
+            # control must be the SAME checkpoint step, never pooled across 5k/30k
+            c = by.get((ctrl_run, ckpt, "uniform"), {}).get(sd) or \
+                by.get((ctrl_run, ckpt, "matched"), {}).get(sd)
             if c is None:
                 continue
             if run == ctrl_run and dec in ("uniform", "matched"):
-                print(f"{run[:30]:30s} {dec:8s} {sd:>4} {r['accuracy']:>7.4f} "
-                      f"{'-':>8} {'-':>19} {'-':>7} {r['T1']:>5} {r['T2']:>5}")
+                print(f"{run[:26]:26s} {ckpt[-10:]:>10s} {dec:8s} {sd:>4} "
+                      f"{r['accuracy']:>7.4f} {'-':>8} {'-':>19} {'-':>7} "
+                      f"{r['T1']:>5} {r['T2']:>5}")
                 continue
             d, lo, hi, p, n = paired(c, r)
             sig = "*" if (lo > 0 or hi < 0) else " "
-            print(f"{run[:30]:30s} {dec:8s} {sd:>4} {r['accuracy']:>7.4f} "
-                  f"{d:>+8.4f} [{lo:>+7.4f},{hi:>+7.4f}] {p:>7.4f}{sig} "
-                  f"{r['T1']:>5} {r['T2']:>5}")
-            out.append({"run": run, "decode": dec, "seed": sd, "n": n,
+            print(f"{run[:26]:26s} {ckpt[-10:]:>10s} {dec:8s} {sd:>4} "
+                  f"{r['accuracy']:>7.4f} {d:>+8.4f} [{lo:>+7.4f},{hi:>+7.4f}] "
+                  f"{p:>7.4f}{sig} {r['T1']:>5} {r['T2']:>5}")
+            out.append({"run": run, "ckpt": ckpt, "decode": dec, "seed": sd, "n": n,
                         "accuracy": r["accuracy"], "control_accuracy": c["accuracy"],
                         "delta": d, "ci95": [lo, hi], "p": p,
                         "significant": bool(lo > 0 or hi < 0),
