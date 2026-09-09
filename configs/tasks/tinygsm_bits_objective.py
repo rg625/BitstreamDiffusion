@@ -100,6 +100,13 @@ def get_config():
     # Seed is the replication axis of the stability study. The whole current
     # result rests on 2 SM runs breaking and 2 CE runs not, one seed each; a
     # single divergence event is not evidence of a systematic difference.
+    # Learning rate. The production value (3e-4) diverges in this environment
+    # in every from-scratch run measured (8/8, including the production-era
+    # commit). Fine-tuning at 3e-5 was stable through 15k where 3e-4 broke at
+    # 2,323, so lr is a live candidate for the instability and is overridable
+    # here to test it from scratch.
+    cfg.optim.lr = float(os.environ.get("OBJ_LR", cfg.optim.lr))
+
     cfg.train.seed = int(os.environ.get("OBJ_SEED", 42))
 
     tag = os.environ.get("OBJ_TAG", "").strip()
