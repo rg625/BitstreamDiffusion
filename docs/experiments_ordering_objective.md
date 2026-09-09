@@ -252,3 +252,44 @@ difference. But:
 - a lower absolute accuracy at a given step count than production is
   **expected** at a 10x smaller learning rate and is not evidence about either
   objective.
+
+---
+
+## Experiment E2 — from-scratch stability at lr 3e-5. **THE BLOCKER IS SOLVED.**
+
+`binary_sm`, from scratch (`init_from=None`), production-matched
+(`p_uncond=0.1`, clamp off, EDM weighting, bf16, batch 512), seed 42,
+Python 3.10, **lr 3e-5**: **reached target 20,000 steps with no divergence.**
+Final loss 0.0334, val 0.0558.
+
+| recipe | lr | seed | outcome |
+|---|---|---|---|
+| production-matched, py3.9 | 3e-4 | 42 | diverged @ 6,356 |
+| production-matched, py3.10 | 3e-4 | 42 | diverged @ 5,346 |
+| production-era commit `036a2b5` | 3e-4 | 42 | diverged @ 11,278 |
+| **production-matched, py3.10** | **3e-5** | **42** | **20,000 steps, stable** |
+
+**The learning rate is the identified factor, not the interpreter.** 8/8
+from-scratch runs at 3e-4 diverged in this environment, including the
+production-era commit itself; every run at 3e-5 has been stable (this, plus all
+four ordering arms).
+
+This also closes the environment question in a way the Python 3.10 test could
+not. That test falsified the interpreter hypothesis but left the cause open;
+the answer is that the recipe is simply unstable at 3e-4 here. Why production
+tolerated 3e-4 for 500k steps remains unexplained -- their working tree is
+unreadable -- but it is no longer blocking.
+
+### Definitive from-scratch objective comparison — launched
+
+50,000 steps per arm, verified to differ in exactly four keys (`train.loss_type`
+plus three output paths):
+
+```
+lr=3e-05  seed=42  steps=50000  p_uncond=0.1  clamp=None
+weighting=edm  init_from=None  amp=bf16  batch=512
+```
+
+Per the recorded caveat: 3e-5 establishes a **stable** regime, not a **tuned**
+one. Absolute accuracies are compared only against the matched control in this
+regime, never against production's 3e-4 trajectory.
