@@ -22,7 +22,9 @@
 3. Nature of errors on TinyGSM & \yes & guidance harms code validity, not reasoning\\
 4a. Temporal ordering --- at inference & \yes & no benefit; random is harmful\\
 4b. Temporal ordering --- trained (L2R/R2L/random) & \no & inconclusive: control arm degenerate\\
-5. Logits: softmax vs score matching & \yes & softmax $\equiv$ BCE (proved); SM vs CE \textbf{negative}\\
+5a. Per-bit softmax vs BCE & \yes & mathematically identical; no GPU spent\\
+5b. \textbf{V-way token softmax} (predict logits, not bits) & \run & implemented + tested; smoke queued\\
+5c. binary\_sm vs binary\_ce (50k, from scratch) & \yes & \textbf{negative}: neither measurable\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -154,7 +156,7 @@ artefact.
 either by preserving the entropy schedule across the fine-tune, or by training
 all arms from scratch under a common schedule. Not attempted within this window.
 
-\section{Task 5 --- Logits: softmax vs score matching \yes}
+\section{Task 5 --- Predict logits instead of raw bits}
 \textbf{Softmax is not a distinct objective, and this is proved rather than
 assumed.} The model already emits \textbf{one logit per bit}
 (\code{out\_dim=1}, \code{vocab\_size=2}). A 2-class softmax is shift-invariant,
@@ -166,6 +168,55 @@ so it has a single degree of freedom $d=z_1-z_0$ and
 exactly; the 2-class head merely splits the same gradient across two logits
 ($\partial L/\partial z_1=-\partial L/\partial z_0=\partial L/\partial d$).
 Verified to $10^{-12}$ in 5 tests. \textbf{No GPU was spent on it.}
+
+\subsection*{The distinction I initially got wrong}
+The task asked for \emph{``bitstream embedding but predict logits''}. I first
+resolved that as a per-bit softmax and proved it redundant. That proof is
+correct but answers a \textbf{narrower} question than was asked:
+
+\begin{center}\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameterisation & Degrees of freedom & Distinct from BCE?\\ \midrule
+2-class softmax \emph{per bit} & 1 \ ($z_1-z_0$) & \textbf{No} --- exactly BCE\\
+\textbf{$V$-way softmax \emph{per token}} & \textbf{49{,}152} & \textbf{Yes} --- strictly more expressive\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The binary head predicts \textbf{16 independent Bernoullis} per token, so it can
+only represent a \emph{product} distribution over that token's bits. A $V$-way
+categorical over the 49{,}153-token vocabulary can represent \emph{any}
+distribution over tokens, including the bit correlations the binary head
+structurally cannot express. \textbf{That is the ``added flexibility'' the task
+was about, and it is a real experiment.}
+
+\subsection*{$V$-way token softmax --- implemented, not yet run \run}
+Now wired for TinyGSM:
+\begin{center}\small
+\code{representation=tokens \ \ V=49153 \ \ S=512 \ \ patch\_size=1 \ \ out\_dim=49153}\\
+\code{loss=token\_ce \ \ data\_center=1/V=2.03e-05 \ \ p\_uncond=0.1 \ \ edm \ \ clamp off}
+\end{center}
+Two defects had to be fixed beyond the config. The TinyGSM dataset returned
+\emph{bits}, but the trainer's token path indexes \code{x0} as \emph{class
+indices} --- it would have trained silently on the wrong target space; it now
+returns token IDs and a token-level prefix mask, with the binary path
+bit-identical (tested). And \code{data\_center} must be $1/V$, not the bits
+value 0.5: a one-hot token's mean is $1/49153$, and centring the diffusion at
+0.5 would place it nowhere near the data manifold. 7 new tests; 431 pass.
+
+\textbf{Not yet run.} The open question is memory: the logits tensor is
+$[B,512,49153]$, i.e.\ \textbf{26 GB in bf16} at global batch 512 ($\approx$6.4
+GB per GPU over 4 ranks) before activations, so the loss is evaluated in chunks
+rather than materialised. A 300-step smoke test is queued. If it OOMs, the batch
+drops \emph{and the binary control is rerun at the same batch}, so the
+comparison never confounds representation with batch size.
+
+\textbf{Caveat.} Unlike SM-vs-CE this is \emph{not} a one-variable experiment:
+representation, output dimensionality, loss and memory profile all change
+together. And with accuracy at 0.0000 for 5k/10k and the first non-zero point at
+200k, a 50k token run will most likely also score zero --- the readable endpoints
+would be stability and the loss/gradient diagnostics, not accuracy.
 
 \subsection*{binary\_sm vs binary\_ce --- definitive, from scratch, and negative}
 Both arms trained \textbf{from scratch for 50{,}000 steps} at \code{lr 3e-5},
@@ -249,9 +300,12 @@ the control's matched 5k evaluation. Neither changes any verdict above.
 
 \section{Not done}
 \begin{enumerate}\itemsep2pt
+\item \textbf{The $V$-way token-softmax run itself.} Implemented and tested;
+memory smoke test queued. This is the experiment the task actually asked for and
+it is the top priority for the next window.
 \item \textbf{A valid ordering-as-training verdict.} Blocked on a control arm
 that does not retain its initialisation's accuracy. The implementation is
-finished and tested; only the experimental setup is at fault.
+finished and tested; the experimental setup is at fault.
 \item \textbf{CE vs SM at a convergent budget.} The 50k result is clean and
 negative, but at \code{lr 3e-5} neither arm is near convergence. Whether CE
 helps a \emph{converged} model is untested.
@@ -264,17 +318,27 @@ not run; the first results did not justify the spend.
 \end{enumerate}
 
 \section{Honest notes}
-Three self-inflicted failures cost ${\sim}15$ GPU-h and a night of wall-clock:
-an over-strict guidance guard failed 9/9 evaluation cells; the ordering control
+Four self-inflicted failures cost ${\sim}15$ GPU-h and a night of wall-clock: an
+over-strict guidance guard failed 9/9 evaluation cells; the ordering control
 returned probabilities from $\sigma_{N-1}$ instead of a final denoise, scoring
-0.000 against a true 0.164; and a disk-full event killed four training arms
-mid-checkpoint. Each was caught before it entered a result. The second was
-caught \emph{only} because a production anchor was included in the evaluation ---
-without it, seven cells of confidently wrong nulls would have been reported.
+0.000 against a true 0.164; a disk-full event killed four training arms
+mid-checkpoint; and an evaluation tag omitted the checkpoint step, so 5k and 30k
+results overwrote each other. Each was caught before it entered a result. The
+second was caught \emph{only} because a production anchor was included in the
+evaluation --- without it, seven cells of confidently wrong nulls would have been
+reported.
 
-A fourth was caught this morning: the entropic sampling schedule is fitted
-per-run, so each fine-tuned arm had refitted its own decoder schedule
-($\max|\mathrm{cdf}-\mathrm{prod}|$ up to 0.545). Evaluating that way compares
-arms differing in both training \emph{and} decoding. All evaluations now use the
-analytic karras schedule, identical for every arm by construction.
+A fifth was conceptual rather than operational, and is the most important to
+record: I initially resolved \emph{``predict logits''} as a per-bit softmax,
+proved it identical to BCE, and reported the sub-task as closed. The proof is
+sound but the interpretation was too narrow --- the intended experiment was a
+$V$-way softmax over the token vocabulary, which is genuinely more expressive.
+That cost no GPU but it did cost a day of the schedule, and it was caught by the
+supervisor rather than by me. Where a task admits two readings, the ambiguity
+should be raised rather than resolved silently.
+
+Two evaluation confounds were also found and fixed before they reached a
+conclusion: per-run entropy sampling schedules (arms differed in decoder as well
+as training; all evaluation now uses the analytic karras schedule) and
+5k/30k filename collisions.
 \end{document}

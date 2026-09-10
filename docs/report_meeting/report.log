@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.19 (TeX Live 2018) (preloaded format=pdflatex 2026.8.1)  10 SEP 2026 12:10
+This is pdfTeX, Version 3.14159265-2.6-1.40.19 (TeX Live 2018) (preloaded format=pdflatex 2026.8.1)  10 SEP 2026 12:42
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -398,10 +398,10 @@ Underfull \hbox (badness 10000) in paragraph at lines 24--24
 <fig/guidance.pdf, id=48, pagebox=cropbox, 395.99773pt x 219.07257pt>
 File: fig/guidance.pdf Graphic file (type pdf)
 <use fig/guidance.pdf>
-Package pdftex.def Info: fig/guidance.pdf  used on input line 64. on input line
- 64.
+Package pdftex.def Info: fig/guidance.pdf  used on input line 66. on input line
+ 66.
 Package pdftex.def Info: Requested size: 303.41801pt x 167.86742pt on input lin
-e 64.
+e 66.
 [1
 
 {/usr/share/texlive/texmf-dist/fonts/map/pdftex/updmap/pdftex.map} <./fig/guida
@@ -410,79 +410,81 @@ nce.pdf>]
 >
 File: fig/ordering_inference.pdf Graphic file (type pdf)
 <use fig/ordering_inference.pdf>
-Package pdftex.def Info: fig/ordering_inference.pdf  used on input line 107. on
- input line 107.
+Package pdftex.def Info: fig/ordering_inference.pdf  used on input line 109. on
+ input line 109.
 Package pdftex.def Info: Requested size: 269.16475pt x 163.99551pt on input lin
-e 107.
- [2 <./fig/ordering_inference.pdf>]
-<fig/sm_vs_ce.pdf, id=171, pagebox=cropbox, 475.02238pt x 200.5746pt>
+e 109.
+ [2 <./fig/ordering_inference.pdf>] [3]
+<fig/sm_vs_ce.pdf, id=180, pagebox=cropbox, 475.02238pt x 200.5746pt>
 File: fig/sm_vs_ce.pdf Graphic file (type pdf)
 <use fig/sm_vs_ce.pdf>
-Package pdftex.def Info: fig/sm_vs_ce.pdf  used on input line 193. on input lin
-e 193.
+Package pdftex.def Info: fig/sm_vs_ce.pdf  used on input line 244. on input lin
+e 244.
 Package pdftex.def Info: Requested size: 420.87376pt x 177.71814pt on input lin
-e 193.
- [3 <./fig/sm_vs_ce.pdf>]
-<fig/lr_stability.pdf, id=228, pagebox=cropbox, 391.42078pt x 190.96632pt>
+e 244.
+<fig/lr_stability.pdf, id=181, pagebox=cropbox, 391.42078pt x 190.96632pt>
 File: fig/lr_stability.pdf Graphic file (type pdf)
 <use fig/lr_stability.pdf>
-Package pdftex.def Info: fig/lr_stability.pdf  used on input line 220. on input
- line 220.
+Package pdftex.def Info: fig/lr_stability.pdf  used on input line 271. on input
+ line 271.
 Package pdftex.def Info: Requested size: 293.63564pt x 143.26227pt on input lin
-e 220.
+e 271.
+ [4 <./fig/sm_vs_ce.pdf> <./fig/lr_stability.pdf>]
 LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <10> not available
-(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 229.
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 280.
 LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <9> not available
-(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 229.
-<fig/accuracy_vs_steps.pdf, id=229, pagebox=cropbox, 300.82515pt x 197.81717pt>
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 280.
+<fig/accuracy_vs_steps.pdf, id=274, pagebox=cropbox, 300.82515pt x 197.81717pt>
 
 File: fig/accuracy_vs_steps.pdf Graphic file (type pdf)
 <use fig/accuracy_vs_steps.pdf>
-Package pdftex.def Info: fig/accuracy_vs_steps.pdf  used on input line 238. on 
-input line 238.
+Package pdftex.def Info: fig/accuracy_vs_steps.pdf  used on input line 289. on 
+input line 289.
 Package pdftex.def Info: Requested size: 254.48372pt x 167.3485pt on input line
- 238.
-
-[4 <./fig/lr_stability.pdf> <./fig/accuracy_vs_steps.pdf>]
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 280.
- [5]
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 280.
+ 289.
+ [5 <./fig/accuracy_vs_steps.pdf>]
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 344.
+ [6]
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 344.
  (./report.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 280.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 280.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 344.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 344.
 Package rerunfilecheck Info: File `report.out' has not changed.
-(rerunfilecheck)             Checksum: 619A78DC7D9B8ADD8566C7F182E98619;821.
-Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 280.
+(rerunfilecheck)             Checksum: D3C87D6A07E391BAE43D416C4710F4E3;817.
+Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 344.
  ) 
 Here is how much of TeX's memory you used:
- 6685 strings out of 494917
- 95699 string characters out of 6180700
- 191905 words of memory out of 5000000
- 9909 multiletter control sequences out of 15000+600000
- 12080 words of font info for 44 fonts, out of 8000000 for 9000
+ 6696 strings out of 494917
+ 95814 string characters out of 6180700
+ 192905 words of memory out of 5000000
+ 9913 multiletter control sequences out of 15000+600000
+ 13093 words of font info for 47 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 28i,9n,44p,264b,410s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 28i,9n,44p,264b,408s stack positions out of 5000i,500n,10000p,200000b,80000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></us
 r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/share/texli
-ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/tex
-mf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist
-/fonts/type1/public/amsfonts/cm/cmmi9.pfb></usr/share/texlive/texmf-dist/fonts/
-type1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/p
-ublic/amsfonts/cm/cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/a
-msfonts/cm/cmr17.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts
-/cm/cmr6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7
-.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></u
-sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/sha
-re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/share/texl
-ive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/share/texlive/tex
-mf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist
-/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts
-/type1/public/amsfonts/cm/cmtt9.pfb>
-Output written on report.pdf (5 pages, 311934 bytes).
+ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmbxti10.pfb></usr/share/texlive/t
+exmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-d
+ist/fonts/type1/public/amsfonts/cm/cmmi12.pfb></usr/share/texlive/texmf-dist/fo
+nts/type1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/fonts/typ
+e1/public/amsfonts/cm/cmmi9.pfb></usr/share/texlive/texmf-dist/fonts/type1/publ
+ic/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
+onts/cm/cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
+/cmr17.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.p
+fb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr
+/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/t
+exlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive
+/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/share/texlive/texmf-
+dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/share/texlive/texmf-dist/fo
+nts/type1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/typ
+e1/public/amsfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/pub
+lic/amsfonts/cm/cmti9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/ams
+fonts/cm/cmtt9.pfb>
+Output written on report.pdf (6 pages, 347137 bytes).
 PDF statistics:
- 382 PDF objects out of 1000 (max. 8388607)
- 160 compressed objects within 2 object streams
- 24 named destinations out of 1000 (max. 500000)
+ 402 PDF objects out of 1000 (max. 8388607)
+ 176 compressed objects within 2 object streams
+ 28 named destinations out of 1000 (max. 500000)
  114 words of extra memory for PDF output out of 10000 (max. 10000000)
 

@@ -213,6 +213,7 @@ class TinyGSMDataset(Dataset):
         self.block_size = int(getattr(d, "sequence_len_tokens", 512))
         self.bits_per_token = int(getattr(d, "bits_per_token", 16))
         self.tokenizer_name = str(getattr(d, "tokenizer_name", DEFAULT_TOKENIZER))
+        self.representation = str(getattr(d, "representation", "binary")).lower()
         root = str(getattr(d, "root", "datasets/tinygsm"))
         max_train = getattr(d, "max_train_examples", None)
         max_train = int(max_train) if max_train is not None else None
@@ -234,8 +235,12 @@ class TinyGSMDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         ids = torch.from_numpy(np.asarray(self.ids[idx], dtype=np.int64))  # [block]
         plen = int(self.prompt_len[idx])
-        bits = token_ids_to_bits(ids, self.bits_per_token)  # [block*bpt]
         prefix_tok = torch.arange(self.block_size) < plen
+        if self.representation == "tokens":
+            # Token-space (V-way softmax) runs consume TOKEN IDS and a
+            # TOKEN-level prefix mask. The binary path is untouched.
+            return {"x0": ids, "prefix_mask": prefix_tok, "input_ids": ids}
+        bits = token_ids_to_bits(ids, self.bits_per_token)  # [block*bpt]
         prefix_bits = token_mask_to_bit_mask(prefix_tok, self.bits_per_token).bool()
         return {"x0": bits, "prefix_mask": prefix_bits, "input_ids": ids}
 

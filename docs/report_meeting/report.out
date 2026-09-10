@@ -3,7 +3,7 @@
 \BOOKMARK [1][-]{section.3}{Task 3 \204 Nature of errors on TinyGSM DONE}{}% 3
 \BOOKMARK [1][-]{section.4}{Task 4a \204 Temporal ordering at inference DONE}{}% 4
 \BOOKMARK [1][-]{section.5}{Task 4b \204 Temporal ordering, TRAINED NOT DONE \(inconclusive\)}{}% 5
-\BOOKMARK [1][-]{section.6}{Task 5 \204 Logits: softmax vs score matching DONE}{}% 6
+\BOOKMARK [1][-]{section.6}{Task 5 \204 Predict logits instead of raw bits}{}% 6
 \BOOKMARK [1][-]{section.7}{The infrastructural finding \(not on the task list\)}{}% 7
 \BOOKMARK [1][-]{section.8}{Why accuracy could not be measured on short runs}{}% 8
 \BOOKMARK [1][-]{section.9}{Currently running}{}% 9
