@@ -58,7 +58,7 @@ run_one () {   # $1=order_mode $2=order_w $3=seed $4=label
     --order_w "$2" --order_mode "$1" --order_seed $((1234 + $3)) \
     --steps "$EV_STEPS" --limit "$EV_LIMIT" --seed "$3" \
     --out_dir results/ordering/train_eval \
-    --regime ordering_train --tag "${EV_RUN}__${4}__s${3}" \
+    --regime ordering_train --tag "${EV_RUN}__ck${EV_CKPT//[^0-9]/}__${4}__s${3}" \
     || echo "[ev] FAILED ${EV_RUN} ${4} seed $3"
 }
 
