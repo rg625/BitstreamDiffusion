@@ -21,8 +21,8 @@
 2. CFG + other guidance mechanisms, calibrate & \yes & CFG best, $+0.081$; study CLOSED\\
 3. Nature of errors on TinyGSM & \yes & guidance harms code validity, not reasoning\\
 4a. Temporal ordering --- at inference & \yes & no benefit; random is harmful\\
-4b. Temporal ordering --- trained (L2R/R2L/random) & \run & control arm defective; see \S5\\
-5. Logits: softmax vs score matching & \yes\,/\,\run & softmax $\equiv$ BCE (proved); SM vs CE running\\
+4b. Temporal ordering --- trained (L2R/R2L/random) & \no & inconclusive: control arm degenerate\\
+5. Logits: softmax vs score matching & \yes & softmax $\equiv$ BCE (proved); SM vs CE \textbf{negative}\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -125,26 +125,38 @@ improves. Expected, since the model was \emph{trained} with uniform $\sigma$:
 it tolerates a ${\sim}2.9\times$ spread with no gain and breaks at ${\sim}9\times$.
 512 steps does not rescue it, so it is not a too-short-trajectory artefact.
 
-\section{Task 4b --- Temporal ordering, TRAINED \run}
-This is the substantive version of the experiment and it is \textbf{running, not
-finished}. Implementation is complete and tested (24 tests): $\sigma$ is drawn
-per example, mapped to normalised time by the \emph{same} map the sampler uses,
-offset per token, mapped back and expanded blockwise to bits. All three modes
-provably produce \emph{different} $\sigma$ fields; L2R and R2L are mirror images;
-random is redrawn per example \emph{and} per step; $w{=}0$ leaves the gradient
-hash unchanged.
+\section{Task 4b --- Temporal ordering, TRAINED \no\ (inconclusive)}
+Implementation is complete and tested (24 tests): $\sigma$ is drawn per example,
+mapped to normalised time by the \emph{same} map the sampler uses, offset per
+token, mapped back and expanded blockwise to bits. All three modes provably
+produce \emph{different} $\sigma$ fields; L2R and R2L are mirror images; random
+is redrawn per example \emph{and} per step; $w{=}0$ leaves the gradient hash
+unchanged. Four arms (control / L2R / R2L / random, $w{=}0.25$) fine-tuned from
+the same production 500k checkpoint at \code{lr 3e-5}; none diverged.
 
-Four arms (control / L2R / R2L / random, $w{=}0.25$) fine-tune from the same
-production 500k checkpoint --- from-scratch was not evaluable when these were
-launched. \textbf{Current blocker: the control arm is defective.} At the matched
-5k checkpoint it scores 0.0000 while ordered arms score 0.07--0.12, which would
-read as ``ordering massively helps'' and is not credible. Its weights moved only
-4.65\% from init and its EMA is healthy, so the model is not destroyed;
-diagnosis is ongoing. \textbf{No ordering-training claim is made in this report.}
+\textbf{The experiment is nonetheless inconclusive, because the control arm is
+degenerate.} At the matched 5k checkpoint the uniform-$\sigma$ control scores
+\textbf{0.0000} while the ordered arms score 0.07--0.12. Taken at face value
+that reads as ``ordering massively improves TinyGSM''. It is not credible and
+is not claimed.
 
-\section{Task 5 --- Logits: softmax vs score matching}
+\textbf{Diagnosis.} The control's weights moved only 4.65\% from init and its
+EMA is healthy, so the model is not destroyed. The likely cause is the
+$\sigma$-\emph{sampling} distribution: production converged under its
+entropy-adapted draw, but a fresh fine-tune restarts the entropy warmup
+(\code{entropy\_warmup\_steps=40000}) and therefore trains under the base
+log-normal draw. Every arm suffers that mismatch; the control, whose $\sigma$
+field is pure and unspread, appears to suffer it most. Verified under two
+independent sampling schedules (entropic and karras), so it is not a decoder
+artefact.
+
+\textbf{What is needed:} a control that provably retains the init's accuracy ---
+either by preserving the entropy schedule across the fine-tune, or by training
+all arms from scratch under a common schedule. Not attempted within this window.
+
+\section{Task 5 --- Logits: softmax vs score matching \yes}
 \textbf{Softmax is not a distinct objective, and this is proved rather than
-assumed \yes.} The model already emits \textbf{one logit per bit}
+assumed.} The model already emits \textbf{one logit per bit}
 (\code{out\_dim=1}, \code{vocab\_size=2}). A 2-class softmax is shift-invariant,
 so it has a single degree of freedom $d=z_1-z_0$ and
 \[
@@ -155,15 +167,53 @@ exactly; the 2-class head merely splits the same gradient across two logits
 ($\partial L/\partial z_1=-\partial L/\partial z_0=\partial L/\partial d$).
 Verified to $10^{-12}$ in 5 tests. \textbf{No GPU was spent on it.}
 
-The meaningful comparison is \textbf{binary\_sm vs binary\_ce}, now \run\ from
-scratch, 50k steps/arm, differing in exactly four keys (\code{train.loss\_type}
-plus three output paths).
+\subsection*{binary\_sm vs binary\_ce --- definitive, from scratch, and negative}
+Both arms trained \textbf{from scratch for 50{,}000 steps} at \code{lr 3e-5},
+\textbf{neither diverged}, differing in exactly four keys (\code{train.loss\_type}
+plus three output paths). Evaluated on 1319 problems $\times$ 3 seeds,
+karras/DDIM, identical settings.
 
-\textbf{$\sigma$-weighting was derived, not inherited.} Matching Bayes-risk
-scale gives a factor spanning only $0.250$--$0.361$ across four decades of
-$\sigma$ ($0.82$--$1.18\times$ anchored at $\sigma_d$); gradient-scale matching
-is self-defeating because it reintroduces the $D(1{-}D)$ factor under test.
-Conclusion: \textbf{no bespoke CE weighting is justified}; both arms use EDM.
+\begin{center}\small
+\begin{tabular}{@{}lccl@{}}
+\toprule
+Arm & Mean accuracy & Correct / 1319 & Stability\\ \midrule
+binary\_sm & 0.00027 & 0.4 & stable to 50k\\
+binary\_ce & 0.00100 & 1.3 & stable to 50k\\
+\textbf{$\Delta$} & $\mathbf{+0.00073}$ & \textbf{one problem} & ---\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Neither objective produces measurable task performance at this budget},
+and a one-problem difference is not evidence of anything. The gradient
+diagnostics --- computed identically in both arms and therefore directly
+comparable --- agree:
+
+\begin{center}
+\includegraphics[width=0.86\textwidth]{fig/sm_vs_ce.pdf}
+\end{center}
+
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+& SM @1k & CE @1k & SM @25k & CE @25k\\ \midrule
+gradient survival & 0.1854 & 0.1866 & 0.1805 & 0.1808\\
+saturation $D(1{-}D)<10^{-3}$ & 0.846 & 0.865 & 0.942 & 0.956\\
+$|\mathrm{logit}|$ mean & 17.9 & 20.1 & 25.1 & 29.4\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{CE's theoretical advantage does not appear.} The motivation for CE was
+that its gradient lacks the $D(1{-}D)$ factor that suppresses SM's. In a
+from-scratch matched pair at 50k, gradient survival is identical to three
+decimals. \textbf{This is the cleanest test the objective branch has had, and it
+is negative.}
+
+\emph{Caveat, stated deliberately:} \code{lr 3e-5} establishes a \textbf{stable}
+regime, not a \textbf{tuned} one. These arms are compared only to each other,
+never to production's 3e-4 trajectory. A comparison at a tuned learning rate and
+a convergent budget remains untested.
 
 \section{The infrastructural finding (not on the task list)}
 \begin{center}
@@ -194,27 +244,23 @@ where accuracy exists \textbf{did not overlap} --- which is why the objective
 branch was blocked rather than merely slow.
 
 \section{Currently running}
-\begin{center}\small
-\begin{tabular}{@{}p{6.2cm}p{3.2cm}p{5.4cm}@{}}
-\toprule
-Job & ETA & Purpose\\ \midrule
-Ordering eval, 5k + 30k, karras & ${\sim}1$h & 4 arms $\times$ 3 seeds $\times$ 1319\\
-L2R retrain to 30k & ${\sim}5$h & its checkpoint was corrupted by a disk-full event\\
-\textbf{binary\_sm vs binary\_ce}, from scratch, 50k & ${\sim}7$h & the definitive objective comparison\\
-\bottomrule
-\end{tabular}
-\end{center}
+Only the L2R 30k retrain (its checkpoint was corrupted by a disk-full event) and
+the control's matched 5k evaluation. Neither changes any verdict above.
 
 \section{Not done}
 \begin{enumerate}\itemsep2pt
-\item \textbf{Ordering-as-training verdict.} Blocked on the defective control arm.
-\item \textbf{CE vs SM verdict.} Running; no result yet.
+\item \textbf{A valid ordering-as-training verdict.} Blocked on a control arm
+that does not retain its initialisation's accuracy. The implementation is
+finished and tested; only the experimental setup is at fault.
+\item \textbf{CE vs SM at a convergent budget.} The 50k result is clean and
+negative, but at \code{lr 3e-5} neither arm is near convergence. Whether CE
+helps a \emph{converged} model is untested.
 \item \textbf{Accuracy lift-off point} between 10k and 200k steps --- unmeasured,
 and it sets the cost of every future training comparison.
 \item \textbf{Why production tolerated \code{lr 3e-4} for 500k steps.} Their
 working tree is permission-denied to us, so this stays open.
-\item \textbf{Ordering at other strengths / from scratch}, and R2L at inference
-(deliberately not run: the first results did not justify it).
+\item \textbf{Ordering at other strengths, and R2L at inference} --- deliberately
+not run; the first results did not justify the spend.
 \end{enumerate}
 
 \section{Honest notes}

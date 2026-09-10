@@ -65,3 +65,34 @@ def f_steps():
 for fn in (f_guidance, f_ordering_inf, f_lr, f_steps):
     try: fn(); print("ok", fn.__name__)
     except Exception as e: print("FAIL", fn.__name__, type(e).__name__, e)
+
+
+def f_smce():
+    """SM vs CE: gradient diagnostics (the informative panel) + accuracy."""
+    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+    import glob as _g, collections as _c, bisect as _b
+    def ser(arm, tag):
+        p = sorted(_g.glob(f"runs/tasks/tinygsm/{arm}/training_logs/events.out.tfevents*"))
+        if not p: return []
+        ea = EventAccumulator(p[-1], size_guidance={'scalars': 0}); ea.Reload()
+        if tag not in ea.Tags()['scalars']: return []
+        sc = ea.Scalars(tag); cc = _c.Counter(s.step for s in sc)
+        return [(s.step, s.value) for s in sc if cc[s.step] == 1]
+    arms = [("obj_binary_sm_fs50k_s42", "binary_sm", C0),
+            ("obj_binary_ce_fs50k_s42", "binary_ce", C1)]
+    fig, axes = plt.subplots(1, 2, figsize=(7.4, 2.6))
+    for a, lab, c in arms:
+        x = ser(a, "objective/grad_survival")
+        if x: axes[0].plot([s for s, _ in x], [v for _, v in x], color=c, lw=1.3, label=lab)
+        y = ser(a, "objective/frac_D1mD_lt_0.001")
+        if y: axes[1].plot([s for s, _ in y], [v for _, v in y], color=c, lw=1.3, label=lab)
+    axes[0].set_ylabel("gradient survival"); axes[0].set_ylim(0, .25)
+    axes[1].set_ylabel(r"frac $D(1{-}D)<10^{-3}$")
+    for ax in axes:
+        ax.set_xlabel("training step"); ax.legend(frameon=False, fontsize=8)
+    axes[0].set_title("CE retains no more gradient than SM", fontsize=9)
+    axes[1].set_title("Saturation is the same in both arms", fontsize=9)
+    fig.savefig(f"{OUT}/sm_vs_ce.pdf"); plt.close(fig)
+
+try: f_smce(); print("ok f_smce")
+except Exception as e: print("FAIL f_smce", type(e).__name__, e)
