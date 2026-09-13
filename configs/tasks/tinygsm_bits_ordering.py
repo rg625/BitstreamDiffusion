@@ -47,8 +47,14 @@ def get_config():
     cfg.train.ordering = o
 
     # Every arm starts from the same healthy weights, fresh optimiser state.
-    cfg.train.init_from = os.environ.get(
+    # ORD_INIT=none trains FROM SCRATCH, which is the real experiment: ordering
+    # is baked into the whole trajectory rather than bolted onto a model that
+    # converged without it. Fine-tuning was only ever a workaround for the
+    # divergence blocker, and that blocker is now fixed.
+    _init = os.environ.get(
         "ORD_INIT", "tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg/checkpoints/last.pt")
+    if str(_init).lower() not in ("none", "", "scratch"):
+        cfg.train.init_from = _init
 
     # Fine-tuning learning rate. The from-scratch value (3e-4) applied to
     # ALREADY-CONVERGED weights kicked every arm out of its minimum: the CONTROL

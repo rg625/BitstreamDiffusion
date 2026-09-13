@@ -79,3 +79,19 @@ def test_expressivity_claim_is_arithmetically_what_we_say_it_is():
     bits_dof = 16
     cat_dof = 49153 - 1
     assert cat_dof > bits_dof * 3000
+
+
+def test_token_prefix_masking_handles_the_V_axis():
+    """A [B,S,1] boolean mask cannot index a [B,S,V] tensor -- it raises
+    IndexError, which is exactly what killed the first token smoke run."""
+    B, S, V = 2, 4, 7
+    xt = torch.zeros(B, S, V)
+    src = torch.arange(B * S * V, dtype=torch.float32).reshape(B, S, V)
+    prefix_mask = torch.zeros(B, S, dtype=torch.bool)
+    prefix_mask[:, :2] = True
+    pm = prefix_mask.unsqueeze(-1).expand_as(xt)
+    xt[pm] = src[pm]
+    assert torch.equal(xt[:, :2, :], src[:, :2, :])
+    assert torch.all(xt[:, 2:, :] == 0)
+    with pytest.raises(IndexError):
+        torch.zeros(B, S, V)[prefix_mask.unsqueeze(-1)] = 1.0

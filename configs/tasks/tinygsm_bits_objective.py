@@ -106,6 +106,10 @@ def get_config():
     # 2,323, so lr is a live candidate for the instability and is overridable
     # here to test it from scratch.
     cfg.optim.lr = float(os.environ.get("OBJ_LR", cfg.optim.lr))
+    # Batch override: the token-softmax arm cannot run at 512 (its [B,S,V]
+    # logits are 12.9 GB/GPU), so its binary CONTROL must run at the same batch
+    # or representation would be confounded with batch size.
+    cfg.train.batch_size = int(os.environ.get("OBJ_BATCH", cfg.train.batch_size))
 
     cfg.train.seed = int(os.environ.get("OBJ_SEED", 42))
 

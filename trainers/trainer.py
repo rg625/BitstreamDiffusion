@@ -1552,7 +1552,9 @@ class Trainer:
 
             if drop_mask.any():
                 if is_cont_tokens:
-                    replace = drop_mask.view(B, 1, 1) & prefix_mask.unsqueeze(-1)
+                    # expand: a [B,S,1] boolean mask cannot index a [B,S,V] tensor
+                    replace = (drop_mask.view(B, 1, 1)
+                               & prefix_mask.unsqueeze(-1)).expand_as(prefix_used_full)
                     prefix_used_full[replace] = null_full[replace]
                 else:
                     replace = drop_mask.view(B, 1) & prefix_mask
@@ -1568,7 +1570,7 @@ class Trainer:
 
             # Clamp prefix positions to chosen clean/null prefix.
             if is_cont_tokens:
-                pm = prefix_mask.unsqueeze(-1)
+                pm = prefix_mask.unsqueeze(-1).expand_as(xt)
                 xt[pm] = prefix_used_full[pm]
             else:
                 xt[prefix_mask] = prefix_used_full[prefix_mask]
@@ -1632,7 +1634,7 @@ class Trainer:
 
             if needs_sc_injection:
                 if is_cont_tokens:
-                    pm = prefix_mask.unsqueeze(-1)
+                    pm = prefix_mask.unsqueeze(-1).expand_as(x0_hat)
                     x0_hat[pm] = prefix_used_full[pm]
                 else:
                     x0_hat[prefix_mask] = prefix_used_full[prefix_mask]

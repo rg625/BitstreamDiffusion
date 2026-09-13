@@ -26,7 +26,12 @@ def _setup_ddp():
         torch.cuda.set_device(local_rank)
         dist.init_process_group(
             backend="nccl",
-            timeout=datetime.timedelta(minutes=20),
+            # Default unchanged (20 min). Overridable because end-of-epoch work on
+            # rank 0 (validation + callbacks) with the 49,153-way token head can
+            # outlast 20 min while the other ranks wait in an all-reduce: that is
+            # exactly what killed token_ce at step 401,435 (epoch-6 boundary).
+            # A timeout changes no training arithmetic.
+            timeout=datetime.timedelta(minutes=int(os.environ.get("DDP_TIMEOUT_MIN", 20))),
             device_id=torch.device(f"cuda:{local_rank}"),
         )
         # Only print setup info on master or for debugging
