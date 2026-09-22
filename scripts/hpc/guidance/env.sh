@@ -9,14 +9,28 @@
 set -euo pipefail
 
 export PROJECT_DIR="${PROJECT_DIR:-/rds/user/rg625/hpc-work/BitstreamDiffusion}"
+
+# Per-cluster parameters live in one place. On CSD3 this reproduces exactly what
+# was hardcoded here before; on Isambard it supplies the aarch64 interpreter and
+# that site's partition/account. Guarded so an older checkout without the file
+# still works.
+if [ -f "$PROJECT_DIR/scripts/site/site.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$PROJECT_DIR/scripts/site/site.sh"
+  export PROJECT_DIR="${COBIT_PROJECT_DIR:-$PROJECT_DIR}"
+fi
 export COBIT_PYTHON="${COBIT_PYTHON:-/home/rg625/miniforge3/envs/sedd/bin/python}"
 
 cd "$PROJECT_DIR"
 
-if [ -f /etc/profile.d/modules.sh ]; then
+if [ "${COBIT_SITE:-csd3}" = "csd3" ] && [ -f /etc/profile.d/modules.sh ]; then
   . /etc/profile.d/modules.sh
   module purge >/dev/null 2>&1 || true
   module load rhel8/default-amp >/dev/null 2>&1 || true
+fi
+if [ "${COBIT_SITE:-}" = "isambard" ] && [ -n "${COBIT_MODULES:-}" ]; then
+  # shellcheck disable=SC2086
+  module load $COBIT_MODULES >/dev/null 2>&1 || true
 fi
 
 # Everything offline: compute nodes have no outbound network, and a silent
