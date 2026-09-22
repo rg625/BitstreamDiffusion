@@ -85,11 +85,57 @@ done
 echo
 printf "total: %.1f GB in %d items (%d missing)\n" "$(echo $total | awk '{print $1/1073741824}')" "${#ITEMS[@]}" "$missing"
 
+# PREFLIGHT. Reach the far side BEFORE hashing 10 GB of checkpoints: the first
+# attempt spent minutes on sha256 and then died on "Could not resolve hostname
+# login45", because an internal login-node name only resolves once you are
+# already inside that cluster.
+if [ -n "$DEST" ]; then
+  host="${DEST%%:*}"; host="${host##*@}"
+  if ! getent hosts "$host" >/dev/null 2>&1; then
+    cat >&2 <<MSG
+[transfer] cannot resolve host: $host
+
+  "$host" looks like a name that only resolves INSIDE the target cluster.
+  From here you need its public FQDN, which is in your grant email or the
+  site's access documentation -- it is not guessable and I will not guess it.
+
+  Once you have it, either:
+    (a) push from here:
+          bash scripts/site/transfer.sh --dest user@<fqdn>:/path --go
+    (b) or, if the target only allows outbound connections (common), PULL from
+        the far side -- run this ON the target:
+          rsync -avhP --files-from=transfer_manifest.txt \
+                $USER@login.hpc.cam.ac.uk:$PWD/ ./
+        (copy scripts/site/transfer_manifest.txt over first, or use
+         --files-from=- and paste the list)
+MSG
+    exit 1
+  fi
+  if ! timeout 20 ssh -o BatchMode=yes -o ConnectTimeout=10 \
+         "${DEST%%:*}" true >/dev/null 2>&1; then
+    echo "[transfer] $host resolves but SSH failed (key not registered, or the" >&2
+    echo "[transfer] site does not accept inbound connections). Try the pull" >&2
+    echo "[transfer] direction described above." >&2
+    exit 1
+  fi
+  echo "[transfer] preflight ok: $host reachable"
+fi
+
 # Checksums for the files where a truncated copy would cost a GPU-hour to
 # discover. The corpus is excluded: 11 GB of hashing to protect a file rsync
 # already size-checks, and a corrupt corpus shows up immediately as garbage loss.
 SUMS="scripts/site/transfer_checksums.txt"
-if [ $GO -eq 1 ] || [ -n "$DEST" ]; then
+stale=0
+if [ -f "$SUMS" ]; then
+  for it in "${ITEMS[@]}"; do
+    case "$it" in *.pt) [ -f "$it" ] && [ "$it" -nt "$SUMS" ] && stale=1 ;; esac
+  done
+else
+  stale=1
+fi
+if { [ $GO -eq 1 ] || [ -n "$DEST" ]; } && [ $stale -eq 0 ]; then
+  echo "[transfer] reusing $SUMS (checkpoints unchanged since it was written)"
+elif [ $GO -eq 1 ] || [ -n "$DEST" ]; then
   echo "[transfer] hashing checkpoints (a few minutes)..."
   : > "$SUMS"
   for it in "${ITEMS[@]}"; do
