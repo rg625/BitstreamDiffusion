@@ -49,10 +49,31 @@ def get_config():
     cfg.train.token_sm_chunk_size = int(os.environ.get("TOK_CHUNK", 2048))
 
     cfg.train.batch_size = int(os.environ.get("TOK_BATCH", cfg.train.batch_size))
+
+    # GRADIENT ACCUMULATION: how the V-way head gets a real batch.
+    # cfg.train.batch_size is the EFFECTIVE batch -- the examples behind one
+    # optimiser step, the number that must match the binary control. This model
+    # cannot fit 128 examples/GPU (it OOMs asking for 12 GiB with 3.44 GiB free),
+    # which is why the first 500k V-way run was pushed down to an effective 128
+    # and measured at 0.0255 against a binary control of 0.0493 -- matched to
+    # each other, but both far below production's 0.164. TOK_ACCUM splits the
+    # step into TOK_ACCUM forward passes of batch_size/(world x accum) each, so
+    # 512 with accum 4 on 4 GPUs is 32/GPU: exactly the per-GPU load the 128
+    # run already proved fits.
+    cfg.train.grad_accum_steps = int(os.environ.get("TOK_ACCUM", 1))
     cfg.optim.lr = float(os.environ.get("TOK_LR", cfg.optim.lr))
     cfg.train.seed = int(os.environ.get("TOK_SEED", 42))
     cfg.optim.total_steps = int(os.environ.get("TOK_STEPS", 50000))
     cfg.train.checkpointing.interval.every_steps = int(os.environ.get("TOK_CKPT_EVERY", 25000))
+
+    # RESUME CADENCE. The smoke run measures ~0.5 optimiser steps/s, so the
+    # 5,000-step default puts nearly three hours between last.pt writes -- and a
+    # chained link is killed at its wall limit, so that is up to three hours of
+    # compute thrown away at every link boundary, eight or nine times over.
+    # 1,000 steps is about half an hour; a 3.4 GB write that often costs
+    # seconds.
+    cfg.train.checkpointing.resume_interval.every_steps = int(
+        os.environ.get("TOK_RESUME_EVERY", 1000))
     cfg.train.checkpointing.interval.keep_last = None
 
     g = type(cfg.train.checkpointing)()

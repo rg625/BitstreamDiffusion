@@ -260,6 +260,7 @@ class GSM8KTestDataset(Dataset):
         self.block_size = int(getattr(d, "sequence_len_tokens", 512))
         self.bits_per_token = int(getattr(d, "bits_per_token", 16))
         self.tokenizer_name = str(getattr(d, "tokenizer_name", DEFAULT_TOKENIZER))
+        self.representation = str(getattr(d, "representation", "binary")).lower()
         path = str(getattr(d, "gsm8k_test_path", "datasets/gsm8k/gsm8k_test.json"))
         self.records = json.loads(Path(path).read_text())
 
@@ -280,8 +281,20 @@ class GSM8KTestDataset(Dataset):
             plen = self.block_size
         ids = prompt + [self.pad] * (self.block_size - plen)
         ids_t = torch.tensor(ids, dtype=torch.long)
-        bits = token_ids_to_bits(ids_t, self.bits_per_token)
         prefix_tok = torch.arange(self.block_size) < plen
+        if getattr(self, "representation", "binary") == "tokens":
+            # Token-space model: condition on TOKEN IDS with a token-level mask,
+            # mirroring TinyGSMDataset. Handing it bits would evaluate the model
+            # on a representation it was never trained on.
+            return {
+                "x0": ids_t,
+                "prefix_mask": prefix_tok,
+                "prompt_len_tokens": plen,
+                "idx": idx,
+                "prompt": rec["prompt"],
+                "response_ground_truth": rec["response_ground_truth"],
+            }
+        bits = token_ids_to_bits(ids_t, self.bits_per_token)
         prefix_bits = token_mask_to_bit_mask(prefix_tok, self.bits_per_token).bool()
         return {
             "x0": bits,

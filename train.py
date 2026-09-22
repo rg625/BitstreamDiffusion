@@ -9,6 +9,42 @@ import torch.distributed as dist
 from ml_collections import config_dict
 from trainers import Trainer
 import datetime
+import faulthandler
+import signal
+
+
+def _install_stack_dumper():
+    """Dump every thread's Python stack on SIGUSR1 (and on a hard crash).
+
+    The epoch-boundary deadlock shows up as ranks 1-3 waiting in a scalar
+    ALLREDUCE while rank 0 is three collectives ahead in a gradient bucket
+    all-reduce.  The NCCL watchdog names the op but not the Python line that
+    issued it, and each occurrence costs hours of queue time, so the stall
+    watchdog in the launcher signals every rank before the process group times
+    out and we get the issuing frame for free.  Costs nothing when unused.
+    """
+    faulthandler.enable()
+    rank = os.environ.get("RANK", "0")
+    job = os.environ.get("SLURM_JOB_ID", "local")
+    out_dir = Path(os.environ.get("COBIT_STACK_DIR", "logs/arch"))
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Kept open for the process lifetime: faulthandler writes to the fd.
+        fh = open(out_dir / f"stack_{job}_rank{rank}.txt", "a", buffering=1)
+        faulthandler.register(signal.SIGUSR1, file=fh, all_threads=True, chain=False)
+        # Publish our pid so the stall watchdog signals THIS process and nothing
+        # else. Guessing from the process tree is not safe: SIGUSR1 terminates a
+        # process that has no handler, and the launcher's command line contains
+        # "train.py" too, so a cmdline match killed the torchrun agent (rc=138)
+        # and captured nothing. Only a process that has reached this line can be
+        # signalled safely, and reaching this line is what writes the file.
+        (out_dir / f"pid_{job}_rank{rank}.txt").write_text(str(os.getpid()))
+    except Exception as e:  # never let diagnostics break training
+        print(f"[stackdump] WARN: could not install SIGUSR1 handler ({e})")
+
+
+_install_stack_dumper()
+
 
 def _is_distributed():
     """Check if we are running under torchrun."""

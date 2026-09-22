@@ -39,17 +39,38 @@ export COBIT_PYTHON="${COBIT_PYTHON:-/home/rg625/miniforge3/envs/sedd310/bin/pyt
 source "$PROJECT_DIR/scripts/hpc/guidance/env.sh"
 cd "$PROJECT_DIR"; mkdir -p logs/arch results/ordering/train_eval
 
-EV_RUN="${EV_RUN:?set EV_RUN=<run dir name under runs/tasks/tinygsm>}"
+EV_RUN="${EV_RUN:?set EV_RUN=<label for this arm; also the run dir unless EV_CK_PATH is set>}"
 EV_MODE="${EV_MODE:?set EV_MODE=none|l2r|r2l|random}"
 EV_W="${EV_W:?set EV_W}"
 EV_CKPT="${EV_CKPT:-last.pt}"
 EV_STEPS="${EV_STEPS:-256}"
 EV_LIMIT="${EV_LIMIT:-1319}"
-CK="runs/tasks/tinygsm/${EV_RUN}/checkpoints/${EV_CKPT}"
+# EV_CK_PATH evaluates a checkpoint outside runs/tasks/tinygsm -- specifically
+# the production anchor, which every batch must include. A sampler bug once
+# returned probabilities from sigma_{N-1} instead of a final denoise and scored
+# 0.000 against a true 0.164; it was caught only because an anchor was in the
+# batch. Without one, seven cells of confidently-wrong nulls would have shipped.
+CK="${EV_CK_PATH:-runs/tasks/tinygsm/${EV_RUN}/checkpoints/${EV_CKPT}}"
 [ -f "$CK" ] || { echo "[ev] FATAL: missing $CK" >&2; exit 1; }
 
+# Take the step from the checkpoint itself, never from the file name: with
+# EV_CKPT=last.pt the old tag stripped non-digits from "last.pt" and got the
+# empty string, so two evaluations of the same run at different steps wrote to
+# the same file and the first was silently overwritten.
+EV_STEP=$("$COBIT_PYTHON" - "$CK" <<'PYEOF'
+import sys, torch
+try:
+    d = torch.load(sys.argv[1], map_location="cpu", mmap=True, weights_only=False)
+    print(f"{int(d.get('global_step', -1)):09d}")
+except Exception:
+    print("unknown")
+PYEOF
+)
+[ "$EV_STEP" = "unknown" ] && { echo "[ev] FATAL: could not read global_step from $CK" >&2; exit 1; }
+
 echo "[ev] commit $(git rev-parse --short HEAD) | python $($COBIT_PYTHON -V 2>&1)"
-echo "[ev] run=$EV_RUN ckpt=$EV_CKPT train_mode=$EV_MODE w=$EV_W"
+echo "[ev] run=$EV_RUN ckpt=$CK step=$EV_STEP train_mode=$EV_MODE w=$EV_W"
+echo "[ev] schedule=karras steps=$EV_STEPS limit=$EV_LIMIT seeds=0,1,2"
 
 run_one () {   # $1=order_mode $2=order_w $3=seed $4=label
   "$COBIT_PYTHON" evaluation/tasks/gsm8k_eval.py \
@@ -58,12 +79,18 @@ run_one () {   # $1=order_mode $2=order_w $3=seed $4=label
     --order_w "$2" --order_mode "$1" --order_seed $((1234 + $3)) \
     --steps "$EV_STEPS" --limit "$EV_LIMIT" --seed "$3" \
     --out_dir results/ordering/train_eval \
-    --regime ordering_train --tag "${EV_RUN}__ck${EV_CKPT//[^0-9]/}__${4}__s${3}" \
+    --regime ordering_train --tag "${EV_RUN}__ck${EV_STEP}__${4}__s${3}" \
     || echo "[ev] FAILED ${EV_RUN} ${4} seed $3"
 }
 
 for s in 0 1 2; do
-  run_one "$EV_MODE" "$EV_W" "$s" "matched"      # (a)
-  run_one none 0.0 "$s" "uniform"                # (b)
+  if [ "$EV_MODE" = "none" ] || [ "$EV_W" = "0" ] || [ "$EV_W" = "0.0" ]; then
+    # For the control, "decoded as trained" IS uniform decoding -- running both
+    # would evaluate the identical cell twice and double the GPU cost.
+    run_one none 0.0 "$s" "uniform"
+  else
+    run_one "$EV_MODE" "$EV_W" "$s" "matched"    # (a)
+    run_one none 0.0 "$s" "uniform"              # (b)
+  fi
 done
 echo "[ev] finished $(date)"

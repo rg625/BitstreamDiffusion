@@ -567,6 +567,26 @@ def _sample_cond_len_positions_per_example_discrete(cfg, B: int, seq_len_positio
     cL = units * int(pos_per_tok)
     return torch.clamp(cL, min=0, max=int(seq_len_positions)).to(torch.long)
 
+def _micro_batch_size(effective_batch: int, world_size: int, accum_steps: int) -> int:
+    """Examples per GPU per forward pass.
+
+    `effective_batch` is the number of examples behind ONE optimiser step -- the
+    number that has to match across arms for a comparison to mean anything.
+    Accumulation splits that work into more, smaller forward passes; it does not
+    change the number itself. Raises rather than rounding, because a silently
+    rounded batch would make an arm quietly incomparable.
+    """
+    denom = int(world_size) * int(accum_steps)
+    if denom <= 0:
+        raise ValueError(f"world_size x accum_steps must be positive, got {denom}")
+    if int(effective_batch) % denom != 0:
+        raise ValueError(
+            f"Effective batch_size ({effective_batch}) must be divisible by "
+            f"world_size x grad_accum_steps ({world_size} x {accum_steps} = {denom})"
+        )
+    return int(effective_batch) // denom
+
+
 def _dataloader_kwargs(cfg) -> dict:
     """
     DataLoader kwargs with version-safe handling of prefetch_factor and persistent_workers.
@@ -822,16 +842,35 @@ class Trainer:
         self._interval_ckpt_paths: List[str] = []
 
 
+        # ── gradient accumulation ───────────────────────────────────────────
+        # The token-space model materialises a [B, 512, 49153] logits tensor and
+        # OOMs at 128 examples/GPU on an 80 GB A100 (it asked for 12 GiB with
+        # 3.44 GiB left), which forced the first V-way run down to an effective
+        # batch of 128 -- a quarter of the binary control's 512, so the two were
+        # matched to each other but measured well below the production operating
+        # point. Accumulation buys back the batch on the same four GPUs: 32/GPU
+        # x 4 GPUs x 4 accumulation steps is 512 examples per optimiser step at
+        # the per-GPU memory the 128-batch run already proved fits.
+        self.grad_accum_steps = max(1, int(getattr(cfg.train, "grad_accum_steps", 1) or 1))
+        if self.grad_accum_steps > 1 and cfg.framework != "continuous_score":
+            raise NotImplementedError(
+                "grad_accum_steps > 1 is implemented for continuous_score only")
+
         # ── data ────────────────────────────────────────────────────────────
         raw_train_loader, raw_val_loader, _ = get_dataloaders(cfg)
         dl_kw = _dataloader_kwargs(cfg)
 
         if self.ddp_active:
-            assert cfg.train.batch_size % self.world_size == 0, (
-                f"Global batch_size ({cfg.train.batch_size}) must be divisible by world_size "
-                f"({self.world_size}) for fixed-shape DDP training."
-            )
-            batch_size_per_gpu = cfg.train.batch_size // self.world_size
+            # cfg.train.batch_size is the EFFECTIVE global batch: the number of
+            # examples behind one optimiser step, and so the number that has to
+            # match across arms. Accumulation splits it over more, smaller
+            # forward passes; it does not change it.
+            batch_size_per_gpu = _micro_batch_size(
+                cfg.train.batch_size, self.world_size, self.grad_accum_steps)
+            if self.is_master and self.grad_accum_steps > 1:
+                print(f"[accum] effective batch {cfg.train.batch_size} = "
+                      f"{batch_size_per_gpu}/GPU x {self.world_size} GPUs x "
+                      f"{self.grad_accum_steps} accumulation steps")
 
             train_sampler = DistributedSampler(
                 raw_train_loader.dataset,
@@ -867,7 +906,8 @@ class Trainer:
         else:
             self.train_loader = torch.utils.data.DataLoader(
                 raw_train_loader.dataset,
-                batch_size=cfg.train.batch_size,
+                batch_size=_micro_batch_size(
+                    cfg.train.batch_size, 1, self.grad_accum_steps),
                 shuffle=True,
                 drop_last=True,
                 **dl_kw,
@@ -1435,7 +1475,9 @@ class Trainer:
     # -----------------------------------------------------------------------------
     # Trainer method: full step_continuous
     # -----------------------------------------------------------------------------
-    def _step_continuous(self, x0, is_train: bool, batch_prefix_mask=None):
+    def _step_continuous(self, x0, is_train: bool, batch_prefix_mask=None,
+                         accum_first: bool = True, accum_last: bool = True,
+                         accum_scale: float = 1.0):
         """
         Continuous score training step with optional CFG-style prefix conditioning.
 
@@ -1706,28 +1748,54 @@ class Trainer:
         # Optim step
         # ------------------------------------------------------------------
         if is_train:
-            self.opt.zero_grad(set_to_none=True)
+            # GRADIENT ACCUMULATION.
+            # accum_first/accum_last/accum_scale are all defaults (True/True/1.0)
+            # when cfg.train.grad_accum_steps == 1, so every existing run is
+            # bit-identical to before: zero_grad, one backward, one step.
+            #
+            # With accumulation the micro-batch loss is scaled by 1/accum before
+            # backward, so the accumulated gradient is the mean over the FULL
+            # effective batch, not the sum -- the same quantity a single large
+            # batch would produce. Clipping, the optimiser step, the LR schedule
+            # and the EMA update all happen once per effective batch.
+            #
+            # DDP's all-reduce is deliberately NOT suppressed with no_sync() on
+            # the non-final micro-batches. Autograd accumulates into .grad before
+            # DDP's hook fires, so each micro-backward all-reduces the running
+            # accumulated gradient; averaging an already-averaged value across
+            # ranks is idempotent and the result is identical. That costs
+            # (accum-1) extra all-reduces per step -- a few percent inside one
+            # NVLink node -- and buys correctness that does not depend on
+            # no_sync() interacting correctly with torch.compile's DDPOptimizer,
+            # which splits the backward graph and is exactly the kind of
+            # never-exercised path that has bitten this project before.
+            if accum_first:
+                self.opt.zero_grad(set_to_none=True)
             gnorm = None
+            loss_for_backward = loss * accum_scale if accum_scale != 1.0 else loss
 
             if self.use_scaler:
-                self.scaler.scale(loss).backward()
-                if self.grad_clip > 0:
-                    self.scaler.unscale_(self.opt)
-                    gnorm = torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.grad_clip)
-                self.scaler.step(self.opt)
-                self.scaler.update()
+                self.scaler.scale(loss_for_backward).backward()
+                if accum_last:
+                    if self.grad_clip > 0:
+                        self.scaler.unscale_(self.opt)
+                        gnorm = torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.grad_clip)
+                    self.scaler.step(self.opt)
+                    self.scaler.update()
             else:
-                loss.backward()
-                if self.grad_clip > 0:
-                    gnorm = torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.grad_clip)
-                self.opt.step()
+                loss_for_backward.backward()
+                if accum_last:
+                    if self.grad_clip > 0:
+                        gnorm = torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.grad_clip)
+                    self.opt.step()
 
-            self.lr_sched.step()
-            self.ema.update(self.model)
-            self._last_grad_norm = (float(gnorm) if gnorm is not None else None)
-            self._log_optim_diagnostics(gnorm)
+            if accum_last:
+                self.lr_sched.step()
+                self.ema.update(self.model)
+                self._last_grad_norm = (float(gnorm) if gnorm is not None else None)
+                self._log_optim_diagnostics(gnorm)
 
         # ------------------------------------------------------------------
         # Entropy buffer update
@@ -1742,7 +1810,16 @@ class Trainer:
 
         return loss.item()
 
-    def _step_discrete(self, x0, is_train: bool, batch_prefix_mask=None):
+    def _step_discrete(self, x0, is_train: bool, batch_prefix_mask=None,
+                       accum_first: bool = True, accum_last: bool = True,
+                       accum_scale: float = 1.0):
+        # Interface parity with _step_continuous. Gradient accumulation is
+        # implemented for the continuous-score framework only (that is where the
+        # token-space V-way head needs it); fail loudly rather than silently
+        # ignoring accum and training at a quarter of the intended batch.
+        if not (accum_first and accum_last and accum_scale == 1.0):
+            raise NotImplementedError(
+                "grad_accum_steps > 1 is not implemented for the discrete framework")
         # batch_prefix_mask is accepted for interface parity with _step_continuous.
         # The task experiments use the continuous-score framework; discrete
         # conditioning still flows through the config-derived path below.
@@ -2268,6 +2345,21 @@ class Trainer:
         target_total_steps = int(getattr(self.cfg.optim, "total_steps", 0))
         stop_training = False
 
+        # DEBUG KNOB: cap the number of batches per epoch.
+        # The epoch-boundary deadlock is deterministic -- every arm hangs at the
+        # same collective index, one epoch (22,858 steps ~ 4 h) after a fresh
+        # start -- so reproducing it normally costs a 4 h job plus queue time.
+        # Capping the epoch makes the boundary arrive in minutes WITHOUT
+        # changing it: the cap is a batch count, identical on every rank, so the
+        # ranks stay in lockstep exactly as they do at a natural boundary.
+        # Unset (0) in every production run; set only by the repro launcher.
+        epoch_batch_limit = int(
+            os.environ.get("COBIT_STEPS_PER_EPOCH",
+                           getattr(self.cfg.train, "steps_per_epoch_limit", 0) or 0))
+        if epoch_batch_limit > 0 and self.is_master:
+            print(f"[debug] COBIT_STEPS_PER_EPOCH={epoch_batch_limit}: epochs are "
+                  f"truncated to {epoch_batch_limit} batches (deadlock repro only)")
+
         try:
             for epoch in range(self.start_epoch, self.cfg.train.epochs):
                 # Critical for DDP: shuffle data differently each epoch
@@ -2286,6 +2378,13 @@ class Trainer:
                     disable=not self.is_master,
                 )
 
+                # Micro-batch bookkeeping for gradient accumulation. With
+                # grad_accum_steps == 1 this reduces to the original loop:
+                # every batch is both the first and the last of its group.
+                accum = self.grad_accum_steps
+                micro_idx = 0
+                micro_loss_sum = 0.0
+
                 for batch in pbar:
                     # Safety guard in case we resumed exactly at target_total_steps
                     if target_total_steps > 0 and self.global_step >= target_total_steps:
@@ -2296,7 +2395,24 @@ class Trainer:
                         torch.compiler.cudagraph_mark_step_begin()
 
                     x0, batch_prefix_mask = self._unpack_batch(batch)
-                    loss = step_fn(x0, is_train=True, batch_prefix_mask=batch_prefix_mask)
+                    is_last_micro = (micro_idx + 1) >= accum
+                    micro_loss = step_fn(
+                        x0, is_train=True, batch_prefix_mask=batch_prefix_mask,
+                        accum_first=(micro_idx == 0), accum_last=is_last_micro,
+                        accum_scale=(1.0 / accum),
+                    )
+                    micro_loss_sum += micro_loss
+                    micro_idx += 1
+
+                    # Nothing below this line may run on a partial batch: the
+                    # optimiser has not stepped, so global_step must not move
+                    # and no checkpoint may be written mid-accumulation.
+                    if not is_last_micro:
+                        continue
+
+                    loss = micro_loss_sum / accum
+                    micro_idx = 0
+                    micro_loss_sum = 0.0
 
                     self.global_step += 1
                     train_loss += loss
@@ -2346,6 +2462,10 @@ class Trainer:
 
                     if target_total_steps > 0 and self.global_step >= target_total_steps:
                         stop_training = True
+                        break
+
+                    # Deterministic on every rank: same count, same break point.
+                    if epoch_batch_limit > 0 and num_train_batches >= epoch_batch_limit:
                         break
 
                 # If we did not process any batch in this epoch, stop cleanly

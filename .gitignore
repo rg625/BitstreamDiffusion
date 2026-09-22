@@ -83,3 +83,15 @@ scripts/_fkc_cfg_2d_out/
 
 # Guidance analysis: per-step diagnostics are ~19 MB and regenerate from runs/
 results/guidance/per_step.csv
+
+# Production-era checkpoints, 18 GB. They are data, not source: the anchor
+# travels with the checkpoint bundle (scripts/site/transfer_manifest.txt),
+# never through git.
+tinigsm_gsm8k/
+
+# Stray LaTeX build artefacts at the repo root; the real ones live in
+# docs/report_meeting/.
+/report.aux
+/report.log
+/report.out
+/report.pdf

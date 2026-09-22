@@ -19,6 +19,10 @@ from pathlib import Path
 
 import numpy as np
 
+# The production 500k checkpoint, scoring 0.164 under karras/DDIM/256 steps.
+ANCHOR_RUN = "cobit_raw_binary_bits_cfg"
+ANCHOR_BAND = (0.12, 0.20)
+
 
 def load(path):
     d = json.loads(Path(path).read_text())
@@ -30,9 +34,17 @@ def load(path):
     # arm to the same truncated string and made the whole table unreadable.
     ck = str(d.get("checkpoint") or "")
     mrun = re.search(r"runs/tasks/tinygsm/([^/]+)/checkpoints/(.+)$", ck)
-    if not mrun:
-        return None
-    run, ckpt = mrun.group(1), mrun.group(2)
+    if mrun:
+        run, ckpt = mrun.group(1), mrun.group(2)
+    else:
+        # The production anchor does not live under runs/tasks/tinygsm, and the
+        # stricter pattern dropped it SILENTLY -- which defeats the whole point
+        # of including an anchor. Fall back to the directory that holds the
+        # checkpoints.
+        mrun = re.search(r"([^/]+)/checkpoints/(.+)$", ck)
+        if not mrun:
+            return None
+        run, ckpt = mrun.group(1), mrun.group(2)
     decode = "uniform" if float(d.get("order_w") or 0.0) == 0.0 else "matched"
     if "__uniform__" in Path(path).stem:
         decode = "uniform"
@@ -103,11 +115,41 @@ def main():
     for r in runs:
         by[(r["run"], r["ckpt"], r["decode"])][r["seed"]] = r
 
+    # NB: keys are (run, ckpt, decode) triples; unpacking them as pairs raised
+    # ValueError whenever --control was omitted.
     ctrl_run = args.control or next(
-        (n for (n, dec) in by if "none" in n), None)
+        (n for (n, _ck, _dec) in by if "none" in n), None)
     if ctrl_run is None:
         print("[ord] no control arm found"); return
     print(f"[ord] control = {ctrl_run}\n")
+
+    # ---- known-good anchor -------------------------------------------------
+    # A sampler bug once returned probabilities from sigma_{N-1} instead of a
+    # final denoise and scored 0.000 against a true 0.164. It was caught only
+    # because a production checkpoint was in the batch. An anchor that is
+    # missing, or present but out of band, invalidates every other cell here,
+    # so say so loudly rather than printing a clean-looking table of nulls.
+    anchors = [r for r in runs if ANCHOR_RUN in r["run"]]
+    if not anchors:
+        print("!" * 72)
+        print(f"[ord] NO ANCHOR in {args.dir}: nothing here verifies the decode path.")
+        print(f"[ord] Expected a cell from a checkpoint under .../{ANCHOR_RUN}/.")
+        print(f"[ord] Treat every number below as unverified.")
+        print("!" * 72 + "\n")
+    else:
+        accs = [a["accuracy"] for a in anchors]
+        lo, hi = ANCHOR_BAND
+        ok = all(lo <= a <= hi for a in accs)
+        line = ", ".join(f"{a:.4f}" for a in accs)
+        print(f"[ord] anchor {ANCHOR_RUN}: {line} "
+              f"(expected {lo:.2f}-{hi:.2f}) -> {'OK' if ok else 'OUT OF BAND'}")
+        if not ok:
+            print("!" * 72)
+            print("[ord] The anchor is a KNOWN-GOOD checkpoint. Out of band means the")
+            print("[ord] decode path is broken, not that the anchor regressed. Fix that")
+            print("[ord] before reading anything below.")
+            print("!" * 72)
+        print()
 
     print(f"{'arm':26s} {'ckpt':>10s} {'decode':8s} {'seed':>4} {'acc':>7} {'delta':>8} "
           f"{'95% CI':>19} {'p':>7} {'T1':>5} {'T2':>5}")

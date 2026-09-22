@@ -359,6 +359,13 @@ def sample_bits(
     else:
         x, probs = out
         trace = None
+    # Token-space models return a categorical posterior [B,S,V]; the decoded
+    # unit is the argmax TOKEN, not a thresholded bit. Thresholding a V-way
+    # simplex at 0.5 would yield near-all-zeros and then fail downstream with
+    # "bit length 49153 not divisible by width 16".
+    if probs.dim() == 3:
+        out_ids = probs.float().argmax(dim=-1).long()          # [B,S] token ids
+        return (out_ids, trace) if collect_diagnostics else out_ids
     bits = (probs.float() >= 0.5).long()
     return (bits, trace) if collect_diagnostics else bits
 

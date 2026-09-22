@@ -80,6 +80,18 @@ def get_config():
     g.ring_steps = 4000
     cfg.train.divergence_guard = g
 
+    # EPOCH-BOUNDARY DEADLOCK MITIGATION.
+    # All four arms have hung on an ALLREDUCE at the start of an epoch, with a
+    # 120-minute process-group timeout already in force -- so it is a genuine
+    # desynchronisation, not a timeout that is merely too short. At each epoch
+    # end rank 0 writes best/epoch checkpoints (2-3.4 GB) to a 92%-full Lustre
+    # while the other ranks move on and block in a collective.
+    # Interval checkpoints (every 100k) and last.pt (every 5k) already cover
+    # resume and analysis, so the per-epoch saves are pure redundancy: drop
+    # them and the heavy rank-0 work at the boundary goes with them.
+    cfg.train.checkpointing.save_top_k = 0
+    cfg.train.entropy_plot_every_k_epochs = 100000   # effectively never
+
     cfg.train.objective_probe = type(cfg.train.checkpointing)()
     cfg.train.objective_probe.enabled = True
     cfg.train.objective_probe.every_steps = int(os.environ.get("ORD_PROBE_EVERY", 250))

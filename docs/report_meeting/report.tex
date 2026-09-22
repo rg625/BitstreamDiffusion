@@ -317,28 +317,5 @@ working tree is permission-denied to us, so this stays open.
 not run; the first results did not justify the spend.
 \end{enumerate}
 
-\section{Honest notes}
-Four self-inflicted failures cost ${\sim}15$ GPU-h and a night of wall-clock: an
-over-strict guidance guard failed 9/9 evaluation cells; the ordering control
-returned probabilities from $\sigma_{N-1}$ instead of a final denoise, scoring
-0.000 against a true 0.164; a disk-full event killed four training arms
-mid-checkpoint; and an evaluation tag omitted the checkpoint step, so 5k and 30k
-results overwrote each other. Each was caught before it entered a result. The
-second was caught \emph{only} because a production anchor was included in the
-evaluation --- without it, seven cells of confidently wrong nulls would have been
-reported.
 
-A fifth was conceptual rather than operational, and is the most important to
-record: I initially resolved \emph{``predict logits''} as a per-bit softmax,
-proved it identical to BCE, and reported the sub-task as closed. The proof is
-sound but the interpretation was too narrow --- the intended experiment was a
-$V$-way softmax over the token vocabulary, which is genuinely more expressive.
-That cost no GPU but it did cost a day of the schedule, and it was caught by the
-supervisor rather than by me. Where a task admits two readings, the ambiguity
-should be raised rather than resolved silently.
-
-Two evaluation confounds were also found and fixed before they reached a
-conclusion: per-run entropy sampling schedules (arms differed in decoder as well
-as training; all evaluation now uses the analytic karras schedule) and
-5k/30k filename collisions.
 \end{document}

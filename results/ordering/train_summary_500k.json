@@ -1,0 +1,128 @@
+[
+  {
+    "run": "cobit_raw_binary_bits_cfg",
+    "ckpt": "last.pt",
+    "decode": "uniform",
+    "seed": 0,
+    "n": 1319,
+    "accuracy": 0.13191811978771797,
+    "control_accuracy": 0.12661106899166036,
+    "delta": 0.005307050796057616,
+    "ci95": [
+      -0.012888551933282782,
+      0.022744503411675512
+    ],
+    "p": 0.5896,
+    "significant": false,
+    "T1": 918,
+    "T2": 227,
+    "T3": 100,
+    "invalid_token_rate": 8.46123906384851e-06,
+    "samples_per_sec": 2.279835521053644
+  },
+  {
+    "run": "cobit_raw_binary_bits_cfg",
+    "ckpt": "last.pt",
+    "decode": "uniform",
+    "seed": 1,
+    "n": 1319,
+    "accuracy": 0.14101592115238817,
+    "control_accuracy": 0.13419257012888552,
+    "delta": 0.0068233510235026495,
+    "ci95": [
+      -0.01137225170583775,
+      0.02501895375284305
+    ],
+    "p": 0.4904,
+    "significant": false,
+    "T1": 905,
+    "T2": 228,
+    "T3": 100,
+    "invalid_token_rate": 1.3537982502157615e-05,
+    "samples_per_sec": 2.291746923513481
+  },
+  {
+    "run": "ord_fs500k_l2r_w0.25_s42",
+    "ckpt": "last.pt",
+    "decode": "matched",
+    "seed": 0,
+    "n": 1319,
+    "accuracy": 0.12130401819560273,
+    "control_accuracy": 0.12661106899166036,
+    "delta": -0.00530705079605763,
+    "ci95": [
+      -0.021986353297952996,
+      0.012130401819560266
+    ],
+    "p": 0.5786,
+    "significant": false,
+    "T1": 950,
+    "T2": 209,
+    "T3": 100,
+    "invalid_token_rate": 1.5230230314927318e-05,
+    "samples_per_sec": 2.1591186546432435
+  },
+  {
+    "run": "ord_fs500k_l2r_w0.25_s42",
+    "ckpt": "last.pt",
+    "decode": "matched",
+    "seed": 1,
+    "n": 1319,
+    "accuracy": 0.12357846853677028,
+    "control_accuracy": 0.13419257012888552,
+    "delta": -0.010614101592115247,
+    "ci95": [
+      -0.02805155420773313,
+      0.006065200909780147
+    ],
+    "p": 0.2402,
+    "significant": false,
+    "T1": 946,
+    "T2": 210,
+    "T3": 100,
+    "invalid_token_rate": 1.0153486876618213e-05,
+    "samples_per_sec": 2.2877827944003237
+  },
+  {
+    "run": "ord_fs500k_l2r_w0.25_s42",
+    "ckpt": "last.pt",
+    "decode": "uniform",
+    "seed": 0,
+    "n": 1319,
+    "accuracy": 0.03866565579984837,
+    "control_accuracy": 0.12661106899166036,
+    "delta": -0.08794541319181198,
+    "ci95": [
+      -0.1068991660348749,
+      -0.06974981046247157
+    ],
+    "p": 0.0,
+    "significant": true,
+    "T1": 1182,
+    "T2": 86,
+    "T3": 100,
+    "invalid_token_rate": 1.861472594046672e-05,
+    "samples_per_sec": 2.289486867331624
+  },
+  {
+    "run": "ord_fs500k_l2r_w0.25_s42",
+    "ckpt": "last.pt",
+    "decode": "uniform",
+    "seed": 1,
+    "n": 1319,
+    "accuracy": 0.04245640636846096,
+    "control_accuracy": 0.13419257012888552,
+    "delta": -0.09173616376042457,
+    "ci95": [
+      -0.10993176648976496,
+      -0.07354056103108417
+    ],
+    "p": 0.0,
+    "significant": true,
+    "T1": 1179,
+    "T2": 84,
+    "T3": 100,
+    "invalid_token_rate": 1.1845734689387914e-05,
+    "samples_per_sec": 2.287266887273553
+  }
+]

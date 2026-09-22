@@ -37,6 +37,16 @@ export ORD_SEED="${ORD_SEED:-42}"
 export ORD_TAG="${ORD_TAG:-ft}"
 CFG="configs/tasks/tinygsm_bits_ordering.py"
 
+# Epoch-boundary deadlock instrumentation (see deadlock_debug.sh). Free unless
+# the run stalls; with the flight recorder on, a short PG timeout is preferable
+# to a long one -- 120 min was tried and the hang is a collective MISMATCH, not
+# a slow collective, so waiting longer only burns the rest of the wall clock.
+source "$PROJECT_DIR/scripts/hpc/arch/deadlock_debug.sh"
+export DDP_TIMEOUT_MIN="${DDP_TIMEOUT_MIN:-20}"
+enable_nccl_flight_recorder "$PROJECT_DIR/logs/arch"
+start_stall_watchdog "$PROJECT_DIR/logs/arch/${SLURM_JOB_NAME:-cobit_ordtrain}_${SLURM_JOB_ID:-local}.log" "${STALL_MIN:-15}"
+trap stop_stall_watchdog EXIT
+
 echo "[ord] commit $(git rev-parse --short HEAD)"
 echo "[ord] python $($COBIT_PYTHON -V 2>&1)"
 echo "[ord] mode=$ORD_MODE w=$ORD_W steps=$ORD_STEPS seed=$ORD_SEED"

@@ -373,6 +373,25 @@ def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir, out_di
     print(f"saved -> {out_path}")
 
 
+def _answer_to_str(pred):
+    """Stringify a program's answer without letting one absurd value kill the run.
+
+    A generated program is free to return something like 10**999999, and since
+    Python 3.10.7 int->str raises above 4,300 digits. That took down the control
+    at seed 2 after 768 of 1,319 problems -- discarding the whole cell for one
+    bad generation, which is the expensive way to be strict. Such an answer is
+    certainly wrong for GSM8K, where the targets are small integers, so record
+    it as an unparseable answer (T1) and carry on: correctness is decided
+    numerically elsewhere and is unaffected.
+    """
+    if pred is None:
+        return None
+    try:
+        return str(pred)
+    except ValueError:
+        return "<overflow>"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
@@ -632,6 +651,7 @@ def main():
     ds = GSM8KTestDataset(cfg)
     tok = ds.tok
     bpt = ds.bits_per_token
+    n_tok_positions = int(getattr(cfg.data, "sequence_len_tokens", 512))
     tok_len = len(tok)
     n = len(ds) if args.limit is None else min(args.limit, len(ds))
 
@@ -695,7 +715,9 @@ def main():
                 guidance_traces.append([{k: v for k, v in rec.items() if k != "_rows"}
                                         for rec in trace])
         batch_secs.append(time.time() - t_batch)
-        gen_ids = bits_to_token_ids(bits, bpt)  # [B,512]
+        # Token-space runs already come back as token ids [B,S]; only the
+        # bitstream representation needs unpacking.
+        gen_ids = bits if bits.shape[-1] == n_tok_positions else bits_to_token_ids(bits, bpt)
 
         for b, gi in enumerate(idxs):
             ids_row = gen_ids[b].tolist()
@@ -733,7 +755,7 @@ def main():
             # future run comparable against multi-sample baselines offline,
             # with no extra sampling. `predict_answer` returns None when the
             # program does not run or returns nothing.
-            per_problem_answer.append(None if _pred is None else str(_pred))
+            per_problem_answer.append(_answer_to_str(_pred))
             if len(records) < 100:
                 records.append({
                     "idx": gi,
