@@ -89,3 +89,27 @@ def test_transfer_manifest_carries_sigma_data_with_every_checkpoint():
     n_sigma = body.count("sigma_data.json")
     assert n_ckpt >= 6
     assert n_sigma >= n_ckpt, f"{n_ckpt} checkpoints but only {n_sigma} sigma_data entries"
+
+
+def test_manifest_carries_every_published_result_checkpoint():
+    """A checkpoint behind a number in docs/ cannot be regenerated without
+    retraining, so it travels even though nothing resumes from it.
+
+    The first manifest carried 10 of 206 .pt files and silently omitted the
+    V-way token run that measured 0.0255, its matched binary control at 0.0493,
+    and both arms of the SM-vs-CE negative.
+    """
+    body = (REPO / "scripts" / "site" / "transfer.sh").read_text()
+    for run in ("tok_fs500k_token_ce_s42",            # 0.0255, the V-way result
+                "obj_binary_sm_fs500k_b128_s42",      # 0.0493, its control
+                "obj_binary_sm_fs50k_s42",            # SM arm of the CE/SM negative
+                "obj_binary_ce_fs50k_s42"):           # CE arm
+        assert f"{run}/checkpoints/last.pt" in body, f"{run} is not in the manifest"
+
+
+def test_interval_checkpoints_are_opt_in():
+    """42 GB that only an accuracy-vs-step curve needs; nothing measured so far
+    depends on them."""
+    body = (REPO / "scripts" / "site" / "transfer.sh").read_text()
+    assert "--with-intervals" in body
+    assert 'WITH_INTERVALS:-0' in body, "must default to off"

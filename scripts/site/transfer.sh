@@ -19,6 +19,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dest) DEST="$2"; shift 2 ;;
     --go)   GO=1; shift ;;
+    --with-intervals) WITH_INTERVALS=1; shift ;;
     *) echo "unknown arg $1" >&2; exit 1 ;;
   esac
 done
@@ -63,8 +64,48 @@ ITEMS=(
   "runs/tasks/tinygsm/ord_fs500k_random_w0.25_s42/sigma_data.json"
   "runs/tasks/tinygsm/tok_b512_token_ce_s42/checkpoints/last.pt"
   "runs/tasks/tinygsm/tok_b512_token_ce_s42/sigma_data.json"
+  # PUBLISHED RESULTS. Each of these IS a finding in docs/: the V-way token run
+  # that measured 0.0255, its matched binary control at 0.0493, and the two 50k
+  # arms behind the SM-vs-CE definitive negative. None can be recovered without
+  # retraining, so they travel even though nothing resumes from them.
+  "runs/tasks/tinygsm/tok_fs500k_token_ce_s42/checkpoints/last.pt"
+  "runs/tasks/tinygsm/tok_fs500k_token_ce_s42/sigma_data.json"
+  "runs/tasks/tinygsm/obj_binary_sm_fs500k_b128_s42/checkpoints/last.pt"
+  "runs/tasks/tinygsm/obj_binary_sm_fs500k_b128_s42/sigma_data.json"
+  "runs/tasks/tinygsm/obj_binary_sm_fs50k_s42/checkpoints/last.pt"
+  "runs/tasks/tinygsm/obj_binary_sm_fs50k_s42/sigma_data.json"
+  "runs/tasks/tinygsm/obj_binary_ce_fs50k_s42/checkpoints/last.pt"
+  "runs/tasks/tinygsm/obj_binary_ce_fs50k_s42/sigma_data.json"
   "results"
 )
+
+# Per-run entropy tables: a few KB each, and the only way to reproduce a result
+# that was measured with --schedule entropic rather than karras. Free to carry,
+# impossible to regenerate without the run that fitted them.
+for _r in tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg \
+          runs/tasks/tinygsm/ord_fs500k_none_s42 \
+          runs/tasks/tinygsm/ord_fs500k_l2r_w0.25_s42 \
+          runs/tasks/tinygsm/ord_fs500k_r2l_w0.25_s42 \
+          runs/tasks/tinygsm/ord_fs500k_random_w0.25_s42 \
+          runs/tasks/tinygsm/tok_b512_token_ce_s42 \
+          runs/tasks/tinygsm/tok_fs500k_token_ce_s42 \
+          runs/tasks/tinygsm/obj_binary_sm_fs500k_b128_s42 \
+          runs/tasks/tinygsm/obj_binary_sm_fs50k_s42 \
+          runs/tasks/tinygsm/obj_binary_ce_fs50k_s42; do
+  for _e in entropy_cdf entropy_pdf entropy_edges entropy_sigmas; do
+    [ -f "$_r/$_e.pt" ] && ITEMS+=("$_r/$_e.pt")
+  done
+  [ -f "$_r/config.json" ] && ITEMS+=("$_r/config.json")
+done
+
+# --with-intervals adds the step=NNN.pt trajectory for the four ordering arms
+# and the anchor: 42 GB, and only needed for an accuracy-vs-step curve. Skipped
+# by default because nothing currently measured depends on it.
+if [ "${WITH_INTERVALS:-0}" = "1" ]; then
+  while IFS= read -r _f; do ITEMS+=("$_f"); done < <(
+    ls runs/tasks/tinygsm/ord_fs500k_*/checkpoints/step=*.pt \
+       tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg/checkpoints/step=*.pt 2>/dev/null)
+fi
 
 MANIFEST="scripts/site/transfer_manifest.txt"
 : > "$MANIFEST"
