@@ -85,40 +85,56 @@ done
 echo
 printf "total: %.1f GB in %d items (%d missing)\n" "$(echo $total | awk '{print $1/1073741824}')" "${#ITEMS[@]}" "$missing"
 
-# PREFLIGHT. Reach the far side BEFORE hashing 10 GB of checkpoints: the first
-# attempt spent minutes on sha256 and then died on "Could not resolve hostname
-# login45", because an internal login-node name only resolves once you are
-# already inside that cluster.
+# PREFLIGHT. Reach the far side BEFORE hashing 24 GB: the first attempt spent
+# minutes on sha256 and then died on "Could not resolve hostname login45".
+#
+# Try SSH FIRST, not DNS. A destination may legitimately be an alias defined in
+# ~/.ssh/config with its own HostName, ProxyJump or ProxyCommand -- `getent
+# hosts` cannot see any of that, so a DNS-first check rejects a setup that
+# works. DNS is used only to explain a failure, never to gate one.
 if [ -n "$DEST" ]; then
-  host="${DEST%%:*}"; host="${host##*@}"
-  if ! getent hosts "$host" >/dev/null 2>&1; then
+  sshtarget="${DEST%%:*}"                       # user@host or an alias
+  host="${sshtarget##*@}"
+  if timeout 25 ssh -o BatchMode=yes -o ConnectTimeout=15 "$sshtarget" true >/dev/null 2>&1; then
+    echo "[transfer] preflight ok: $sshtarget reachable"
+  else
+    echo "[transfer] cannot reach: $sshtarget" >&2
+    if ssh -G "$host" 2>/dev/null | grep -qiE "^hostname ${host}$" && \
+       ! getent hosts "$host" >/dev/null 2>&1; then
+      cat >&2 <<MSG
+
+  "$host" is not in DNS and has no ~/.ssh/config entry, so ssh has nothing to
+  connect to. On Isambard-AI the portal gives you a config stanza to paste --
+  names like "login45" are ALIASES it defines, not public hostnames. Create
+  ~/.ssh/config (it does not exist on this node) with what the portal gives
+  you, then re-run this command unchanged:
+
+    Host login45
+        HostName   <what the portal says>
+        User       <your user.project.system.isambard name>
+        ProxyJump  <if the portal specifies one>
+        IdentityFile ~/.ssh/<the key you registered>
+
+MSG
+    else
+      cat >&2 <<MSG
+
+  The name resolves or is configured, but SSH did not connect. Usual causes:
+  the key is not registered with the site, the certificate has expired, or the
+  site does not accept inbound connections from here.
+
+MSG
+    fi
     cat >&2 <<MSG
-[transfer] cannot resolve host: $host
+  Either way, the PULL direction avoids all of it -- most sites allow outbound
+  but not inbound. Clone the repo on Isambard, then run THERE:
 
-  "$host" looks like a name that only resolves INSIDE the target cluster.
-  From here you need its public FQDN, which is in your grant email or the
-  site's access documentation -- it is not guessable and I will not guess it.
+    rsync -avhP --files-from=scripts/site/transfer_manifest.txt \\
+          ${USER}@login.hpc.cam.ac.uk:${PWD}/ ./
 
-  Once you have it, either:
-    (a) push from here:
-          bash scripts/site/transfer.sh --dest user@<fqdn>:/path --go
-    (b) or, if the target only allows outbound connections (common), PULL from
-        the far side -- run this ON the target:
-          rsync -avhP --files-from=transfer_manifest.txt \
-                $USER@login.hpc.cam.ac.uk:$PWD/ ./
-        (copy scripts/site/transfer_manifest.txt over first, or use
-         --files-from=- and paste the list)
 MSG
     exit 1
   fi
-  if ! timeout 20 ssh -o BatchMode=yes -o ConnectTimeout=10 \
-         "${DEST%%:*}" true >/dev/null 2>&1; then
-    echo "[transfer] $host resolves but SSH failed (key not registered, or the" >&2
-    echo "[transfer] site does not accept inbound connections). Try the pull" >&2
-    echo "[transfer] direction described above." >&2
-    exit 1
-  fi
-  echo "[transfer] preflight ok: $host reachable"
 fi
 
 # Checksums for the files where a truncated copy would cost a GPU-hour to
