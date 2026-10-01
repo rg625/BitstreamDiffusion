@@ -141,6 +141,23 @@ def _broadcast_sigma_data(cfg, device, ddp_active: bool) -> float:
     return val
 
 
+def _rank_seed(seed: int, rank: int, step: int = 0) -> int:
+    """Seed for one rank's training RNG streams (T3).
+
+    Distinct per (seed, rank, step) so that DDP ranks draw different noise,
+    sigma, CFG-drop and self-conditioning masks for their different shards.
+    Rank 0 at step 0 gets `seed` itself, so single-GPU runs are unchanged.
+    """
+    return (int(seed) + 1_000_003 * int(rank) + 7_919 * int(step)) % (2 ** 31 - 1)
+
+
+def _seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed % (2 ** 32))
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
 def _maybe_set_seed(cfg):
     """Set Python/NumPy/Torch seeds for reproducibility if cfg.train.seed is provided."""
     seed = getattr(cfg.train, "seed", None)
@@ -982,6 +999,11 @@ class Trainer:
         # ── opt / ema / amp ────────────────────────────────────────────────
         self.ema = EMA(self.model, decay=cfg.train.ema_decay)
         self.opt, self.lr_sched = get_optimizer_and_scheduler(self.model, cfg, 0)
+        # Weights are initialised from the shared seed (identical on every rank);
+        # from here on each rank gets its own stream (T3). Rank 0 keeps the base
+        # seed, so a single-GPU run is unchanged.
+        if getattr(cfg.train, "seed", None) is not None and self.world_size > 1:
+            _seed_everything(_rank_seed(int(cfg.train.seed), self.rank, 0))
 
         self.amp_enabled = bool(getattr(cfg.train, "use_fp16", False))
         amp_dtype_req = str(getattr(cfg.train, "amp_dtype", "auto")).lower()
@@ -1338,6 +1360,18 @@ class Trainer:
             if self.is_master:
                 print(f"⚠️  RNG state restore warning: {e}")
 
+    def _restore_rng_on_resume(self, state, step: int):
+        """Single process: restore the saved RNG state exactly. DDP: the
+        checkpoint holds rank 0's state only, and loading it into every rank
+        put all ranks on one stream (T3), so each rank is re-seeded from
+        (seed, rank, step) instead."""
+        if int(getattr(self, "world_size", 1)) <= 1:
+            if state is not None:
+                self._set_rng_state(state)
+            return
+        seed = getattr(self.cfg.train, "seed", None)
+        _seed_everything(_rank_seed(0 if seed is None else int(seed), int(self.rank), int(step)))
+
     def _load_checkpoint(self, path: Path):
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
         state_dict = ckpt["model"]
@@ -1366,8 +1400,7 @@ class Trainer:
             self.ema.load_state_dict(ckpt["ema"])
             self.ema.to(self.device)
 
-        if "rng_state" in ckpt and ckpt["rng_state"] is not None:
-            self._set_rng_state(ckpt["rng_state"])
+        self._restore_rng_on_resume(ckpt.get("rng_state"), int(ckpt.get("global_step", 0)))
 
         self.global_step = ckpt.get("global_step", 0)
         start_epoch = ckpt.get("epoch", -1) + 1
