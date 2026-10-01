@@ -170,6 +170,7 @@ class _StepStub:
     _log_objective_probe = Trainer._log_objective_probe
     _log_optim_diagnostics = Trainer._log_optim_diagnostics
     _apply_training_ordering = Trainer._apply_training_ordering
+    _window_ordering_enabled = Trainer._window_ordering_enabled
 
     def __init__(self, cfg):
         self.cfg = cfg

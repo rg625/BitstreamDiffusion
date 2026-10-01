@@ -93,7 +93,9 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
                            fkc_resample_entropy_frac=None,
                            order_w: float = 0.0,
                            order_mode: str = "l2r",
-                           order_seed=None):
+                           order_seed=None,
+                           order_k: float = float("inf"),
+                           noise_table=None):
     """Return (model, sampler). Applies EMA shadow weights if present.
 
     sampler_kind='ddim' (default) -> DDIMSampler, the CoBit 'ddim_entropic'
@@ -130,6 +132,13 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
         sampler = OrderedSampler(model, proc, cfg,
                                  order_w=order_w, order_mode=order_mode,
                                  order_seed=order_seed)
+    elif kind == "window":
+        # Window ordering over absolute token ranks, through the arm's frozen
+        # training noise CDF. k=inf is the uniform model on the F-quantile grid.
+        from diffusion.continuous.ordered_sampler import WindowSampler
+        sampler = WindowSampler(model, proc, cfg, order_k=order_k,
+                                order_mode=order_mode, order_seed=order_seed,
+                                noise_table=noise_table)
     elif kind in {"heun", "karras"}:
         sampler = HeunSampler(model, proc, cfg)
     elif kind in {"em", "euler_maruyama"}:

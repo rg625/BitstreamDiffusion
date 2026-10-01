@@ -1564,12 +1564,21 @@ class Trainer:
         # ------------------------------------------------------------------
         # Draw sigma
         # ------------------------------------------------------------------
-        sigma = self._draw_sigma(B)
-        # Keep the GLOBAL (per-example) sigma: the entropy schedule and the
-        # objective probe are about the trajectory's noise level, not about any
-        # one token's, so they must not see the per-position form.
-        sigma_global = sigma
-        sigma = self._apply_training_ordering(sigma, S, prefix_mask, is_cont_tokens)
+        window_keep = None
+        if self._window_ordering_enabled():
+            # Window ordering replaces the sigma draw itself (for EVERY arm,
+            # control included): tau ~ U(0,1] from a dedicated stream, then
+            # sigma_j = F^-1(t_j) through the frozen noise CDF. See
+            # _draw_window_sigma.
+            sigma, window_keep, sigma_global = self._draw_window_sigma(
+                B, S, prefix_mask, is_cont_tokens, is_train, accum_first)
+        else:
+            sigma = self._draw_sigma(B)
+            # Keep the GLOBAL (per-example) sigma: the entropy schedule and the
+            # objective probe are about the trajectory's noise level, not about
+            # any one token's, so they must not see the per-position form.
+            sigma_global = sigma
+            sigma = self._apply_training_ordering(sigma, S, prefix_mask, is_cont_tokens)
         # sigma is [B] today. Per-position sigma ([B,S], temporal ordering) needs
         # only the position axis kept and the trailing dims padded; the [B] path
         # below is byte-for-byte what it was.
@@ -1700,6 +1709,11 @@ class Trainer:
             loss_mask = None
             if suffix_only_loss and cond_enabled and (not noise_prefix):
                 loss_mask = (~prefix_mask).to(dtype=torch.float32)
+            if window_keep is not None:
+                # Resolved-context tokens (t_j = 0) carry no loss; at k = inf
+                # window_keep is the suffix mask and this changes nothing.
+                wk = window_keep.to(dtype=torch.float32)
+                loss_mask = wk if loss_mask is None else loss_mask * wk
 
             loss_target = x0_target if is_cont_tokens else x0_clean
 
@@ -1895,6 +1909,53 @@ class Trainer:
             self.ema.update(self.model)
 
         return loss.item()
+
+    def _window_ordering_enabled(self) -> bool:
+        cfg_o = getattr(self.cfg.train, "ordering", None)
+        return (cfg_o is not None and bool(getattr(cfg_o, "enabled", False))
+                and str(getattr(cfg_o, "kind", "w")) == "window")
+
+    def _draw_window_sigma(self, B, n_bits, prefix_mask, is_cont_tokens, is_train,
+                           accum_first):
+        """Window ordering: (sigma [B,n_bits], keep [B,n_bits], sigma_global [B]).
+
+        MATCHING ACROSS ARMS. tau and the random-order keys come from two
+        dedicated generators seeded from (seed, rank, optimiser step, micro-batch),
+        never from the global RNG. So for a given training seed every arm sees
+        the same data order, the same Gaussian noise and the same tau; arms at the
+        same k differ only in which token gets which of an identical multiset of
+        sigmas. Keyed to the step, the streams are also resume-exact.
+        """
+        if is_cont_tokens:
+            raise NotImplementedError("window ordering is implemented for binary bitstreams only")
+        from diffusion.continuous.ordering import NoiseCDF, training_window_sigma
+        cfg_o = self.cfg.train.ordering
+        if getattr(self, "_window_noise", None) is None:
+            self._window_noise = NoiseCDF.load(str(cfg_o.noise_table))
+            self._window_gen_tau = torch.Generator(device=self.device)
+            self._window_gen_key = torch.Generator(device=self.device)
+            self._window_micro = 0
+        # micro-batch index within the optimiser step; validation gets its own
+        # stream so evaluating never shifts the training draws
+        self._window_micro = 0 if accum_first else self._window_micro + 1
+        stream = 0 if is_train else 1
+        base = (int(self.cfg.train.seed) * 1_000_003 + int(self.rank) * 7_919
+                + int(self.global_step) * 64 + self._window_micro) * 2 + stream
+        self._window_gen_tau.manual_seed(base)
+        self._window_gen_key.manual_seed(base ^ 0x5DEECE66D)
+        # tau in (0, 1]: tau = 0 would put the whole sequence at the clean atom
+        tau = 1.0 - torch.rand(B, device=self.device, generator=self._window_gen_tau)
+        return training_window_sigma(
+            tau,
+            n_bits=int(n_bits),
+            bits_per_token=int(getattr(self.cfg.data, "bits_per_token", 16)),
+            mode=str(getattr(cfg_o, "mode", "none")),
+            k=float(getattr(cfg_o, "k", float("inf"))),
+            noise=self._window_noise,
+            prefix_mask=prefix_mask,
+            generator=self._window_gen_key,
+            loss_match_k=getattr(cfg_o, "loss_match_k", None),
+        )
 
     def _apply_training_ordering(self, sigma, n_bits, prefix_mask, is_cont_tokens):
         """[B] -> [B, n_bits] per-position sigma when temporal ordering is on.

@@ -145,6 +145,7 @@ def _provenance(args, cfg) -> dict:
         "sampler_kind": args.sampler_kind,
         "order_w": args.order_w, "order_mode": args.order_mode,
         "order_seed": args.order_seed,
+        "order_k": args.order_k, "noise_table": args.noise_table,
         "num_sampling_steps": int(args.steps or getattr(cfg.evaluation, "num_sampling_steps", 1024)),
         "seed": int(args.seed),
         "torch_version": torch.__version__,
@@ -316,6 +317,7 @@ def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir, out_di
         "sampler_kind": args.sampler_kind, "beta": args.beta, "num_particles": K,
         "order_w": args.order_w, "order_mode": args.order_mode,
         "order_seed": args.order_seed,
+        "order_k": args.order_k, "noise_table": args.noise_table,
         "steps": steps, "proposal": args.proposal, "churn_gamma": args.churn_gamma,
         "lambda_zero": args.lambda_zero, "lambda_profile": args.lambda_profile,
         "lambda_normalize": args.lambda_normalize,
@@ -406,8 +408,13 @@ def main():
                     help="Denoising priority over the SUFFIX. u=1 denoises first.")
     ap.add_argument("--order_seed", type=int, default=None,
                     help="Seed for --order_mode random; None = follow global seed.")
+    ap.add_argument("--order_k", type=float, default=float("inf"),
+                    help="Window width in tokens for --sampler_kind window "
+                         "(t_j = clip(tau(1+L/k) - r_j/k, 0, 1)); inf = uniform.")
+    ap.add_argument("--noise_table", default=None,
+                    help="Frozen training noise CDF for --sampler_kind window.")
     ap.add_argument("--sampler_kind", default="ddim",
-                    choices=["ddim", "heun", "em", "pc", "fkc_em", "ordered"],
+                    choices=["ddim", "heun", "em", "pc", "fkc_em", "ordered", "window"],
                     help="ddim = CoBit ddim_entropic headline path (EDM churn, capped at gamma<=sqrt(2)-1); "
                          "heun = 2nd-order ablation; em = Euler-Maruyama entropy-gated reverse SDE "
                          "(stochasticity via lambda_zero, NO churn cap -> exceed the EDM ceiling); "
@@ -619,6 +626,7 @@ def main():
     model, sampler = load_model_and_sampler(
         cfg, args.checkpoint, device, apply_ema=bool(args.ema), sampler_kind=args.sampler_kind,
         order_w=args.order_w, order_mode=args.order_mode, order_seed=args.order_seed,
+        order_k=args.order_k, noise_table=args.noise_table,
         lambda_zero=args.lambda_zero, lambda_profile=args.lambda_profile,
         lambda_normalize=args.lambda_normalize, guidance_mode=args.guidance_mode,
         em_step_gamma_cap=args.em_step_gamma_cap,
@@ -803,6 +811,7 @@ def main():
         "sampler_kind": args.sampler_kind,
         "order_w": args.order_w, "order_mode": args.order_mode,
         "order_seed": args.order_seed,
+        "order_k": args.order_k, "noise_table": args.noise_table,
         "lambda_zero": args.lambda_zero,
         "lambda_profile": args.lambda_profile,
         "lambda_normalize": args.lambda_normalize,

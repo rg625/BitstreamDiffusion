@@ -60,22 +60,8 @@ class OrderedSampler(DDIMSampler):
                 "OrderedSampler is binary-bitstream only; token-space ordering "
                 "would need its own per-position sigma expansion.")
 
-    @torch.no_grad()
-    def sample(self, num_samples, seq_len, *,
-               conditioning_prefix_full=None,
-               cond_prefix_mask=None,
-               num_steps=None,
-               schedule=None,
-               entropy_run_dir=None,
-               sigma_min_override=None,
-               sigma_max_override=None,
-               return_probs=False,
-               guidance_scale=None,
-               guidance=None,
-               bad_model=None,
-               collect_diagnostics=False,
-               return_sigma_trace=False,
-               **ignored):
+    @staticmethod
+    def _reject_active_guidance(guidance_scale, guidance, bad_model, collect_diagnostics):
         # Reject only when guidance is ACTUALLY ACTIVE. The task evals always
         # construct a guidance config and pass it, with every scale at 0.0; a
         # truthiness check on the object itself rejected every ordering cell.
@@ -101,6 +87,52 @@ class OrderedSampler(DDIMSampler):
         if collect_diagnostics:
             raise NotImplementedError(
                 "OrderedSampler has no guidance trace to collect.")
+
+    def _make_denoise_fn(self, prefix_mask, prefix_full, last):
+        """The model call both ordered samplers share: sigma already per bit.
+
+        Self-conditioning carry, matching DDIMSampler's sc_refresh_mode="carry",
+        which is what the task evals request. These checkpoints are trained with
+        model.self_condition=True (p=0.5), so a sampler that never supplies the
+        previous estimate runs the model in a weaker mode than its baseline.
+        """
+        sc = {"x0_hat": None}
+
+        def denoise_fn(x_in, sigma_bits):
+            x0_hat = None
+            if self.sc_enabled:
+                x0_hat = sc["x0_hat"]
+                if x0_hat is None:
+                    x0_hat = torch.zeros_like(x_in)
+                if prefix_mask is not None and prefix_full is not None:
+                    x0_hat = torch.where(prefix_mask, prefix_full, x0_hat)
+            logits = _model_logits_continuous(self.model, self.cfg, x_in, sigma_bits, x0_hat)
+            D = torch.sigmoid(logits.float())
+            if self.sc_enabled:
+                sc["x0_hat"] = D.detach()
+            last["D"] = D
+            last["sigma"] = sigma_bits
+            return D
+        return denoise_fn
+
+    @torch.no_grad()
+    def sample(self, num_samples, seq_len, *,
+               conditioning_prefix_full=None,
+               cond_prefix_mask=None,
+               num_steps=None,
+               schedule=None,
+               entropy_run_dir=None,
+               sigma_min_override=None,
+               sigma_max_override=None,
+               return_probs=False,
+               guidance_scale=None,
+               guidance=None,
+               bad_model=None,
+               collect_diagnostics=False,
+               return_sigma_trace=False,
+               **ignored):
+        self._reject_active_guidance(guidance_scale, guidance, bad_model,
+                                     collect_diagnostics)
 
         B, S = int(num_samples), int(seq_len)
         bpt = int(self.bits_per_token)
@@ -132,28 +164,7 @@ class OrderedSampler(DDIMSampler):
                            suffix_mask=suffix_tok, generator=gen).to(self.device)
 
         last = {}
-        # Self-conditioning carry, matching DDIMSampler's sc_refresh_mode="carry",
-        # which is what the task evals request. This checkpoint was trained with
-        # model.self_condition=True (p=0.5), so a sampler that never supplies the
-        # previous estimate is running the model in a weaker mode than the
-        # baseline it is being compared against.
-        sc = {"x0_hat": None}
-
-        def denoise_fn(x_in, sigma_bits):
-            x0_hat = None
-            if self.sc_enabled:
-                x0_hat = sc["x0_hat"]
-                if x0_hat is None:
-                    x0_hat = torch.zeros_like(x_in)
-                if prefix_mask is not None and prefix_full is not None:
-                    x0_hat = torch.where(prefix_mask, prefix_full, x0_hat)
-            logits = _model_logits_continuous(self.model, self.cfg, x_in, sigma_bits, x0_hat)
-            D = torch.sigmoid(logits.float())
-            if self.sc_enabled:
-                sc["x0_hat"] = D.detach()
-            last["D"] = D
-            last["sigma"] = sigma_bits
-            return D
+        denoise_fn = self._make_denoise_fn(prefix_mask, prefix_full, last)
 
         x = sample_ordered(
             denoise_fn, sigmas=sigmas, x_init=x, u=u, w=self.order_w,
@@ -170,6 +181,86 @@ class OrderedSampler(DDIMSampler):
         if prefix_mask is not None and prefix_full is not None:
             probs = torch.where(prefix_mask, prefix_full, probs)
 
+        if return_sigma_trace:
+            return x, probs, last.get("sigma")
+        return (x, probs) if return_probs else x
+
+
+class WindowSampler(OrderedSampler):
+    """Window-ordered deterministic Euler: t_j = clip(tau(1+L/k) - r_j/k, 0, 1).
+
+    Uses the SAME frozen noise CDF the arm was trained with (`noise_table`), a
+    uniform tau grid of `num_steps` points and one final denoise, so it spends
+    exactly `num_steps` network evaluations -- the same as the standard sampler
+    (`OrderedSampler`, order_w=0, Karras) at the same `num_steps`. That is the
+    matched-compute comparison.
+
+    Ranks are over the whole generated canvas in absolute token units. At
+    sampling time the answer's length is unknown, so this is the only order
+    that can actually be run: l2r resolves the answer first and the padding
+    after it; r2l resolves the padding (i.e. the length) first; random draws a
+    fresh permutation per sample, seeded by `order_seed`.
+    """
+
+    def __init__(self, model, forward_process, cfg, *,
+                 order_k: float = float("inf"),
+                 order_mode: str = "none",
+                 order_seed: Optional[int] = None,
+                 noise_table: Optional[str] = None):
+        super().__init__(model, forward_process, cfg, order_w=0.0,
+                         order_mode=order_mode, order_seed=order_seed)
+        from diffusion.continuous.ordering import NoiseCDF
+        if not noise_table:
+            raise ValueError("WindowSampler needs the arm's frozen noise table")
+        self.order_k = float(order_k)
+        self.noise = NoiseCDF.load(noise_table)
+
+    @torch.no_grad()
+    def sample(self, num_samples, seq_len, *,
+               conditioning_prefix_full=None,
+               cond_prefix_mask=None,
+               num_steps=None,
+               return_probs=False,
+               guidance_scale=None,
+               guidance=None,
+               bad_model=None,
+               collect_diagnostics=False,
+               return_sigma_trace=False,
+               **ignored):
+        from diffusion.continuous.ordering import sample_window, window_ranks
+        self._reject_active_guidance(guidance_scale, guidance, bad_model,
+                                     collect_diagnostics)
+        B, S = int(num_samples), int(seq_len)
+        bpt = int(self.bits_per_token)
+        N = int(num_steps if num_steps is not None
+                else getattr(self.cfg.evaluation, "num_sampling_steps", 256))
+
+        x = torch.randn(B, S, device=self.device, dtype=torch.float32) * float(self.noise.sigma_hi)
+        x = x + self.data_center
+
+        prefix_full = prefix_mask = None
+        if conditioning_prefix_full is not None and cond_prefix_mask is not None:
+            prefix_full = conditioning_prefix_full.to(self.device).float()
+            prefix_mask = cond_prefix_mask.to(self.device).bool()
+        n_tok = S // bpt
+        suffix_tok = (~token_prefix_mask_from_bits(prefix_mask, bpt) if prefix_mask is not None
+                      else torch.ones(B, n_tok, dtype=torch.bool, device=self.device))
+        gen = None
+        if self.order_seed is not None:
+            gen = torch.Generator(device=self.device).manual_seed(int(self.order_seed))
+        r, L = window_ranks(self.order_mode, suffix_tok.to(self.device), generator=gen)
+
+        last = {}
+        denoise_fn = self._make_denoise_fn(prefix_mask, prefix_full, last)
+        x = sample_window(denoise_fn, num_steps=N, x_init=x, noise=self.noise,
+                          r=r, L=L, k=self.order_k, bits_per_token=bpt,
+                          prefix_full=prefix_full, prefix_mask=prefix_mask)
+
+        # Final denoise at the bottom of the support, as every sampler here does.
+        sig_final = torch.full_like(x, float(self.noise.sigma_lo))
+        probs = denoise_fn(x, sig_final)
+        if prefix_mask is not None and prefix_full is not None:
+            probs = torch.where(prefix_mask, prefix_full, probs)
         if return_sigma_trace:
             return x, probs, last.get("sigma")
         return (x, probs) if return_probs else x
