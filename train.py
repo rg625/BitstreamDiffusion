@@ -93,6 +93,52 @@ def _update_cfg_from_dict(cfg, d, skip_sections=("logging", "system", "evaluatio
             setattr(cfg, k, v)
 
 
+# Keys where the FRESH Python config wins over the saved snapshot on resume.
+# They set how a step is computed (micro-batch layout, checkpoint cadence),
+# never what a step is: the effective batch is train.batch_size, which stays
+# saved. Without this, moving a run to more nodes with TOK_ACCUM=1 silently
+# kept the saved accumulation (32/GPU x 8 GPUs x 2 instead of 64/GPU x 8, ~10%
+# slower), because the merge below overwrote what the config had just read
+# from the environment.
+RESUME_LAYOUT_KEYS = (
+    ("train", "grad_accum_steps"),
+    ("train", "checkpointing", "resume_interval", "every_steps"),
+)
+
+
+def _get_path(cfg, path):
+    for k in path:
+        if cfg is None or not hasattr(cfg, k):
+            return None
+        cfg = getattr(cfg, k)
+    return cfg
+
+
+def _snapshot_layout(cfg):
+    """Fresh-config values of RESUME_LAYOUT_KEYS; keys it does not set are omitted."""
+    out = {}
+    for path in RESUME_LAYOUT_KEYS:
+        v = _get_path(cfg, path)
+        if v is not None:
+            out[path] = v
+    return out
+
+
+def _restore_layout(cfg, snapshot):
+    """Re-apply the fresh layout values after the saved-config merge. Returns
+    [(dotted key, saved value, fresh value)] for every key that changed."""
+    changed = []
+    for path, fresh in snapshot.items():
+        parent = _get_path(cfg, path[:-1])
+        if parent is None:
+            continue
+        saved = getattr(parent, path[-1], None)
+        if saved != fresh:
+            setattr(parent, path[-1], fresh)
+            changed.append((".".join(path), saved, fresh))
+    return changed
+
+
 def main():
     # 1. Setup Distributed Environment
     rank, local_rank, world_size = _setup_ddp()
@@ -125,7 +171,11 @@ def main():
     if last_ckpt.exists() and saved_cfg_path.exists():
         with open(saved_cfg_path, "r") as f:
             saved_cfg_dict = json.load(f)
+        layout = _snapshot_layout(cfg)
         _update_cfg_from_dict(cfg, saved_cfg_dict)
+        for key, saved, fresh in _restore_layout(cfg, layout):
+            if rank == 0:
+                print(f"  ↳ resume override: {key} = {fresh} (saved run had {saved})")
         # The saved snapshot is authoritative for architecture/data, but the
         # merge above also clobbers env-derived knobs that the Python config had
         # just read (e.g. cfg.optim.total_steps from TINYGSM_TOTAL_STEPS). A
