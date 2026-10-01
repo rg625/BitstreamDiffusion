@@ -124,6 +124,23 @@ SIGMA_BANDS = (
 )
 
 
+def _broadcast_sigma_data(cfg, device, ddp_active: bool) -> float:
+    """Make every rank use rank 0's sigma_data (T1).
+
+    SigmaDataEstimator runs on rank 0 only and overwrites
+    cfg.diffusion.continuous.sigma_data there; without this, ranks 1..N-1 kept
+    the configured 0.5 and gradients mixed two preconditionings and two EDM
+    loss weightings. Must be called on every rank (it is a collective).
+    """
+    val = float(cfg.diffusion.continuous.sigma_data)
+    if ddp_active and dist.is_available() and dist.is_initialized():
+        t = torch.tensor([val], dtype=torch.float64, device=device)
+        dist.broadcast(t, src=0)
+        val = float(t.item())
+        cfg.diffusion.continuous.sigma_data = val
+    return val
+
+
 def _maybe_set_seed(cfg):
     """Set Python/NumPy/Torch seeds for reproducibility if cfg.train.seed is provided."""
     seed = getattr(cfg.train, "seed", None)
@@ -2399,6 +2416,12 @@ class Trainer:
 
         # IMPORTANT: callbacks may include run_on_all_ranks=True (e.g. offline entropy)
         self._run_callbacks("on_train_begin")
+        # SigmaDataEstimator ran on rank 0 only: give every rank its value (T1)
+        # before any forward pass. Every rank reaches this line, so the
+        # collective always matches.
+        sd = _broadcast_sigma_data(self.cfg, self.device, self.ddp_active)
+        if self.is_master:
+            print(f"[sigma_data] all ranks use {sd:.6f}")
 
         # Lightning-style sanity: run callbacks once before training
         self._maybe_run_sanity()
