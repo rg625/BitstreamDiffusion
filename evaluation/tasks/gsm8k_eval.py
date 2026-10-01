@@ -39,6 +39,7 @@ from evaluation.tasks._task_common import (
 from evaluation.tasks.sandbox_gsm8k import (
     evaluate_samples, predict_answer, _extract_gold_answer, _numbers_equal,
 )
+from evaluation.tasks.safe_exec import predict_answer_subprocess
 
 
 def _ckpt_tag(path: str) -> str:
@@ -563,6 +564,13 @@ def main():
                          "machines can be concatenated: shards must be disjoint and share every "
                          "other setting. Default: datasets/gsm8k/gsm8k_test.json (all 1319).")
     ap.add_argument("--out_dir", default=None)
+    ap.add_argument("--executor", default="subprocess", choices=["subprocess", "inprocess"],
+                    help="How generated programs are run. subprocess (default) = one "
+                         "rlimited child per program (evaluation/tasks/safe_exec.py: 5 s "
+                         "CPU, 1 GiB, no writes/forks, hard kill). inprocess = the legacy "
+                         "exec sandbox, which a bare except can hang and [0]*10**10 can "
+                         "OOM (CODEBASE.md S1/S2). Scoring is identical. The FKC path "
+                         "still uses the in-process sandbox.")
     ap.add_argument("--allow_cpu", action="store_true",
                     help="Permit running on CPU. By default the eval ASSERTS CUDA is available, "
                          "because a silent CPU fallback (e.g. CUDA failing to init on a bad node) "
@@ -586,6 +594,7 @@ def main():
         cfg.cond.null_strategy = args.null_strategy
     steps = int(args.steps or getattr(cfg.evaluation, "num_sampling_steps", 1024))
     timeout_s = float(getattr(getattr(cfg.evaluation, "gsm8k", object()), "timeout_s", 5.0))
+    _predict = predict_answer_subprocess if args.executor == "subprocess" else predict_answer
     n_boot = int(getattr(getattr(cfg.evaluation, "gsm8k", object()), "bootstrap_size", 10000))
     # Guard against a silent CPU fallback when CUDA fails to init on a bad node:
     # such a run would (a) be ~100x slower and (b) silently produce results that
@@ -735,7 +744,7 @@ def main():
             # exactly `_numbers_equal(predict_answer(...), gold)`, so calling
             # both would run every generated program twice -- doubling the
             # sandbox cost of a 1319-problem run for a number we already have.
-            _pred = predict_answer(text, timeout_s)
+            _pred = _predict(text, timeout_s)
             ok = bool(_numbers_equal(_pred, _extract_gold_answer(
                 rec["response_ground_truth"])))
             per_correct.append(1 if ok else 0)
@@ -818,6 +827,7 @@ def main():
         "num_correct": int(correct.sum()),
         "invalid_token_rate": n_invalid_tok / max(1, n_gen_tokens),
         "timeout_s": timeout_s,
+        "executor": args.executor,
         "seed": int(args.seed),
         "regime": args.regime,
         "batch_size": int(args.batch_size),
