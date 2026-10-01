@@ -1,0 +1,659 @@
+{
+  "source": [
+    "results/guidance/paired_comparisons.json",
+    "results/guidance/all_cells.csv"
+  ],
+  "n_problems": 1319,
+  "steps": 512,
+  "gamma": 0.0,
+  "missing": "n=1069 holdout per-problem records (CSD3 runs/guidance/) not on this cluster",
+  "configs": {
+    "CFG w=12": {
+      "n_seeds": 3,
+      "fix": 461,
+      "break": 140,
+      "fix_rate": 0.13523027280727487,
+      "break_rate": 0.25547445255474455,
+      "fix_rate_ci95_binomial": [
+        0.12378996773247286,
+        0.146963919037841
+      ],
+      "break_rate_ci95_binomial": [
+        0.21897810218978103,
+        0.291970802919708
+      ],
+      "a_star": 0.3461188565916963,
+      "a_star_ci95_binomial": [
+        0.31049489460367036,
+        0.38599580380295706
+      ],
+      "a_star_seed_range": [
+        0.3040082490511397,
+        0.3963771976558338
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 107.0,
+      "seeds": [
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.23654283548142532,
+          "discordant": 210,
+          "fix": 168,
+          "break": 42,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.14827890556045895,
+          "break_rate": 0.22580645161290322,
+          "a_star": 0.3963771976558338,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_cfgconf_w12_s44.json",
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_fact_cfg_seed44.json"
+          ]
+        },
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.21076573161485973,
+          "discordant": 186,
+          "fix": 144,
+          "break": 42,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.12598425196850394,
+          "break_rate": 0.23863636363636365,
+          "a_star": 0.34552147239263803,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_cfgconf_w12_s42.json",
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_fact_cfg_seed42.json",
+            "runs/guidance/repro/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_repro_cfg12_s42.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.21152388172858225,
+          "discordant": 205,
+          "fix": 149,
+          "break": 56,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.13150926743159752,
+          "break_rate": 0.3010752688172043,
+          "a_star": 0.3040082490511397,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_cfgconf_w12_s43.json",
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w12.0_s512_sd0.3998_ema1_fact_cfg_seed43.json"
+          ]
+        }
+      ]
+    },
+    "CFG w=7": {
+      "n_seeds": 3,
+      "fix": 430,
+      "break": 128,
+      "fix_rate": 0.1261366969785861,
+      "break_rate": 0.23357664233576642,
+      "fix_rate_ci95_binomial": [
+        0.1152830742153124,
+        0.13728366089762395
+      ],
+      "break_rate_ci95_binomial": [
+        0.1989051094890511,
+        0.27007299270072993
+      ],
+      "a_star": 0.3506589364159097,
+      "a_star_ci95_binomial": [
+        0.31323621296262444,
+        0.3924597124328773
+      ],
+      "a_star_seed_range": [
+        0.3253442500930406,
+        0.3865189586290665
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 100.66666666666667,
+      "seeds": [
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.22062168309325247,
+          "discordant": 179,
+          "fix": 142,
+          "break": 37,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.12533097969991175,
+          "break_rate": 0.1989247311827957,
+          "a_star": 0.3865189586290665,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w7.0_s512_sd0.3998_ema1_cfgconf_w7_s44.json"
+          ]
+        },
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.21228203184230476,
+          "discordant": 190,
+          "fix": 147,
+          "break": 43,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.12860892388451445,
+          "break_rate": 0.24431818181818182,
+          "a_star": 0.3448634382372936,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w7.0_s512_sd0.3998_ema1_cfgconf_w7_s42.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.21152388172858225,
+          "discordant": 189,
+          "fix": 141,
+          "break": 48,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.12444836716681378,
+          "break_rate": 0.25806451612903225,
+          "a_star": 0.3253442500930406,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w7.0_s512_sd0.3998_ema1_cfgconf_w7_s43.json"
+          ]
+        }
+      ]
+    },
+    "CFG w=4": {
+      "n_seeds": 3,
+      "fix": 366,
+      "break": 117,
+      "fix_rate": 0.10736286300968026,
+      "break_rate": 0.21350364963503649,
+      "fix_rate_ci95_binomial": [
+        0.09680258140217073,
+        0.11792314461718979
+      ],
+      "break_rate_ci95_binomial": [
+        0.18065693430656934,
+        0.24817518248175183
+      ],
+      "a_star": 0.3346028917905779,
+      "a_star_ci95_binomial": [
+        0.29561038064998224,
+        0.37882769749237793
+      ],
+      "a_star_seed_range": [
+        0.2994821856403122,
+        0.36153305584085627
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 83.0,
+      "seeds": [
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.20849128127369218,
+          "discordant": 165,
+          "fix": 127,
+          "break": 38,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.11209179170344219,
+          "break_rate": 0.20430107526881722,
+          "a_star": 0.35428040074389583,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w4.0_s512_sd0.3998_ema1_cfgconf_w4_s44.json"
+          ]
+        },
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.19636087945413191,
+          "discordant": 145,
+          "fix": 114,
+          "break": 31,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.09973753280839895,
+          "break_rate": 0.17613636363636365,
+          "a_star": 0.36153305584085627,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w4.0_s512_sd0.3998_ema1_cfgconf_w4_s42.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.19939347990902198,
+          "discordant": 173,
+          "fix": 125,
+          "break": 48,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.11032656663724624,
+          "break_rate": 0.25806451612903225,
+          "a_star": 0.2994821856403122,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w4.0_s512_sd0.3998_ema1_cfgconf_w4_s43.json"
+          ]
+        }
+      ]
+    },
+    "CFG w=20": {
+      "n_seeds": 3,
+      "fix": 462,
+      "break": 154,
+      "fix_rate": 0.13552361396303902,
+      "break_rate": 0.28102189781021897,
+      "fix_rate_ci95_binomial": [
+        0.12408330888823701,
+        0.14725726019360516
+      ],
+      "break_rate_ci95_binomial": [
+        0.24452554744525548,
+        0.3193430656934307
+      ],
+      "a_star": 0.32535127646942413,
+      "a_star_ci95_binomial": [
+        0.29266187864583576,
+        0.3619021169235979
+      ],
+      "a_star_seed_range": [
+        0.30783414233191525,
+        0.33869141951550824
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 102.66666666666667,
+      "seeds": [
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.21455648218347234,
+          "discordant": 199,
+          "fix": 153,
+          "break": 46,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.13385826771653545,
+          "break_rate": 0.2613636363636364,
+          "a_star": 0.33869141951550824,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w20.0_s512_sd0.3998_ema1_cfgconf_w20_s42.json"
+          ]
+        },
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.2221379833206975,
+          "discordant": 213,
+          "fix": 160,
+          "break": 53,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.1412180052956752,
+          "break_rate": 0.2849462365591398,
+          "a_star": 0.33136990724760323,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w20.0_s512_sd0.3998_ema1_cfgconf_w20_s44.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.21228203184230476,
+          "discordant": 204,
+          "fix": 149,
+          "break": 55,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.13150926743159752,
+          "break_rate": 0.2956989247311828,
+          "a_star": 0.30783414233191525,
+          "files": [
+            "runs/guidance/cfg_confirm/gsm8k_results_deterministic_g0.0_w20.0_s512_sd0.3998_ema1_cfgconf_w20_s43.json"
+          ]
+        }
+      ]
+    },
+    "SG-prev w=2": {
+      "n_seeds": 3,
+      "fix": 258,
+      "break": 67,
+      "fix_rate": 0.07568201818715166,
+      "break_rate": 0.12226277372262774,
+      "fix_rate_ci95_binomial": [
+        0.0671751246699912,
+        0.08477559401584042
+      ],
+      "break_rate_ci95_binomial": [
+        0.0948905109489051,
+        0.15145985401459855
+      ],
+      "a_star": 0.38233902219385757,
+      "a_star_ci95_binomial": [
+        0.32732229983381167,
+        0.44749565775355754
+      ],
+      "a_star_seed_range": [
+        0.340152104615848,
+        0.4395713107996702
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 63.666666666666664,
+      "seeds": [
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.19332827899924185,
+          "discordant": 121,
+          "fix": 95,
+          "break": 26,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.08384819064430715,
+          "break_rate": 0.13978494623655913,
+          "a_star": 0.3749363435749449,
+          "files": [
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_fact_sgprev_seed44.json",
+            "runs/guidance/sg_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_sgconf_prev2_s44.json",
+            "runs/guidance/solver_control/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_solv_sgprev512_seed44.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.19257012888551933,
+          "discordant": 104,
+          "fix": 86,
+          "break": 18,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.07590467784642542,
+          "break_rate": 0.0967741935483871,
+          "a_star": 0.4395713107996702,
+          "files": [
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_fact_sgprev_seed43.json",
+            "runs/guidance/sg_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_sgconf_prev2_s43.json",
+            "runs/guidance/solver_control/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_solv_sgprev512_seed43.json"
+          ]
+        },
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.17437452615617893,
+          "discordant": 100,
+          "fix": 77,
+          "break": 23,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.0673665791776028,
+          "break_rate": 0.1306818181818182,
+          "a_star": 0.340152104615848,
+          "files": [
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_fact_sgprev_seed42.json",
+            "runs/guidance/repro/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_repro_sgprev2_s42.json",
+            "runs/guidance/sg_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_sgconf_prev2_s42.json",
+            "runs/guidance/solver_control/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg2prev_d0.5_solv_sgprev512_seed42.json"
+          ]
+        }
+      ]
+    },
+    "SG-prev w=1": {
+      "n_seeds": 1,
+      "fix": 60,
+      "break": 17,
+      "fix_rate": 0.05249343832020997,
+      "break_rate": 0.09659090909090909,
+      "fix_rate_ci95_binomial": [
+        0.04024496937882765,
+        0.06561679790026247
+      ],
+      "break_rate_ci95_binomial": [
+        0.056818181818181816,
+        0.14204545454545456
+      ],
+      "a_star": 0.35210563168950687,
+      "a_star_ci95_binomial": [
+        0.25237735849056603,
+        0.5002186270222999
+      ],
+      "a_star_seed_range": [
+        0.35210563168950687,
+        0.35210563168950687
+      ],
+      "baseline_acc_mean": 0.133434420015163,
+      "net_problems_per_seed": 43.0,
+      "seeds": [
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.16603487490523122,
+          "discordant": 77,
+          "fix": 60,
+          "break": 17,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.05249343832020997,
+          "break_rate": 0.09659090909090909,
+          "a_star": 0.35210563168950687,
+          "files": [
+            "runs/guidance/sg_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_sg1prev_d0.5_sgconf_prev1_s42.json"
+          ]
+        }
+      ]
+    },
+    "AG w=15 bad=350k": {
+      "n_seeds": 3,
+      "fix": 416,
+      "break": 154,
+      "fix_rate": 0.12202992079788795,
+      "break_rate": 0.28102189781021897,
+      "fix_rate_ci95_binomial": [
+        0.11117629803461426,
+        0.1331768847169258
+      ],
+      "break_rate_ci95_binomial": [
+        0.24452554744525548,
+        0.3193430656934307
+      ],
+      "a_star": 0.30276484353625854,
+      "a_star_ci95_binomial": [
+        0.2703208031262585,
+        0.3384447099263616
+      ],
+      "a_star_seed_range": [
+        0.2765664898841092,
+        0.3185764342869097
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 87.33333333333333,
+      "seeds": [
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.2100075815011372,
+          "discordant": 191,
+          "fix": 141,
+          "break": 50,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.12444836716681378,
+          "break_rate": 0.26881720430107525,
+          "a_star": 0.3164486703026208,
+          "files": [
+            "runs/guidance/ag_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_agconf_b000350000_w15_s44.json",
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_fact_ag_seed44.json"
+          ]
+        },
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.19863532979529946,
+          "discordant": 202,
+          "fix": 144,
+          "break": 58,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.12598425196850394,
+          "break_rate": 0.32954545454545453,
+          "a_star": 0.2765664898841092,
+          "files": [
+            "runs/guidance/ag_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_agconf_b000350000_w15_s42.json",
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_fact_ag_seed42.json",
+            "runs/guidance/repro/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_repro_ag15_s42.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.20545868081880211,
+          "discordant": 177,
+          "fix": 131,
+          "break": 46,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.11562224183583407,
+          "break_rate": 0.24731182795698925,
+          "a_star": 0.3185764342869097,
+          "files": [
+            "runs/guidance/ag_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_agconf_b000350000_w15_s43.json",
+            "runs/guidance/factorial_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag15_bad000350000_fact_ag_seed43.json"
+          ]
+        }
+      ]
+    },
+    "AG w=6 bad=250k": {
+      "n_seeds": 3,
+      "fix": 315,
+      "break": 154,
+      "fix_rate": 0.09240246406570841,
+      "break_rate": 0.28102189781021897,
+      "fix_rate_ci95_binomial": [
+        0.08272220592549134,
+        0.10237606336168964
+      ],
+      "break_rate_ci95_binomial": [
+        0.24452554744525548,
+        0.3193430656934307
+      ],
+      "a_star": 0.24744626623050833,
+      "a_star_ci95_binomial": [
+        0.21768590627084322,
+        0.28129680699646853
+      ],
+      "a_star_seed_range": [
+        0.220121001340434,
+        0.2649115365142787
+      ],
+      "baseline_acc_mean": 0.13848875410664643,
+      "net_problems_per_seed": 53.666666666666664,
+      "seeds": [
+        {
+          "seed": "42",
+          "baseline_acc": 0.133434420015163,
+          "guided_acc": 0.18119787717968158,
+          "discordant": 157,
+          "fix": 110,
+          "break": 47,
+          "baseline_wrong": 1143,
+          "baseline_correct": 176,
+          "fix_rate": 0.09623797025371829,
+          "break_rate": 0.26704545454545453,
+          "a_star": 0.2649115365142787,
+          "files": [
+            "runs/guidance/ag_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag6_bad000250000_agconf_b000250000_w6_s42.json"
+          ]
+        },
+        {
+          "seed": "44",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.18423047763457165,
+          "discordant": 157,
+          "fix": 107,
+          "break": 50,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.09443954104148279,
+          "break_rate": 0.26881720430107525,
+          "a_star": 0.25998014421569654,
+          "files": [
+            "runs/guidance/ag_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag6_bad000250000_agconf_b000250000_w6_s44.json"
+          ]
+        },
+        {
+          "seed": "43",
+          "baseline_acc": 0.14101592115238817,
+          "guided_acc": 0.17210007581501138,
+          "discordant": 155,
+          "fix": 98,
+          "break": 57,
+          "baseline_wrong": 1133,
+          "baseline_correct": 186,
+          "fix_rate": 0.08649602824360106,
+          "break_rate": 0.3064516129032258,
+          "a_star": 0.220121001340434,
+          "files": [
+            "runs/guidance/ag_confirm/gsm8k_results_deterministic_g0.0_w0.0_s512_sd0.3998_ema1_ag6_bad000250000_agconf_b000250000_w6_s43.json"
+          ]
+        }
+      ]
+    }
+  },
+  "churn_doc_derived": [
+    {
+      "regime": "A gamma=0",
+      "baseline_acc": 0.133,
+      "config": "CFG w=12",
+      "fix_pct": 12.6,
+      "break_pct": 23.9,
+      "a_star": 0.34520547945205476,
+      "baseline_below_a_star": true
+    },
+    {
+      "regime": "A gamma=0",
+      "baseline_acc": 0.133,
+      "config": "CFG w=20",
+      "fix_pct": 13.4,
+      "break_pct": 26.1,
+      "a_star": 0.33924050632911396,
+      "baseline_below_a_star": true
+    },
+    {
+      "regime": "A gamma=0.3",
+      "baseline_acc": 0.252,
+      "config": "CFG w=2",
+      "fix_pct": 10.7,
+      "break_pct": 23.8,
+      "a_star": 0.31014492753623185,
+      "baseline_below_a_star": true
+    },
+    {
+      "regime": "A gamma=0.3",
+      "baseline_acc": 0.252,
+      "config": "CFG w=4",
+      "fix_pct": 11.3,
+      "break_pct": 24.7,
+      "a_star": 0.3138888888888889,
+      "baseline_below_a_star": true
+    },
+    {
+      "regime": "B gamma=0.41",
+      "baseline_acc": 0.316,
+      "config": "CFG w=2",
+      "fix_pct": 8.2,
+      "break_pct": 16.5,
+      "a_star": 0.33198380566801616,
+      "baseline_below_a_star": true
+    },
+    {
+      "regime": "B gamma=0.41",
+      "baseline_acc": 0.316,
+      "config": "CFG w=8",
+      "fix_pct": 9.4,
+      "break_pct": 32.9,
+      "a_star": 0.22222222222222224,
+      "baseline_below_a_star": false
+    }
+  ]
+}
