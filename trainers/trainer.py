@@ -158,6 +158,17 @@ def _seed_everything(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
+def _make_distributed_sampler(dataset, *, world_size: int, rank: int, seed: int,
+                              shuffle: bool, drop_last: bool):
+    """DistributedSampler that honours cfg.train.seed (T4).
+
+    Without seed= the shuffle seed defaults to 0, so every training seed saw
+    the identical data order.
+    """
+    return DistributedSampler(dataset, num_replicas=world_size, rank=rank,
+                              shuffle=shuffle, drop_last=drop_last, seed=int(seed))
+
+
 def _maybe_set_seed(cfg):
     """Set Python/NumPy/Torch seeds for reproducibility if cfg.train.seed is provided."""
     seed = getattr(cfg.train, "seed", None)
@@ -906,13 +917,9 @@ class Trainer:
                       f"{batch_size_per_gpu}/GPU x {self.world_size} GPUs x "
                       f"{self.grad_accum_steps} accumulation steps")
 
-            train_sampler = DistributedSampler(
-                raw_train_loader.dataset,
-                num_replicas=self.world_size,
-                rank=self.rank,
-                shuffle=True,
-                drop_last=True,
-            )
+            train_sampler = _make_distributed_sampler(
+                raw_train_loader.dataset, world_size=self.world_size, rank=self.rank,
+                seed=int(getattr(cfg.train, "seed", 0) or 0), shuffle=True, drop_last=True)
             self.train_loader = torch.utils.data.DataLoader(
                 raw_train_loader.dataset,
                 batch_size=batch_size_per_gpu,

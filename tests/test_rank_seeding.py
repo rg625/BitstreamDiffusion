@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 from trainers.trainer import (
-    Trainer, _broadcast_sigma_data, _rank_seed, _seed_everything,
+    Trainer, _broadcast_sigma_data, _make_distributed_sampler, _rank_seed, _seed_everything,
 )
 
 
@@ -112,4 +112,16 @@ def test_resume_reseed_is_deterministic():
     x = torch.randn(4)
     b._restore_rng_on_resume(None, step=100)
     assert torch.equal(torch.randn(4), x)
+
+
+
+# ----------------------------------------------------------------------- T4
+def test_distributed_sampler_honours_the_training_seed():
+    ds = list(range(1000))
+    order = lambda seed: list(_make_distributed_sampler(  # noqa: E731
+        ds, world_size=4, rank=1, seed=seed, shuffle=True, drop_last=True))
+    s42 = _make_distributed_sampler(ds, world_size=4, rank=1, seed=42, shuffle=True, drop_last=True)
+    assert s42.seed == 42
+    assert order(42) != order(43)
+    assert order(42) == order(42)
 
