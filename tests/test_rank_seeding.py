@@ -8,6 +8,8 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
+from diffusion.continuous.ordered_sampler import OrderedSampler
+from diffusion.continuous.ordering import ordering_ranks
 from trainers.trainer import (
     Trainer, _broadcast_sigma_data, _make_distributed_sampler, _rank_seed, _seed_everything,
 )
@@ -125,3 +127,35 @@ def test_distributed_sampler_honours_the_training_seed():
     assert order(42) != order(43)
     assert order(42) == order(42)
 
+
+
+# ----------------------------------------------------------------------- T5
+def _bare_sampler(order_seed):
+    s = OrderedSampler.__new__(OrderedSampler)        # no model needed for the seeding logic
+    s.order_seed, s._order_batch_index, s.order_mode = order_seed, 0, "random"
+    return s
+
+
+def test_each_batch_gets_its_own_random_orderings():
+    s = _bare_sampler(1234)
+    b0 = ordering_ranks("random", 32, 4, generator=s._next_order_generator("cpu"))
+    b1 = ordering_ranks("random", 32, 4, generator=s._next_order_generator("cpu"))
+    assert not torch.equal(b0, b1)
+
+
+def test_first_batch_matches_the_old_seeding():
+    s = _bare_sampler(1234)
+    new = ordering_ranks("random", 32, 4, generator=s._next_order_generator("cpu"))
+    old = ordering_ranks("random", 32, 4, generator=torch.Generator().manual_seed(1234))
+    assert torch.equal(new, old)
+
+
+def test_order_seeds_do_not_alias_across_batches():
+    a, b = _bare_sampler(1234), _bare_sampler(1235)
+    a._next_order_generator("cpu")                    # a's batch 1 vs b's batch 0
+    ga, gb = a._next_order_generator("cpu"), b._next_order_generator("cpu")
+    assert ga.initial_seed() != gb.initial_seed()
+
+
+def test_no_order_seed_means_no_generator():
+    assert _bare_sampler(None)._next_order_generator("cpu") is None

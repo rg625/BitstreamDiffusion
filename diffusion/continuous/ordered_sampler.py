@@ -55,10 +55,27 @@ class OrderedSampler(DDIMSampler):
         self.order_w = float(order_w)
         self.order_mode = str(order_mode)
         self.order_seed = order_seed
+        # sample() calls made so far: the eval loop calls once per batch, so
+        # this is the batch index (T5).
+        self._order_batch_index = 0
         if self.is_cont_tokens:
             raise NotImplementedError(
                 "OrderedSampler is binary-bitstream only; token-space ordering "
                 "would need its own per-position sigma expansion.")
+
+    def _next_order_generator(self, device):
+        """Generator for this batch's ordering draws, or None without order_seed.
+
+        Seeded from (order_seed, batch index) so each batch gets its own random
+        orderings. Re-seeding from order_seed alone on every call gave row i of
+        every batch the same permutation (T5). Batch 0 keeps the old seed, and
+        the 1_000_003 stride keeps seeds 1234..1236 from aliasing each other.
+        """
+        idx = getattr(self, "_order_batch_index", 0)   # stubs may skip __init__
+        self._order_batch_index = idx + 1
+        if self.order_seed is None:
+            return None
+        return torch.Generator(device=device).manual_seed(int(self.order_seed) + 1_000_003 * idx)
 
     @staticmethod
     def _reject_active_guidance(guidance_scale, guidance, bad_model, collect_diagnostics):
@@ -155,9 +172,7 @@ class OrderedSampler(DDIMSampler):
             prefix_mask = cond_prefix_mask.to(self.device).bool()
 
         n_tok = S // bpt
-        gen = None
-        if self.order_seed is not None:
-            gen = torch.Generator(device="cpu").manual_seed(int(self.order_seed))
+        gen = self._next_order_generator("cpu")
         suffix_tok = (~token_prefix_mask_from_bits(prefix_mask, bpt)
                       if prefix_mask is not None else None)
         u = ordering_ranks(self.order_mode, n_tok, B,
@@ -245,9 +260,7 @@ class WindowSampler(OrderedSampler):
         n_tok = S // bpt
         suffix_tok = (~token_prefix_mask_from_bits(prefix_mask, bpt) if prefix_mask is not None
                       else torch.ones(B, n_tok, dtype=torch.bool, device=self.device))
-        gen = None
-        if self.order_seed is not None:
-            gen = torch.Generator(device=self.device).manual_seed(int(self.order_seed))
+        gen = self._next_order_generator(self.device)
         r, L = window_ranks(self.order_mode, suffix_tok.to(self.device), generator=gen)
 
         last = {}
