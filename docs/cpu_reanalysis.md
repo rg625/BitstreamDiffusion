@@ -116,7 +116,7 @@ No other recorded field differs. Per-problem comparisons on the shared problems 
 - **Precision and threads:** fp32, 4 threads (the login node caps this user at 1 CPU, hence the ~1.5 h per checkpoint).
 - **Metrics:** suffix only, split into content (answer + EOS; mean 139.7 tokens/example) and padding (321.6 tokens/example). Per-bit BCE, bit error rate, and token error rate of thresholded x̂₀. Paired bootstrap over examples (10k).
 
-**Bits control, `ord_gh500k_none_s42`, `last.pt` (step 500k, EMA), sidecar σ_data = 0.399845** (`t2_sigma_data_bits_control.json`; 85.7 min on CPU). n = 256 examples per cell; Δ = sidecar − 0.5, paired bootstrap over examples.
+**Bits control, `ord_gh500k_none_s42`, `last.pt` (step 500k, EMA), sidecar σ_data = 0.399845** (`t2_sigma_data_bits_control.json`; 85.7 min on CPU, which exceeded the 30-min login-node guideline at the owner's request). n = 256 examples per cell; Δ = sidecar − 0.5, paired bootstrap over examples.
 
 | σ | Content BCE: sidecar / 0.5 (Δ [95% CI]) | Content bit error | Content token error | Padding token error: sidecar / 0.5 |
 |---|---|---|---|---|
@@ -144,7 +144,7 @@ Padding BCE and bit error are below 1e-5 in both arms at every σ, so they aren'
 - It says nothing about the *training-time* effect of T1 (ranks mixing two preconditionings and loss weights). Only the 12k-step run (run-first item 1) addresses that.
 - The c_in scale differs by only 4% between the arms at σ=1 (0.928 vs 0.894), consistent with the null. [likely]
 
-**Production repeat: incomplete.** It was attempted three times. Each process was killed externally (login-node session teardown; the cause isn't visible to this user, and there are no journal permissions). Only σ=0.02 completed, and it is saved in `results/cpu_reanalysis/t2_partial_production.json`. The script now checkpoints per σ and resumes: `python experiments/cpu_reanalysis/t2_sigma_data.py --run_dir tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg --tag production`. About 72 CPU-min remain, or under 0.1 GPU-h on one GPU. **Missing data: the production rows of this table.**
+**Production repeat: skipped.** The run was cancelled by the cluster admins for excessive login-node CPU use, after σ=0.02 (saved in `results/cpu_reanalysis/t2_partial_production.json`). It won't be re-run on the login node. **Missing data: the production rows of this table**; see run-first item 4 for the GPU version.
 
 ## TASK 3: Failure taxonomy
 
@@ -318,5 +318,5 @@ GPU-h estimates use the measured ~2.0 it/s on 4 A100s (`docs/prod_era_diagnostic
 1. **12k-step, lr 3e-4, from-scratch test of T1/T3/T4**, 4 GPUs, production recipe: about **7 GPU-h per seed**, ~20 GPU-h for 3 seeds. Every lr 3e-4 run on our side diverged between 4,481 and 11,278 steps (8/8; `experiments_ordering_objective.md`, `env_validation_plan.md`), while production — which also carried T1/T3/T4 — ran 500k cleanly. Surviving 12k with the fixes would point at T1/T3 as a contributor; diverging again would exonerate them. Also confirm the logged `[sigma_data] all ranks use …` matches the sidecar. This decides whether the window and token-vs-bits conclusions need re-runs, before any is quoted again.
 2. **Save full program text in `gsm8k_eval`, then re-evaluate the production anchor** (3 seeds × 1319): about **0.2 GPU-h**. A small code change is needed first (all texts, uncut). It makes TASK 3's taxonomy complete instead of a 12% subsample.
 3. **Production exec-only maj@k up to k=16** (16 seeds × 1319, 256 steps): about **1.1 GPU-h**. This turns TASK 4's free +7–9 pp into a single-sampler curve.
-4. **Finish TASK 2 for production** (6 of 7 σ remain, resumable) and add the token run: under **0.1 GPU-h** each (3,584 forwards). Low priority: the bits-control result is a clean null.
+4. **TASK 2 for production and the token run, on GPU only** (not on a login node: the CPU attempt was cancelled by the admins). Under **0.1 GPU-h** each (3,584 forwards). Low priority: the bits-control result is a clean null.
 5. **Only after (1):** decide on window/token re-runs with the fixed trainer. Quote GPU-h per arm before launching (the window study used ~2,780 GPU-h for 26 runs to 250k).
