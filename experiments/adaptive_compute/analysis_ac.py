@@ -267,10 +267,11 @@ def predictors(Q, arm: int) -> Dict:
 # -----------------------------------------------------------------------------
 # Experiment 3: oracle allocation (select on half A, evaluate on half B)
 # -----------------------------------------------------------------------------
-def oracle(Q, arm: int, pr: Dict) -> Dict:
+def oracle(Q, E, arm: int, pr: Dict) -> Dict:
     N = Q[(0, 0)].shape[1]
     rows_s, rows_n = pr["rows_s"], pr["rows_n"]
     gA, gB = pr["MA"], pr["MB"]
+    eB = np.concatenate([(E[(s, arm)] - E[(s, 0)])[2:].mean(0) for s in range(N_SEG)])
     nfe_cell = np.array([arm * EXTRA_NFE[s] for s in rows_s], dtype=float)
     fr = [1 / 8, 2 / 8, 4 / 8, 6 / 8, 1.0]
     ncell = len(gA)
@@ -313,10 +314,15 @@ def oracle(Q, arm: int, pr: Dict) -> Dict:
             # paired vs uniform-random: uniform per-sample gain = f * sum_s gB(n,s)
             u = f * np.bincount(rows_n, weights=gB, minlength=N)
             diff = g - u
+            dent = np.bincount(rows_n[sel], weights=eB[sel], minlength=N)
             row[name] = dict(gain_per_sample=per_sample, extra_nfe_per_sample=float(nfe.mean()),
+                             d_entropy_per_sample=float(dent.mean()),
+                             entropy_flag=bool(abs(dent.mean()) > 0.02),
                              gain_minus_uniform=float(diff.mean()), gain_minus_uniform_ci=_ci(diff[idx].mean(1)),
                              share_cells_by_checkpoint=[float(sel[rows_s == s].mean()) for s in range(N_SEG)])
-        row["uniform"] = dict(gain_per_sample=float(uni), extra_nfe_per_sample=float(f * nfe_cell.sum() / N))
+        row["uniform"] = dict(gain_per_sample=float(uni), extra_nfe_per_sample=float(f * nfe_cell.sum() / N),
+                              d_entropy_per_sample=float(f * eB.mean() * N_SEG),
+                              entropy_flag=bool(abs(f * eB.mean() * N_SEG) > 0.02))
         res[f"{f:.3f}"] = row
     return dict(arm=arm, budgets_fraction_of_cells=fr, baseline_nfe=255, results=res,
                 note=("gain = Σ over selected (state, checkpoint) cells of M̂_B, per sample, nats/token; "
@@ -339,7 +345,7 @@ def main(blocks=None) -> None:
         for arm in (1, 4):
             p, pr = predictors(Q, arm)
             preds_all[str(arm)] = p
-            orc_all[str(arm)] = oracle(Q, arm, pr)
+            orc_all[str(arm)] = oracle(Q, E, arm, pr)
             for k in ("MA", "MB", "rows_s", "rows_n"):
                 arrays[f"{k}_c{arm}"] = pr[k]
             for k, v in pr["preds"].items():

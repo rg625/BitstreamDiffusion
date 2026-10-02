@@ -190,6 +190,43 @@ def cmd_features(args) -> None:
     print(f"[features] wrote {RES / 'features.json'} for {N} states x {D.N_SEGMENTS} checkpoints")
 
 
+def cmd_confirm(args) -> None:
+    """End-to-end policy run on all 1024 Run-1 samples from step 0 (same chunk/churn seeds as Run 1,
+    so every sample is paired with its Run 1 reference). Policy = sc_refresh c in segments S."""
+    sys.path.insert(0, str(REPO / "experiments/compute_allocation"))
+    import analysis as CA
+
+    name = f"policy_c{args.c}_segs{'-'.join(map(str, args.segments))}"
+    out = RES / "confirm" / f"{name}.json"
+    if out.exists() and not args.force:
+        print(f"[confirm] {name} done")
+        return
+    check_cap(0.05)
+    t0 = time.perf_counter()
+    ctx = D.Ctx(compile_model=not args.no_compile)
+    overrides = {s: {"sc_refresh": int(args.c)} for s in args.segments}
+    run = ctx.run(seed=D.BASE_SEED, seeded_churn=True, segment_overrides=overrides)
+    sc = ctx.score(run["bits"])
+    total = time.perf_counter() - t0
+    ref = CA._scores(REPO / "experiments/compute_allocation/results", 0, "reference")
+    br = dict(nll=np.asarray(sc["nll"], float), ntok=np.asarray(sc["ntok"], float), ent=np.asarray(sc["entropy"], float))
+    st = CA.paired_stats(ref, br)
+    q_ref = -ref["nll"] / np.maximum(ref["ntok"], 1)
+    q_br = -br["nll"] / np.maximum(br["ntok"], 1)
+    dq = q_br - q_ref
+    idx = np.random.default_rng(20261002).integers(0, dq.size, size=(2000, dq.size))
+    meta = D._meta(ctx, experiment="adaptive_compute/confirm", policy=name, c=int(args.c), segments=args.segments,
+                   nfe_per_sample=run["nfe_calls"] // 2, generation_wall_sec=run["wall"],
+                   scoring_wall_sec=sc["score_wall"], process_wall_sec=total)
+    D._atomic_json(out, dict(meta=meta, genppl=sc["genppl"], mean_entropy=sc["mean_entropy"],
+                             paired_vs_run1_reference=st,
+                             mean_dQ_per_sample=float(dq.mean()), mean_dQ_ci=[float(v) for v in np.percentile(dq[idx].mean(1), [2.5, 97.5])],
+                             per_sample=dict(nll=sc["nll"], ntok=sc["ntok"], entropy=sc["entropy"])))
+    D._ledger_add(RES, f"confirm {name}", total)
+    print(f"[confirm] {name}: GenPPL {sc['genppl']:.3f} ent {sc['mean_entropy']:.4f} mean dQ {dq.mean():.4f} "
+          f"dNLL/tok {st['d_nll_tok']:.4f} [{st['ci_lo']:.4f},{st['ci_hi']:.4f}] dEnt {st['d_entropy']:.4f}", flush=True)
+
+
 def cmd_analyze(args) -> None:
     sys.path.insert(0, str(HERE))
     import analysis_ac
@@ -207,11 +244,16 @@ def main():
     r.add_argument("--rollouts", type=int, default=4)
     r.add_argument("--no-compile", action="store_true")
     r.add_argument("--force", action="store_true")
+    cf = sub.add_parser("confirm")
+    cf.add_argument("--c", type=int, required=True)
+    cf.add_argument("--segments", type=int, nargs="+", required=True)
+    cf.add_argument("--no-compile", action="store_true")
+    cf.add_argument("--force", action="store_true")
     sub.add_parser("features")
     a = sub.add_parser("analyze")
     a.add_argument("--blocks", type=int, nargs="+", default=None)
     args = ap.parse_args()
-    {"rollouts": cmd_rollouts, "features": cmd_features, "analyze": cmd_analyze}[args.cmd](args)
+    {"rollouts": cmd_rollouts, "features": cmd_features, "confirm": cmd_confirm, "analyze": cmd_analyze}[args.cmd](args)
 
 
 if __name__ == "__main__":

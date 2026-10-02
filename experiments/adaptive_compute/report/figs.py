@@ -65,7 +65,7 @@ def fig1():
     # 1b: marginal value vs a state statistic, one panel per checkpoint (small multiples)
     feats = json.loads(FEAT.read_text())["features"]
     fig, axes = plt.subplots(2, 4, figsize=(13, 5.6), sharey=True)
-    MA, MB, rs = arr["MA_c4"], arr["MB_c4"], arr["rows_s"]
+    MA, MB, rs = arr["MA_c4"], arr["MB_c4"], arr["rows_s_c4"]
     N = int((rs == 0).sum())
     for s in seg:
         ax = axes.flat[s]

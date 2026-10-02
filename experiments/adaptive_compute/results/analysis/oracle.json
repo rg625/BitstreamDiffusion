@@ -1,0 +1,1580 @@
+{
+ "1": {
+  "arm": 1,
+  "budgets_fraction_of_cells": [
+   0.125,
+   0.25,
+   0.5,
+   0.75,
+   1.0
+  ],
+  "baseline_nfe": 255,
+  "results": {
+   "0.125": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.12744848817445065,
+     "extra_nfe_per_sample": 32.0,
+     "d_entropy_per_sample": -0.008266100883483887,
+     "entropy_flag": false,
+     "gain_minus_uniform": 0.09325875291462246,
+     "gain_minus_uniform_ci": [
+      0.04657357716043689,
+      0.14044258547151664
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.04691959463305301,
+     "extra_nfe_per_sample": 31.75,
+     "d_entropy_per_sample": -0.013693248033523559,
+     "entropy_flag": false,
+     "gain_minus_uniform": 0.01272985937322482,
+     "gain_minus_uniform_ci": [
+      -0.01798612220473333,
+      0.051046527870234434
+     ],
+     "share_cells_by_checkpoint": [
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.1196768029705282,
+     "extra_nfe_per_sample": 32.0,
+     "d_entropy_per_sample": -0.03350004196166992,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0854870677107,
+     "gain_minus_uniform_ci": [
+      0.04662517361206145,
+      0.13280633880899845
+     ],
+     "share_cells_by_checkpoint": [
+      0.02,
+      0.03,
+      0.325,
+      0.36,
+      0.2,
+      0.065,
+      0.0,
+      0.0
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.14173682310215988,
+     "extra_nfe_per_sample": 32.0,
+     "d_entropy_per_sample": -0.014921126961708069,
+     "entropy_flag": false,
+     "gain_minus_uniform": 0.1075470878423317,
+     "gain_minus_uniform_ci": [
+      0.05183766619251171,
+      0.15933006613267703
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.12,
+      0.735,
+      0.145,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.1465109926681514,
+     "extra_nfe_per_sample": 32.0,
+     "d_entropy_per_sample": -0.020190795063972474,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.11232125740832323,
+     "gain_minus_uniform_ci": [
+      0.05916723914285515,
+      0.16240916938187316
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.11,
+      0.89,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "heuristic_conf_sd": {
+     "gain_per_sample": 0.06957117251390481,
+     "extra_nfe_per_sample": 32.0,
+     "d_entropy_per_sample": 0.005176594853401184,
+     "entropy_flag": false,
+     "gain_minus_uniform": 0.03538143725407663,
+     "gain_minus_uniform_ci": [
+      0.005350960227155311,
+      0.06788918544877436
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.025,
+      0.27,
+      0.7,
+      0.005,
+      0.0,
+      0.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.5008718772158673,
+     "extra_nfe_per_sample": 32.0,
+     "d_entropy_per_sample": -0.10339841187000275,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.4666821419560391,
+     "gain_minus_uniform_ci": [
+      0.4062006612178531,
+      0.5285394044875856
+     ],
+     "share_cells_by_checkpoint": [
+      0.045,
+      0.075,
+      0.325,
+      0.325,
+      0.185,
+      0.04,
+      0.005,
+      0.0
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.034189735259828186,
+     "extra_nfe_per_sample": 31.75,
+     "d_entropy_per_sample": -0.006288569569587708,
+     "entropy_flag": false
+    }
+   },
+   "0.250": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.24489661603541785,
+     "extra_nfe_per_sample": 64.0,
+     "d_entropy_per_sample": -0.07140363276004791,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.17651714551576142,
+     "gain_minus_uniform_ci": [
+      0.11715739133916242,
+      0.24247024549834045
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.11558698103338273,
+     "extra_nfe_per_sample": 63.5,
+     "d_entropy_per_sample": -0.027368693351745604,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.04720751051372636,
+     "gain_minus_uniform_ci": [
+      0.004095370606531758,
+      0.09834020903971971
+     ],
+     "share_cells_by_checkpoint": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.17014511808049587,
+     "extra_nfe_per_sample": 63.98,
+     "d_entropy_per_sample": -0.039363563656806946,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.1017656475608395,
+     "gain_minus_uniform_ci": [
+      0.04725120526932362,
+      0.15365222003680995
+     ],
+     "share_cells_by_checkpoint": [
+      0.17,
+      0.165,
+      0.495,
+      0.525,
+      0.37,
+      0.185,
+      0.08,
+      0.01
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.24399380712110003,
+     "extra_nfe_per_sample": 64.0,
+     "d_entropy_per_sample": -0.039255577921867374,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.17561433660144365,
+     "gain_minus_uniform_ci": [
+      0.1177084803172685,
+      0.23909518984941436
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.695,
+      0.875,
+      0.425,
+      0.005,
+      0.0,
+      0.0
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.2503974351918564,
+     "extra_nfe_per_sample": 64.0,
+     "d_entropy_per_sample": -0.07003242135047913,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.18201796467220002,
+     "gain_minus_uniform_ci": [
+      0.12314835988472693,
+      0.2497550738645157
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.985,
+      0.98,
+      0.035,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "heuristic_conf_sd": {
+     "gain_per_sample": 0.1442614790675771,
+     "extra_nfe_per_sample": 64.0,
+     "d_entropy_per_sample": 0.0102872234582901,
+     "entropy_flag": false,
+     "gain_minus_uniform": 0.07588200854792077,
+     "gain_minus_uniform_ci": [
+      0.0255815710121447,
+      0.12657340307429438
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.005,
+      0.065,
+      0.775,
+      0.945,
+      0.21,
+      0.0,
+      0.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.7047726295751784,
+     "extra_nfe_per_sample": 64.0,
+     "d_entropy_per_sample": -0.11842688679695129,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.6363931590555221,
+     "gain_minus_uniform_ci": [
+      0.5825674459837803,
+      0.6926637814376138
+     ],
+     "share_cells_by_checkpoint": [
+      0.21,
+      0.215,
+      0.45,
+      0.485,
+      0.355,
+      0.195,
+      0.09,
+      0.0
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.06837947051965637,
+     "extra_nfe_per_sample": 63.5,
+     "d_entropy_per_sample": -0.012577139139175415,
+     "entropy_flag": false
+    }
+   },
+   "0.500": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.29388445036652316,
+     "extra_nfe_per_sample": 126.0,
+     "d_entropy_per_sample": -0.056150293350219725,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.1571255093272104,
+     "gain_minus_uniform_ci": [
+      0.10860013212115979,
+      0.21502269246995728
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.14577765545293866,
+     "extra_nfe_per_sample": 127.0,
+     "d_entropy_per_sample": -0.026188642978668214,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.009018714413625931,
+     "gain_minus_uniform_ci": [
+      -0.044455199267755846,
+      0.0612620575998929
+     ],
+     "share_cells_by_checkpoint": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.20614636658262583,
+     "extra_nfe_per_sample": 127.31,
+     "d_entropy_per_sample": -0.04848603069782257,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0693874255433131,
+     "gain_minus_uniform_ci": [
+      0.020056787415992858,
+      0.12003264222213222
+     ],
+     "share_cells_by_checkpoint": [
+      0.465,
+      0.475,
+      0.61,
+      0.72,
+      0.565,
+      0.46,
+      0.36,
+      0.345
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.30559008449847247,
+     "extra_nfe_per_sample": 127.61,
+     "d_entropy_per_sample": -0.06659995079040527,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.16883114345915978,
+     "gain_minus_uniform_ci": [
+      0.11896383601013476,
+      0.225372828939473
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.625,
+      1.0,
+      0.985,
+      0.88,
+      0.295,
+      0.02,
+      0.195
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.3021875848958811,
+     "extra_nfe_per_sample": 127.33,
+     "d_entropy_per_sample": -0.06229978144168854,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.16542864385656833,
+     "gain_minus_uniform_ci": [
+      0.11089525070270942,
+      0.2270759615210517
+     ],
+     "share_cells_by_checkpoint": [
+      0.265,
+      0.19,
+      1.0,
+      1.0,
+      0.945,
+      0.255,
+      0.01,
+      0.335
+     ]
+    },
+    "heuristic_conf_sd": {
+     "gain_per_sample": 0.2850964715743352,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.03982039034366608,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.14833753053502247,
+     "gain_minus_uniform_ci": [
+      0.09770846113278714,
+      0.19915746016321625
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.97,
+      0.73,
+      0.995,
+      0.945,
+      0.36,
+      0.0,
+      0.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.826971843216719,
+     "extra_nfe_per_sample": 127.2,
+     "d_entropy_per_sample": -0.11392898976802826,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.6902129021774063,
+     "gain_minus_uniform_ci": [
+      0.6536981680373637,
+      0.7260922217453809
+     ],
+     "share_cells_by_checkpoint": [
+      0.505,
+      0.52,
+      0.56,
+      0.645,
+      0.575,
+      0.45,
+      0.345,
+      0.4
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.13675894103931274,
+     "extra_nfe_per_sample": 127.0,
+     "d_entropy_per_sample": -0.02515427827835083,
+     "entropy_flag": true
+    }
+   },
+   "0.750": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.31318765822622924,
+     "extra_nfe_per_sample": 190.0,
+     "d_entropy_per_sample": -0.06977757036685944,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.10804924666726017,
+     "gain_minus_uniform_ci": [
+      0.07673937250312508,
+      0.14016616467380494
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.2012726423068847,
+     "extra_nfe_per_sample": 190.5,
+     "d_entropy_per_sample": -0.04380147576332092,
+     "entropy_flag": true,
+     "gain_minus_uniform": -0.0038657692520843723,
+     "gain_minus_uniform_ci": [
+      -0.05430508942438941,
+      0.042944986550007856
+     ],
+     "share_cells_by_checkpoint": [
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.22702278538490397,
+     "extra_nfe_per_sample": 190.09,
+     "d_entropy_per_sample": -0.03955430507659912,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.021884373825934902,
+     "gain_minus_uniform_ci": [
+      -0.017366427293582818,
+      0.06326421772710816
+     ],
+     "share_cells_by_checkpoint": [
+      0.715,
+      0.71,
+      0.7,
+      0.825,
+      0.725,
+      0.68,
+      0.69,
+      0.955
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.3126748724311846,
+     "extra_nfe_per_sample": 190.77,
+     "d_entropy_per_sample": -0.06154605031013489,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.10753646087221551,
+     "gain_minus_uniform_ci": [
+      0.07643124381169443,
+      0.14047952649670198
+     ],
+     "share_cells_by_checkpoint": [
+      0.8,
+      0.915,
+      1.0,
+      0.995,
+      0.915,
+      0.58,
+      0.18,
+      0.615
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.3049580388317236,
+     "extra_nfe_per_sample": 190.32,
+     "d_entropy_per_sample": -0.06243875920772553,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.09981962727275452,
+     "gain_minus_uniform_ci": [
+      0.06637444589338586,
+      0.13330241867407
+     ],
+     "share_cells_by_checkpoint": [
+      0.89,
+      0.71,
+      1.0,
+      1.0,
+      0.975,
+      0.475,
+      0.11,
+      0.84
+     ]
+    },
+    "heuristic_conf_sd": {
+     "gain_per_sample": 0.2757985974817205,
+     "extra_nfe_per_sample": 191.77,
+     "d_entropy_per_sample": -0.047175828218460086,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0706601859227514,
+     "gain_minus_uniform_ci": [
+      0.03928059670310134,
+      0.10539615177646591
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      0.995,
+      0.975,
+      0.915,
+      0.115
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.7508107213518991,
+     "extra_nfe_per_sample": 190.07,
+     "d_entropy_per_sample": -0.10807165503501892,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.54567230979293,
+     "gain_minus_uniform_ci": [
+      0.5073285278514291,
+      0.5823403415561003
+     ],
+     "share_cells_by_checkpoint": [
+      0.735,
+      0.74,
+      0.675,
+      0.765,
+      0.71,
+      0.65,
+      0.76,
+      0.965
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.2051384115589691,
+     "extra_nfe_per_sample": 190.5,
+     "d_entropy_per_sample": -0.037731417417526246,
+     "entropy_flag": true
+    }
+   },
+   "1.000": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "heuristic_conf_sd": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.27351788207862543,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.2735178820786255,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.05030855655670166,
+     "entropy_flag": true
+    }
+   }
+  },
+  "note": "gain = \u03a3 over selected (state, checkpoint) cells of M\u0302_B, per sample, nats/token; assumes gains add across checkpoints of one sample (not tested); local (token/bit) allocation not testable with this branch design"
+ },
+ "4": {
+  "arm": 4,
+  "budgets_fraction_of_cells": [
+   0.125,
+   0.25,
+   0.5,
+   0.75,
+   1.0
+  ],
+  "baseline_nfe": 255,
+  "results": {
+   "0.125": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.368342345576129,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.15461090862751006,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.29394471088436247,
+     "gain_minus_uniform_ci": [
+      0.22877442536111828,
+      0.3652271331039796
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.12171723957241,
+     "extra_nfe_per_sample": 127.0,
+     "d_entropy_per_sample": -0.03535663664340973,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0473196048806434,
+     "gain_minus_uniform_ci": [
+      -0.008338465011731647,
+      0.09951941042938535
+     ],
+     "share_cells_by_checkpoint": [
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125,
+      0.125
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.29780678975993097,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.08373383402824403,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.22340915506816436,
+     "gain_minus_uniform_ci": [
+      0.15411324347256528,
+      0.2959153538938789
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.06,
+      0.46,
+      0.325,
+      0.14,
+      0.01,
+      0.005,
+      0.0
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.3160094710981184,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.07809287309646606,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.2416118364063518,
+     "gain_minus_uniform_ci": [
+      0.17581083864172672,
+      0.31060640702969033
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.365,
+      0.61,
+      0.025,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.36377373402012175,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.1510753720998764,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.2893760993283551,
+     "gain_minus_uniform_ci": [
+      0.22286250809144847,
+      0.3600162830781851
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      0.985,
+      0.015,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.27686196628994636,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.0982927656173706,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.20246433159817975,
+     "gain_minus_uniform_ci": [
+      0.1376444011140122,
+      0.2675989826949606
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.19,
+      0.585,
+      0.22,
+      0.005,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.7567039734016393,
+     "extra_nfe_per_sample": 128.0,
+     "d_entropy_per_sample": -0.19343656599521636,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.6823063387098725,
+     "gain_minus_uniform_ci": [
+      0.6053573707491946,
+      0.7644753244509916
+     ],
+     "share_cells_by_checkpoint": [
+      0.025,
+      0.085,
+      0.435,
+      0.335,
+      0.1,
+      0.02,
+      0.0,
+      0.0
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.07439763469176658,
+     "extra_nfe_per_sample": 127.0,
+     "d_entropy_per_sample": -0.017821424677968024,
+     "entropy_flag": false
+    }
+   },
+   "0.250": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.6043409992123072,
+     "extra_nfe_per_sample": 256.0,
+     "d_entropy_per_sample": -0.1739018577337265,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.455545729828774,
+     "gain_minus_uniform_ci": [
+      0.3809061158990246,
+      0.5302259079416766
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.17387119734015055,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.037419919967651365,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.02507592795661738,
+     "gain_minus_uniform_ci": [
+      -0.04320783753808809,
+      0.09502297406711503
+     ],
+     "share_cells_by_checkpoint": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.4577791030010728,
+     "extra_nfe_per_sample": 255.96,
+     "d_entropy_per_sample": -0.13143426060676575,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.3089838336175396,
+     "gain_minus_uniform_ci": [
+      0.23446532532695447,
+      0.3881124984910437
+     ],
+     "share_cells_by_checkpoint": [
+      0.11,
+      0.18,
+      0.67,
+      0.59,
+      0.31,
+      0.12,
+      0.015,
+      0.005
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.5803198088034115,
+     "extra_nfe_per_sample": 256.0,
+     "d_entropy_per_sample": -0.1623114049434662,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.4315245394198783,
+     "gain_minus_uniform_ci": [
+      0.35583395727415945,
+      0.5086996774174846
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.015,
+      0.965,
+      0.815,
+      0.205,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.6035578607445151,
+     "extra_nfe_per_sample": 256.0,
+     "d_entropy_per_sample": -0.17287239849567412,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.4547625913609819,
+     "gain_minus_uniform_ci": [
+      0.3815447806637536,
+      0.5301905904376778
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.0,
+      1.0,
+      0.965,
+      0.035,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.4794471096284245,
+     "extra_nfe_per_sample": 256.0,
+     "d_entropy_per_sample": -0.15481781005859374,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.33065184024489125,
+     "gain_minus_uniform_ci": [
+      0.2561081630639231,
+      0.4037448787681429
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.545,
+      0.91,
+      0.535,
+      0.01,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 1.0241793425936212,
+     "extra_nfe_per_sample": 256.0,
+     "d_entropy_per_sample": -0.2271537357568741,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.875384073210088,
+     "gain_minus_uniform_ci": [
+      0.8067249812651008,
+      0.9479262729438834
+     ],
+     "share_cells_by_checkpoint": [
+      0.14,
+      0.225,
+      0.625,
+      0.55,
+      0.32,
+      0.11,
+      0.03,
+      0.0
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.14879526938353316,
+     "extra_nfe_per_sample": 254.0,
+     "d_entropy_per_sample": -0.03564284935593605,
+     "entropy_flag": true
+    }
+   },
+   "0.500": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.6988344196866221,
+     "extra_nfe_per_sample": 512.0,
+     "d_entropy_per_sample": -0.17894857227802277,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.4012438809195558,
+     "gain_minus_uniform_ci": [
+      0.3387023751781879,
+      0.4615492042033532
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.30239543725272794,
+     "extra_nfe_per_sample": 508.0,
+     "d_entropy_per_sample": -0.07732898712158204,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.004804898485661591,
+     "gain_minus_uniform_ci": [
+      -0.0710474354053637,
+      0.08401285554257396
+     ],
+     "share_cells_by_checkpoint": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.5390223009640613,
+     "extra_nfe_per_sample": 509.84,
+     "d_entropy_per_sample": -0.14379020273685456,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.24143176219699494,
+     "gain_minus_uniform_ci": [
+      0.17754137682701854,
+      0.3025962496946858
+     ],
+     "share_cells_by_checkpoint": [
+      0.445,
+      0.49,
+      0.78,
+      0.78,
+      0.54,
+      0.38,
+      0.315,
+      0.27
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.6759067969717413,
+     "extra_nfe_per_sample": 511.08,
+     "d_entropy_per_sample": -0.18100255846977234,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.37831625820467496,
+     "gain_minus_uniform_ci": [
+      0.31590106222225217,
+      0.4358701652897768
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.98,
+      0.995,
+      0.965,
+      0.765,
+      0.135,
+      0.045,
+      0.115
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.692928187467081,
+     "extra_nfe_per_sample": 510.88,
+     "d_entropy_per_sample": -0.17117227971553803,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.39533764870001464,
+     "gain_minus_uniform_ci": [
+      0.33212675482873444,
+      0.4563060274765145
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      0.84,
+      1.0,
+      1.0,
+      0.9,
+      0.115,
+      0.005,
+      0.14
+     ]
+    },
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.6789931121797497,
+     "extra_nfe_per_sample": 512.0,
+     "d_entropy_per_sample": -0.17725526034832,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.38140257341268324,
+     "gain_minus_uniform_ci": [
+      0.31798975285101017,
+      0.4411989804704051
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      1.0,
+      1.0,
+      0.99,
+      0.83,
+      0.18,
+      0.0,
+      0.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 1.1770529164893397,
+     "extra_nfe_per_sample": 509.16,
+     "d_entropy_per_sample": -0.22943255186080933,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.8794623777222733,
+     "gain_minus_uniform_ci": [
+      0.8388571317441113,
+      0.9269682710199026
+     ],
+     "share_cells_by_checkpoint": [
+      0.405,
+      0.51,
+      0.745,
+      0.735,
+      0.535,
+      0.39,
+      0.325,
+      0.355
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.2975905387670663,
+     "extra_nfe_per_sample": 508.0,
+     "d_entropy_per_sample": -0.0712856987118721,
+     "entropy_flag": true
+    }
+   },
+   "0.750": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.6927152530703309,
+     "extra_nfe_per_sample": 760.0,
+     "d_entropy_per_sample": -0.17679285168647765,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.24632944491973136,
+     "gain_minus_uniform_ci": [
+      0.20695861007301974,
+      0.283439092522649
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.44335047375180037,
+     "extra_nfe_per_sample": 762.0,
+     "d_entropy_per_sample": -0.11397789657115937,
+     "entropy_flag": true,
+     "gain_minus_uniform": -0.00303533439879911,
+     "gain_minus_uniform_ci": [
+      -0.07172884672756308,
+      0.06580229701336214
+     ],
+     "share_cells_by_checkpoint": [
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.52819080227737,
+     "extra_nfe_per_sample": 760.52,
+     "d_entropy_per_sample": -0.13125160038471223,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0818049941267705,
+     "gain_minus_uniform_ci": [
+      0.02519382451410425,
+      0.13766622874348003
+     ],
+     "share_cells_by_checkpoint": [
+      0.71,
+      0.705,
+      0.81,
+      0.855,
+      0.68,
+      0.65,
+      0.655,
+      0.935
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.6504719569631476,
+     "extra_nfe_per_sample": 763.6,
+     "d_entropy_per_sample": -0.16580929458141327,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.20408614881254802,
+     "gain_minus_uniform_ci": [
+      0.16790603994396436,
+      0.23718492894532534
+     ],
+     "share_cells_by_checkpoint": [
+      0.835,
+      1.0,
+      1.0,
+      0.985,
+      0.89,
+      0.47,
+      0.27,
+      0.55
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.6631349656630917,
+     "extra_nfe_per_sample": 762.44,
+     "d_entropy_per_sample": -0.1668142569065094,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.21674915751249216,
+     "gain_minus_uniform_ci": [
+      0.17835112259494135,
+      0.25325937956779115
+     ],
+     "share_cells_by_checkpoint": [
+      0.895,
+      1.0,
+      1.0,
+      1.0,
+      0.95,
+      0.35,
+      0.11,
+      0.695
+     ]
+    },
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.6027736628006575,
+     "extra_nfe_per_sample": 766.72,
+     "d_entropy_per_sample": -0.1455243408679962,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.1563878546500579,
+     "gain_minus_uniform_ci": [
+      0.12115199275701183,
+      0.19302837935398356
+     ],
+     "share_cells_by_checkpoint": [
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      0.995,
+      0.975,
+      0.87,
+      0.16
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 1.109605999757067,
+     "extra_nfe_per_sample": 760.44,
+     "d_entropy_per_sample": -0.21774546980857848,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.6632201916064676,
+     "gain_minus_uniform_ci": [
+      0.6215739817941356,
+      0.707046951713987
+     ],
+     "share_cells_by_checkpoint": [
+      0.745,
+      0.705,
+      0.79,
+      0.815,
+      0.715,
+      0.655,
+      0.63,
+      0.945
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.4463858081505995,
+     "extra_nfe_per_sample": 762.0,
+     "d_entropy_per_sample": -0.10692854806780815,
+     "entropy_flag": true
+    }
+   },
+   "1.000": {
+    "temporal_oracle": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "example_oracle": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "state_oracle(t x example)": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "learned_state_only(E)": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "learned_state+t(F)": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "in-sample_oracle(optimistic,B on B)": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.0,
+     "gain_minus_uniform_ci": [
+      0.0,
+      0.0
+     ],
+     "share_cells_by_checkpoint": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "uniform": {
+     "gain_per_sample": 0.5951810775341326,
+     "extra_nfe_per_sample": 1016.0,
+     "d_entropy_per_sample": -0.1425713974237442,
+     "entropy_flag": true
+    }
+   }
+  },
+  "note": "gain = \u03a3 over selected (state, checkpoint) cells of M\u0302_B, per sample, nats/token; assumes gains add across checkpoints of one sample (not tested); local (token/bit) allocation not testable with this branch design"
+ }
+}

@@ -87,3 +87,38 @@ defined (no denoiser output yet). Hidden-state statistics not collected (would n
 - **Exploitability** (oracle, PLAN §11–13): allocations chosen on half A, gains evaluated on half
   B, additivity across checkpoints assumed (not tested). Meaningful if the best adaptive policy
   beats uniform by ≥ 0.01 nats/token per sample at some budget with a bootstrap CI excluding 0.
+
+## 2026-10-02 20:41–21:19 — Phase 1 result (job `phase1`, PID 601293; block 0, 200 states)
+
+32 cells, process time 0.63 GPU-h (ledger `results/gpu_ledger.jsonl`). Analysis
+`results/analysis/heterogeneity.json` (CPU).
+
+- **Pre-registered rule → Case B**: cells with Cov(M̂_A, M̂_B) CI excluding 0 and τ ≥ 0.01:
+  s2_c4 τ 0.220 [0.026, 0.312]; s3_c2 τ 0.149 [0.043, 0.209]; s5_c1 τ 0.070 [0.007, 0.101].
+  12 more cells have τ ≥ 0.01 with CIs including 0. **Caveat noted now:** 3 of 24 cells pass at
+  the 95% level with lower bounds just above 0; ~1.2 would pass by chance if τ = 0 everywhere.
+  Phase 2 (5× the states) is the planned remedy.
+- Placebo (zero-compute) covariances ≈ 0 at every checkpoint, CIs include 0 → estimator sane.
+- Mean effects (+4): s0 −0.003, s1 +0.038, **s2 +0.402, s3 +0.265**, s4 +0.066, s5 −0.035,
+  s6 −0.048, s7 −0.004 nats/token. Entropy drops with the gain at s2 (−0.158 at +4) and s3
+  (−0.032): the same entropy confound as the compute-allocation study. Per-state corr(M̂, ΔÊ) is
+  −0.3…−0.7 everywhere; the entropy-adjusted τ for s2_c4 is 0.0, for s3 it stays 0.10–0.12.
+- Final quality determined by the state: between-state sd of Q(+0) rises from 0.00 (s0, pure
+  noise) to 0.08 (s1), 0.30 (s3), 0.44 (s4), 0.50 (s7) vs single-rollout sd ≈ 0.51.
+
+**Decision (pre-registered rule): Case B → Phase 2.** Blocks 1–4 (states 200–999), same arms.
+Estimated 2.5 GPU-h; session total would be ≈ 4.2 of 6 h.
+
+## 2026-10-02 21:21 — Added while phase 2 runs (before any phase-2 result was read)
+
+- **Oracle now reports each policy's Δentropy per sample** (from half-B entropy differences) and an
+  entropy flag (|Δentropy| > 0.02, the previous study's rule). Phase-1 preview (debugging the
+  figures only) showed that every high-gain policy also lowers entropy (e.g. temporal oracle at a
+  25% budget with +4: Δentropy −0.17), so gains must be read with entropy alongside.
+- **End-to-end confirmation runs (pre-registered here)**, `adaptive.py confirm`: one policy for all
+  1024 Run-1 samples from step 0 with Run 1's chunk/churn seeds, so each sample is paired with its
+  Run 1 reference (single rollout, n = 1024). Tests the oracle's additivity assumption:
+  P1 = +1 in every segment (= `refined` self-conditioning everywhere, +255 NFE ≈ +100%);
+  P2 = +4 in the two checkpoints the temporal oracle picks on phase-2 half A at the 2/8 budget.
+  Prediction = Σ over the chosen checkpoints of the rollout mean M̂ (phase 2, 1000 states).
+  Additivity is "consistent" if the measured mean ΔQ's 95% CI contains the prediction.
