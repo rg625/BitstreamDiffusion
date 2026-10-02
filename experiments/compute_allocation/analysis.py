@@ -244,39 +244,69 @@ def settling(step_logs: Dict) -> Dict:
 # §8 decision rule (mechanical; operationalisations in NOTEBOOK.md)
 # -----------------------------------------------------------------------------
 def decide(rows: Dict[str, Dict], settle_share: Optional[List[float]]) -> Dict:
-    def usable_material(r):
-        return r is not None and r["material"] and r["d_nll_tok"] > 0 and not r["entropy_flag"]
+    """
+    §8 applied per segment (pre-registered reading, NOTEBOOK.md 2026-10-02 17:27 / 18:00):
+      R(s): refine[s] material improvement (ΔNLL<0), not entropy-flagged
+      N(s): nochurn[s] material increase, not flagged, and ≥ median nochurn ΔNLL + 0.01
+      R&N -> both;  R only -> step_size;  N only (refine[s] not a material improvement) ->
+      uncorrected_errors.  No R and no N anywhere -> model.
+    Run 3 cause: the cause covering more segments (a 'both' segment counts for the cause with
+    the larger |effect| there); tie -> larger summed |effect|. s* = segment with the largest
+    |effect| for that cause.
+    """
+    def g(name):
+        return rows.get(name)
 
-    ref_mat = [s for s in range(N_SEG) if usable_material(rows.get(f"refine_{s}"))]
-    # refine helping means ΔNLL < 0 (better); "material" for refine is an improvement
-    ref_help = [s for s in range(N_SEG)
-                if rows.get(f"refine_{s}") and rows[f"refine_{s}"]["material"]
-                and rows[f"refine_{s}"]["d_nll_tok"] < 0 and not rows[f"refine_{s}"]["entropy_flag"]]
-    nc = {s: rows.get(f"nochurn_{s}") for s in range(N_SEG)}
-    nc_vals = [nc[s]["d_nll_tok"] for s in range(N_SEG) if nc[s] is not None]
+    def R(s):
+        r = g(f"refine_{s}")
+        return bool(r and r["material"] and r["d_nll_tok"] < 0 and not r["entropy_flag"])
+
+    nc_vals = [g(f"nochurn_{s}")["d_nll_tok"] for s in range(N_SEG) if g(f"nochurn_{s}")]
     med = float(np.median(nc_vals)) if nc_vals else float("nan")
-    nc_standout = [s for s in range(N_SEG) if usable_material(nc[s]) and nc[s]["d_nll_tok"] - med >= MATERIAL]
-    both = sorted(set(ref_help) & set(nc_standout))
-    ref_any = sorted(set(ref_help) | set(ref_mat))
 
-    if both:
-        row, segs = "both", both
-    elif ref_help:
-        row, segs = "step_size", ref_help
-    elif nc_standout and not ref_any:
-        row, segs = "uncorrected_errors", nc_standout
-    elif not ref_any and not nc_standout:
-        row, segs = "model", []
+    def N(s):
+        r = g(f"nochurn_{s}")
+        return bool(r and r["material"] and r["d_nll_tok"] > 0 and not r["entropy_flag"]
+                    and r["d_nll_tok"] - med >= MATERIAL)
+
+    per_seg = {}
+    for s in range(N_SEG):
+        rs, ns = R(s), N(s)
+        per_seg[s] = "both" if (rs and ns) else "step_size" if rs else "uncorrected_errors" if ns else None
+    flagged_refine = [s for s in range(N_SEG) if g(f"refine_{s}") and g(f"refine_{s}")["material"]
+                      and g(f"refine_{s}")["entropy_flag"]]
+    refine_worse = [s for s in range(N_SEG) if g(f"refine_{s}") and g(f"refine_{s}")["material"]
+                    and g(f"refine_{s}")["d_nll_tok"] > 0 and not g(f"refine_{s}")["entropy_flag"]]
+
+    if not any(per_seg.values()):
+        overall, cause, s_star = "model", None, None
     else:
-        row, segs = "unclassified", sorted(set(ref_any) | set(nc_standout))
+        eff = {"step_size": {}, "uncorrected_errors": {}}
+        for s, c in per_seg.items():
+            if c is None:
+                continue
+            er = abs(g(f"refine_{s}")["d_nll_tok"])
+            en = abs(g(f"nochurn_{s}")["d_nll_tok"])
+            if c == "both":
+                (eff["step_size"] if er > en else eff["uncorrected_errors"])[s] = max(er, en)
+            elif c == "step_size":
+                eff["step_size"][s] = er
+            else:
+                eff["uncorrected_errors"][s] = en
+        cause = max(eff, key=lambda k: (len(eff[k]), sum(eff[k].values())))
+        s_star = max(eff[cause], key=eff[cause].get)
+        kinds = {c for c in per_seg.values() if c}
+        overall = "both" if ("both" in kinds or len(kinds) > 1) else kinds.pop()
 
     mismatch = None
+    segs = [s for s, c in per_seg.items() if c]
     if settle_share is not None and segs:
-        top2 = list(np.argsort(settle_share)[::-1][:2])
-        mismatch = dict(top2_settling_segments=[int(v) for v in top2],
-                        bottleneck_outside_top2=[s for s in segs if s not in top2])
-    return dict(row=row, segments=segs, refine_material_improve=ref_help, refine_material_worse=ref_mat,
-                nochurn_median_d_nll=med, nochurn_standout=nc_standout, settling_mismatch=mismatch)
+        top2 = [int(v) for v in np.argsort(settle_share)[::-1][:2]]
+        mismatch = dict(top2_settling_segments=top2, bottleneck_outside_top2=[s for s in segs if s not in top2])
+    return dict(per_segment={str(k): v for k, v in per_seg.items()}, overall=overall,
+                run3_cause=cause, run3_s_star=s_star, nochurn_median_d_nll=med,
+                refine_material_but_entropy_flagged=flagged_refine,
+                refine_material_worse_unflagged=refine_worse, settling_mismatch=mismatch)
 
 
 # -----------------------------------------------------------------------------

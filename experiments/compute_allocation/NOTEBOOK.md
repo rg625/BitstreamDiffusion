@@ -185,3 +185,82 @@ undefined I fix it here, before seeing data (also in `analysis.py` docstring):
   (1024×128 tokens): 1–10, 11–100, 101–1000, >1000/unseen. (LM1B corpus not downloaded.)
 - **Extra batch b** (borderline segments): seed 42+b with the same chunk layout; a new reference
   trajectory for that batch plus the branch; pooled over batches for the decision.
+
+## 2026-10-02 17:26–17:29 — GPU identity check (job `identity_check`, PID 63404)
+
+`diagnose.py identity-check --n 512 --no-compile` → `results/identity_check.json`:
+one production chunk (512 samples, chunk 0 seed, legacy global-stream churn, no new options) with
+the current sampler vs the sampler loaded from `main`: **probs bit-identical (max |Δp| = 0.0)**,
+bits identical, rerun identical; **255 model calls per sample** (confirms 254 steps + final).
+51.7 s per 512-sample chunk. Process 157 s.
+
+## 2026-10-02 17:29 — GPT-2 scorer: SDPA unavailable
+
+transformers 4.38.1 raises "GPT2LMHeadModel does not support ... scaled_dot_product_attention".
+The repo pins transformers ≥4.40. I did not upgrade transformers in the shared `sedd` env
+(it would change an existing package, not add a missing one). **Deviation: GPT-2-large scored with
+`attn_implementation="eager"`, still bf16 weights + bf16 autocast** (driver falls back
+automatically and records `scorer_attn` in every output's meta). Same scorer for all branches, so
+paired comparisons are unaffected; the anchor may differ from production by eager-vs-SDPA rounding.
+
+## 2026-10-02 17:29–17:31 — Run 1 (job `run1_reference`, PID 70874)
+
+- Generation 104.1 s (1024 samples, 510 model calls = 2 chunks × 255), scoring 12.1 s,
+  process 120 s ≈ **0.033 GPU-h per cell** on the 4090.
+- **Anchor: GenPPL 60.176, entropy 4.3129** (`results/batch0/reference.json`). Gate (pre-set):
+  GenPPL ∈ [58.5, 60.5] ✔, |entropy − 4.31| ≤ 0.015 ✔ → **PASS**. Note GenPPL is 0.18 above the
+  README's literal "≈59–60" and +0.42 vs the paper's 59.76 (10-seed mean), i.e. within 1 seed sd.
+- Saved: `runs/compute_allocation/batch0/states/seg{0..7}.pt` (x, x0_hat at steps 0,32,…,224),
+  `step_logs.pt` (token guesses int16 [255,1024,128], per-token mean bit entropy, churn sizes),
+  `reference.pt` (bits, tokens, texts).
+- **Bug found** in the logged per-step bit entropy: clamp at 1−1e−12 rounds to 1.0 in fp32 →
+  NaN at late steps. Affects only that one summary (not samples, scores, guesses). Fixed (clamp
+  1e−6); will rewrite step logs with `reference --step-logs-only` after Run 2, which also checks
+  the rerun reproduces the reference bits exactly.
+- Settling (CPU, `results/analysis/run1_settling.json`): final-settling share by segment
+  0.0000/0.0029/0.0518/0.1542/0.2199/0.2265/0.2158/0.1290 vs uniform 0.1255 (seg 7: 0.1216).
+- Updated cost estimates: Run 2 ≈ 3,300 NFE/sample ≈ 13 cells → ≈ 13×104 s + 17×12 s ≈ 26 min
+  ≈ 0.45 GPU-h; Run 3 (18 cells) ≈ 0.6 GPU-h. Well inside the 6 GPU-h cap.
+
+## 2026-10-02 17:32 — Run 2 started (job `run2_all`, PID 76261): `probe --all --no-compile`
+
+- **null** (first): GenPPL 60.176, entropy 4.3129. **Bit-identical to the reference** (bits, tokens,
+  per-sample NLL and entropy all equal) → replay drift = 0 exactly; determinism gate PASS.
+- 17:34–17:57 remaining 16 branches. Per-branch generation 12–142 s (scales with steps after the
+  start state; refine adds 3 calls/step in its segment), scoring ≈ 11.9 s each.
+  Results: `results/analysis/run2_table.csv` / `run2_analysis.json` (batch 0).
+
+## 2026-10-02 18:00 — Run 2 batch 0 read-out, borderline batches, decision-rule fix
+
+Headline (batch 0, ΔNLL/token [95% CI], Δentropy):
+refine_1 −0.052 [−0.077,−0.029] Δent −0.032 FLAG; refine_2 −0.345 FLAG (Δent −0.138);
+refine_3 −0.265 FLAG (Δent −0.038); **refine_4 −0.087 [−0.111,−0.063], Δent +0.019 (not flagged)**;
+refine_5 +0.018 [+0.001,+0.036]; refine_6 +0.038 [+0.028,+0.048]; nochurn_4..7 +0.093/+0.107/+0.075/+0.058
+(all CIs exclude 0); nochurn_0..3 within ±0.04, CIs include 0 or touch it.
+
+**Borderline (CI straddles ±0.01) → one extra 1024-sample batch (batch 1, seed 43) for those
+branches only:** refine_0, refine_5, refine_7, nochurn_0, nochurn_1, nochurn_2, nochurn_3, plus the
+batch-1 reference they need and a batch-1 null (cheap determinism re-check). Decision uses the
+pooled 2048 paired samples for these branches (pre-registered at 17:27).
+
+**Correction to my analysis code (not to any threshold):** `decide()` returned only the first
+matching §8 row globally. §8 is per segment ("in those segments", "there", "in the same
+segment"), so it now classifies each segment: R(s) = refine material improvement & unflagged,
+N(s) = nochurn "much more" (as pre-registered at 17:27); R&N→both, R→step size, N→uncorrected errors;
+no R and no N anywhere → model. On batch 0 this gives: seg 4 both; segs 5, 6, 7 uncorrected
+errors; segs 0–3 none (segs 1–3 refine effects are material but entropy-flagged, so not
+interpreted on their own).
+
+**Run 3 selection rule — written now, AFTER seeing batch-0 Run 2 but BEFORE batch 1.** §9 asks for a
+single comparison but does not say what to do when segments fall in different rows. Rule: the
+cause covering more segments wins (a "both" segment counts for the cause with the larger |ΔNLL|
+there); ties → larger summed |ΔNLL|; s* = segment with the largest |ΔNLL| for that cause. On batch 0:
+uncorrected errors, s* = 5. Because this rule was fixed after seeing batch 0, the report flags it.
+
+**Run 3 design (uncorrected-errors variant), fixed now:** conditions at each base γ ∈
+{0.185, 0.200, 0.215} (per-step γ = base·255/254 as in production):
+baseline = uniform γ; modified = γ_in = 1.75·γ inside s*, γ_out = c·γ in the other 7 segments, with
+c calibrated by a pilot at base γ = 0.2, seed 42, so that mean entropy matches the baseline's.
+3 seeds (42, 43, 44) × 1024 samples, both conditions share seeds and chunk seeds (same spec tag).
+Per condition×seed: fit log GenPPL linear in entropy over the 3 γ points, evaluate at 4.31;
+paired difference per seed; report mean and t-based 95% CI (t₀.₉₇₅,₂ = 4.303) over the 3 seeds.
