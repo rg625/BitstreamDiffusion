@@ -6,6 +6,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
@@ -77,6 +78,7 @@ def fig1():
         ax.axhspan(-nz, nz, color=GRAY, alpha=0.15, linewidth=0)
         ax.set_title(f"s={s}  τ={pc[str(s)]['arms']['4']['tau']:.3f}", fontsize=9)
         ax.set_xlabel("mean bit entropy of x̂₀" if s > 0 else "rms(x−½)/σ (no x̂₀ yet)", fontsize=8)
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
     for ax in axes[:, 0]:
         ax.set_ylabel("M̂(+4), 4 rollouts")
     fig.suptitle("Figure 1b. Marginal value of +4 vs state, by checkpoint (gray band = ±1 noise sd)",
@@ -103,8 +105,9 @@ def fig2():
         ax.invert_yaxis()
         ax.set_xlabel("rank correlation with held-out M̂_B")
         ax.set_title(f"Figure 2{'ab'[arm == '4']}. Predicting the value of +{arm}")
-    axes[0].legend(fontsize=7.5, loc="lower right")
-    fig.tight_layout()
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=2, fontsize=8, frameon=False)
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     fig.savefig(HERE / "fig2_predictors.png", dpi=160)
 
 
@@ -123,11 +126,22 @@ def fig3_fig4():
             xs = [100 * res[f][key]["extra_nfe_per_sample"] / 255 for f in fr]
             ys = [res[f][key]["gain_per_sample"] for f in fr]
             ax.plot([0] + xs, [0] + ys, color=col, linestyle=ls, marker="o", markersize=4, linewidth=1.6, label=lab)
+        add = json.loads((A / "additivity.json").read_text())
+        key = "policy_c1_segs0-1-2-3-4-5-6-7" if arm == "1" else "policy_c4_segs2-3"
+        if key in add:
+            r = add[key]
+            x = 100 * (r["nfe_per_sample"] - 255) / 255
+            ax.errorbar([x], [r["measured_dQ"]], yerr=[[r["measured_dQ"] - r["measured_ci"][0]], [r["measured_ci"][1] - r["measured_dQ"]]],
+                        fmt="*", color=INK, markersize=10, elinewidth=1.3, zorder=5,
+                        label="measured end-to-end run (+1 everywhere)" if arm == "1" else "measured end-to-end run (+4 at s=2,3)")
+            ax.annotate(f"{100*r['ratio_measured_over_predicted']:.0f}% of additive\nprediction", (x, r["measured_dQ"]),
+                        textcoords="offset points", xytext=(12, -6) if arm == "4" else (-70, -28), fontsize=7.5, color=INK2)
         ax.axhline(0, color=INK2, linewidth=0.8)
         ax.set_xlabel("extra compute (% of the 255-NFE baseline)")
         ax.set_ylabel("quality gain per sample, Σ M̂_B (nats/token)")
         ax.set_title(f"Figure 3{'ab'[arm == '4']}. Fixed-budget allocation, unit = +{arm} per cell")
-    axes[0].legend(fontsize=7.5, loc="best")
+    axes[0].legend(fontsize=7.5, loc="lower right")
+    axes[1].legend(fontsize=7.5, loc="lower right")
     fig.tight_layout()
     fig.savefig(HERE / "fig3_oracle.png", dpi=160)
 

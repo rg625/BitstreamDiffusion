@@ -122,3 +122,49 @@ Estimated 2.5 GPU-h; session total would be ≈ 4.2 of 6 h.
   P2 = +4 in the two checkpoints the temporal oracle picks on phase-2 half A at the 2/8 budget.
   Prediction = Σ over the chosen checkpoints of the rollout mean M̂ (phase 2, 1000 states).
   Additivity is "consistent" if the measured mean ΔQ's 95% CI contains the prediction.
+
+## 2026-10-02 20:50 — Analysis code validated on synthetic data (CPU, before reading phase-1 results)
+
+Synthetic Q with known between-state τ = 0.05 per checkpoint and rollout noise sd 0.3 (N = 1000, R = 4):
+the split-half estimator recovered τ = 0.059 [0.045, 0.070] (s0) and 0.052 [0.033, 0.065] (s5);
+placebo covariance ≈ 0 (CIs include 0). Predictor/oracle code exercised end to end on a synthetic
+feature-dependent signal. Lesson recorded: selecting cells by a noisy half-A estimate (the
+"state oracle") is not an upper bound — a smoothed predictor can beat it; the in-sample oracle
+grossly overstates gains (winner's curse). The "ceiling" label was renamed accordingly.
+
+## 2026-10-02 21:19 → 23:54 — Phase 2 (job `phase2`, PID 690159): blocks 1–4, 128 cells
+
+2.564 GPU-h. No errors. Watcher processes timed out twice (my wait loops, not the job).
+Analysis over all 1000 states (`results/analysis/heterogeneity.json`, `predictors.json`,
+`oracle.json`, `arrays.npz`):
+
+- **Pre-registered rule → still Case B, but only at checkpoint 3**: s3_c2 τ 0.119 [0.075, 0.149],
+  s3_c4 τ 0.120 [0.071, 0.153]; entropy-adjusted τ 0.102 / 0.111. Phase-1 "hits" s2_c4 and s5_c1 did
+  not replicate (τ 0.000 [0, 0.123] and 0.038 [0, 0.061]). Reliability of a 4-rollout M̂ at s3:
+  0.17–0.18 (noise sd 0.25 vs τ 0.12). Placebo covariances ≈ 0 everywhere.
+- Mean marginal value (strong timestep dependence): +4 at s0…s7 = +0.002, +0.048, +0.393, +0.278,
+  +0.068, −0.037, −0.036, −0.007 nats/token. Entropy: s2 −0.146, s3 −0.027, s1 −0.032 at +4.
+- Predictors (fit on A, scored on B): within-timestep Spearman 0.03–0.06 (CIs exclude 0; meets the
+  pre-registered "useful" bar but tiny). Pooled ρ 0.37 for +4, all from timestep (model A alone 0.368).
+  Cross-timestep (state-only, held-out checkpoints): pooled ρ 0.115, R² −1.7.
+- Oracle: temporal oracle ≈ learned state+t (difference −0.008…+0.0035, CIs include 0 or are
+  negative); example-level ≈ uniform; state oracle (half-A selection) clearly worse; in-sample oracle
+  (winner's curse) far above everything. **Added (00:00) a paired "minus temporal oracle" CI** to the
+  oracle output, since the plan's question is state vs timestep.
+
+## 2026-10-02 23:55 → 2026-10-03 00:03 — End-to-end confirmation (jobs `confirm_p1`, `confirm_p2`)
+
+`results/confirm/*.json`, `results/analysis/additivity.json`. Paired with Run 1 (n = 1024):
+- P1 (+1 everywhere, 509 NFE): GenPPL 60.18 → 45.81, entropy 4.313 → 4.244 (Δ −0.069
+  [−0.086, −0.052]); mean ΔQ 0.276 [0.236, 0.314] vs additive prediction 0.332 [0.301, 0.365] → 83%.
+- P2 (+4 at s = 2, 3, 511 NFE): GenPPL 36.42, entropy 4.141 (Δ −0.172 [−0.193, −0.150]); ΔQ 0.510
+  [0.464, 0.556] vs prediction 0.671 [0.642, 0.701] → 76%.
+**Additivity is not consistent (sub-additive by 17–24%)**; the oracle curves overstate combined gains.
+Both policies are entropy-flagged (|Δentropy| > 0.02): the GenPPL gains cannot be read as quality
+gains on their own.
+
+## Totals
+
+This study 3.329 GPU-h (phase 1 incl. smoke 0.641, phase 2 2.564, confirm 0.123); session total
+4.350 of 6 GPU-h. Phase 3 of PLAN §16 (separate expensive evaluation on a stratified subset) was not
+run: every rollout already used the final metric (GPT-2-large on the full sample).

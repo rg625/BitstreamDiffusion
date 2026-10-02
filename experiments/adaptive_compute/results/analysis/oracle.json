@@ -12,14 +12,19 @@
   "results": {
    "0.125": {
     "temporal_oracle": {
-     "gain_per_sample": 0.12744848817445065,
+     "gain_per_sample": 0.1528170148807183,
      "extra_nfe_per_sample": 32.0,
-     "d_entropy_per_sample": -0.008266100883483887,
-     "entropy_flag": false,
-     "gain_minus_uniform": 0.09325875291462246,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.020555556178092956,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.11148593304803996,
      "gain_minus_uniform_ci": [
-      0.04657357716043689,
-      0.14044258547151664
+      0.09179945142884975,
+      0.13108938586415947
      ],
      "share_cells_by_checkpoint": [
       0.0,
@@ -33,14 +38,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.04691959463305301,
+     "gain_per_sample": 0.03258275121748368,
      "extra_nfe_per_sample": 31.75,
-     "d_entropy_per_sample": -0.013693248033523559,
+     "gain_minus_temporal": -0.12023426366323463,
+     "gain_minus_temporal_ci": [
+      -0.14402588367441108,
+      -0.09679503630704428
+     ],
+     "d_entropy_per_sample": -0.00698380583524704,
      "entropy_flag": false,
-     "gain_minus_uniform": 0.01272985937322482,
+     "gain_minus_uniform": -0.008748330615194687,
      "gain_minus_uniform_ci": [
-      -0.01798612220473333,
-      0.051046527870234434
+      -0.021729563916103235,
+      0.005875244875602448
      ],
      "share_cells_by_checkpoint": [
       0.125,
@@ -54,127 +64,157 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.1196768029705282,
+     "gain_per_sample": 0.0988435579545741,
      "extra_nfe_per_sample": 32.0,
-     "d_entropy_per_sample": -0.03350004196166992,
+     "gain_minus_temporal": -0.053973456926144206,
+     "gain_minus_temporal_ci": [
+      -0.07892746670338685,
+      -0.03075401791611879
+     ],
+     "d_entropy_per_sample": -0.022329015493392945,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.0854870677107,
+     "gain_minus_uniform": 0.05751247612189574,
      "gain_minus_uniform_ci": [
-      0.04662517361206145,
-      0.13280633880899845
+      0.037816058070244046,
+      0.07754307578274316
      ],
      "share_cells_by_checkpoint": [
-      0.02,
-      0.03,
-      0.325,
-      0.36,
-      0.2,
-      0.065,
-      0.0,
+      0.044,
+      0.063,
+      0.315,
+      0.347,
+      0.172,
+      0.055,
+      0.004,
       0.0
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.14173682310215988,
+     "gain_per_sample": 0.1535889700193046,
      "extra_nfe_per_sample": 32.0,
-     "d_entropy_per_sample": -0.014921126961708069,
-     "entropy_flag": false,
-     "gain_minus_uniform": 0.1075470878423317,
+     "gain_minus_temporal": 0.0007719551385863017,
+     "gain_minus_temporal_ci": [
+      -0.01449734200798624,
+      0.01771596804673029
+     ],
+     "d_entropy_per_sample": -0.025242842078208923,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.11225788818662623,
      "gain_minus_uniform_ci": [
-      0.05183766619251171,
-      0.15933006613267703
+      0.08863846419132529,
+      0.13276042726870627
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
-      0.12,
-      0.735,
-      0.145,
+      0.118,
+      0.757,
+      0.125,
       0.0,
       0.0,
       0.0
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.1465109926681514,
+     "gain_per_sample": 0.15315191690142557,
      "extra_nfe_per_sample": 32.0,
-     "d_entropy_per_sample": -0.020190795063972474,
+     "gain_minus_temporal": 0.00033490202070726705,
+     "gain_minus_temporal_ci": [
+      -0.01528406828518442,
+      0.01767243918015534
+     ],
+     "d_entropy_per_sample": -0.03165142023563385,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.11232125740832323,
+     "gain_minus_uniform": 0.11182083506874721,
      "gain_minus_uniform_ci": [
-      0.05916723914285515,
-      0.16240916938187316
+      0.09023414778092544,
+      0.13117590493098305
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
-      0.11,
-      0.89,
-      0.0,
+      0.247,
+      0.747,
+      0.006,
       0.0,
       0.0,
       0.0
      ]
     },
-    "heuristic_conf_sd": {
-     "gain_per_sample": 0.06957117251390481,
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.11485153838126155,
      "extra_nfe_per_sample": 32.0,
-     "d_entropy_per_sample": 0.005176594853401184,
-     "entropy_flag": false,
-     "gain_minus_uniform": 0.03538143725407663,
+     "gain_minus_temporal": -0.037965476499456786,
+     "gain_minus_temporal_ci": [
+      -0.06984659095303365,
+      -0.007967680683557585
+     ],
+     "d_entropy_per_sample": -0.038426238656044005,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.07352045654858316,
      "gain_minus_uniform_ci": [
-      0.005350960227155311,
-      0.06788918544877436
+      0.04949647739913605,
+      0.09745151483111532
      ],
      "share_cells_by_checkpoint": [
       0.0,
+      0.165,
+      0.613,
+      0.221,
+      0.001,
       0.0,
-      0.025,
-      0.27,
-      0.7,
-      0.005,
       0.0,
       0.0
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.5008718772158673,
+     "gain_per_sample": 0.5266404418358195,
      "extra_nfe_per_sample": 32.0,
-     "d_entropy_per_sample": -0.10339841187000275,
+     "gain_minus_temporal": 0.3738234269551012,
+     "gain_minus_temporal_ci": [
+      0.34353416109105256,
+      0.4022087008032791
+     ],
+     "d_entropy_per_sample": -0.10111851906776428,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.4666821419560391,
+     "gain_minus_uniform": 0.4853093600031411,
      "gain_minus_uniform_ci": [
-      0.4062006612178531,
-      0.5285394044875856
+      0.4573091048659302,
+      0.5111669274522723
      ],
      "share_cells_by_checkpoint": [
-      0.045,
-      0.075,
-      0.325,
-      0.325,
-      0.185,
-      0.04,
-      0.005,
+      0.049,
+      0.067,
+      0.309,
+      0.343,
+      0.178,
+      0.05,
+      0.004,
       0.0
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.034189735259828186,
+     "gain_per_sample": 0.04133108183267836,
      "extra_nfe_per_sample": 31.75,
-     "d_entropy_per_sample": -0.006288569569587708,
+     "d_entropy_per_sample": -0.00792974279075861,
      "entropy_flag": false
     }
    },
    "0.250": {
     "temporal_oracle": {
-     "gain_per_sample": 0.24489661603541785,
+     "gain_per_sample": 0.2892999099823211,
      "extra_nfe_per_sample": 64.0,
-     "d_entropy_per_sample": -0.07140363276004791,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.07553507745265961,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.17651714551576142,
+     "gain_minus_uniform": 0.2066377463169643,
      "gain_minus_uniform_ci": [
-      0.11715739133916242,
-      0.24247024549834045
+      0.1798860141312021,
+      0.23155422852757293
      ],
      "share_cells_by_checkpoint": [
       0.0,
@@ -188,14 +228,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.11558698103338273,
+     "gain_per_sample": 0.09098780473115883,
      "extra_nfe_per_sample": 63.5,
-     "d_entropy_per_sample": -0.027368693351745604,
-     "entropy_flag": true,
-     "gain_minus_uniform": 0.04720751051372636,
+     "gain_minus_temporal": -0.1983121052511622,
+     "gain_minus_temporal_ci": [
+      -0.2314300468293489,
+      -0.16555415264926301
+     ],
+     "d_entropy_per_sample": -0.01667158931493759,
+     "entropy_flag": false,
+     "gain_minus_uniform": 0.008325641065802107,
      "gain_minus_uniform_ci": [
-      0.004095370606531758,
-      0.09834020903971971
+      -0.011154627727888085,
+      0.029614989293607424
      ],
      "share_cells_by_checkpoint": [
       0.25,
@@ -209,148 +254,183 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.17014511808049587,
-     "extra_nfe_per_sample": 63.98,
-     "d_entropy_per_sample": -0.039363563656806946,
+     "gain_per_sample": 0.15525270893354157,
+     "extra_nfe_per_sample": 63.992,
+     "gain_minus_temporal": -0.13404720104877946,
+     "gain_minus_temporal_ci": [
+      -0.16131922412355057,
+      -0.1060350720235806
+     ],
+     "d_entropy_per_sample": -0.03285582435131073,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.1017656475608395,
+     "gain_minus_uniform": 0.07259054526818486,
      "gain_minus_uniform_ci": [
-      0.04725120526932362,
-      0.15365222003680995
+      0.05014837360370151,
+      0.0965387724789939
      ],
      "share_cells_by_checkpoint": [
-      0.17,
-      0.165,
-      0.495,
-      0.525,
-      0.37,
-      0.185,
-      0.08,
-      0.01
+      0.181,
+      0.207,
+      0.467,
+      0.524,
+      0.359,
+      0.193,
+      0.065,
+      0.004
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.24399380712110003,
+     "gain_per_sample": 0.28042691299137834,
      "extra_nfe_per_sample": 64.0,
-     "d_entropy_per_sample": -0.039255577921867374,
+     "gain_minus_temporal": -0.008872996990942662,
+     "gain_minus_temporal_ci": [
+      -0.0230153928065223,
+      0.006894130785590575
+     ],
+     "d_entropy_per_sample": -0.06640210056304932,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.17561433660144365,
+     "gain_minus_uniform": 0.19776474932602164,
      "gain_minus_uniform_ci": [
-      0.1177084803172685,
-      0.23909518984941436
+      0.17024445734582164,
+      0.22459227779717314
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
-      0.695,
-      0.875,
-      0.425,
-      0.005,
+      0.868,
+      0.845,
+      0.286,
+      0.001,
       0.0,
       0.0
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.2503974351918564,
+     "gain_per_sample": 0.2927586613319441,
      "extra_nfe_per_sample": 64.0,
-     "d_entropy_per_sample": -0.07003242135047913,
+     "gain_minus_temporal": 0.0034587513496230544,
+     "gain_minus_temporal_ci": [
+      -0.005454305567862787,
+      0.012077906569772104
+     ],
+     "d_entropy_per_sample": -0.07240943062305451,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.18201796467220002,
+     "gain_minus_uniform": 0.21009649766658736,
      "gain_minus_uniform_ci": [
-      0.12314835988472693,
-      0.2497550738645157
+      0.18329235550215578,
+      0.2359507222019541
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
-      0.985,
-      0.98,
-      0.035,
+      0.975,
+      0.923,
+      0.102,
       0.0,
       0.0,
       0.0
      ]
     },
-    "heuristic_conf_sd": {
-     "gain_per_sample": 0.1442614790675771,
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.23550106596767478,
      "extra_nfe_per_sample": 64.0,
-     "d_entropy_per_sample": 0.0102872234582901,
-     "entropy_flag": false,
-     "gain_minus_uniform": 0.07588200854792077,
+     "gain_minus_temporal": -0.05379884401464626,
+     "gain_minus_temporal_ci": [
+      -0.07168181573820495,
+      -0.03505334534200511
+     ],
+     "d_entropy_per_sample": -0.06912228256464005,
+     "entropy_flag": true,
+     "gain_minus_uniform": 0.15283890230231806,
      "gain_minus_uniform_ci": [
-      0.0255815710121447,
-      0.12657340307429438
+      0.12535316734381605,
+      0.18096983339083791
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.005,
-      0.065,
-      0.775,
-      0.945,
-      0.21,
+      0.515,
+      0.915,
+      0.556,
+      0.014,
+      0.0,
       0.0,
       0.0
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.7047726295751784,
-     "extra_nfe_per_sample": 64.0,
-     "d_entropy_per_sample": -0.11842688679695129,
+     "gain_per_sample": 0.73022659206645,
+     "extra_nfe_per_sample": 63.994,
+     "gain_minus_temporal": 0.44092668208412905,
+     "gain_minus_temporal_ci": [
+      0.4192044659069902,
+      0.4650295366672552
+     ],
+     "d_entropy_per_sample": -0.12039003574848176,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.6363931590555221,
+     "gain_minus_uniform": 0.6475644284010933,
      "gain_minus_uniform_ci": [
-      0.5825674459837803,
-      0.6926637814376138
+      0.6245702175083938,
+      0.6692586663247873
      ],
      "share_cells_by_checkpoint": [
-      0.21,
-      0.215,
-      0.45,
-      0.485,
-      0.355,
-      0.195,
-      0.09,
-      0.0
+      0.187,
+      0.209,
+      0.453,
+      0.522,
+      0.351,
+      0.191,
+      0.084,
+      0.003
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.06837947051965637,
+     "gain_per_sample": 0.08266216366535672,
      "extra_nfe_per_sample": 63.5,
-     "d_entropy_per_sample": -0.012577139139175415,
+     "d_entropy_per_sample": -0.01585948558151722,
      "entropy_flag": false
     }
    },
    "0.500": {
     "temporal_oracle": {
-     "gain_per_sample": 0.29388445036652316,
-     "extra_nfe_per_sample": 126.0,
-     "d_entropy_per_sample": -0.056150293350219725,
+     "gain_per_sample": 0.35314289444910263,
+     "extra_nfe_per_sample": 128.0,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.07426309162378311,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.1571255093272104,
+     "gain_minus_uniform": 0.18781856711838918,
      "gain_minus_uniform_ci": [
-      0.10860013212115979,
-      0.21502269246995728
+      0.16485793608404986,
+      0.2096722028742891
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.0,
       1.0,
       1.0,
       1.0,
+      1.0,
       0.0,
       0.0,
-      1.0
+      0.0
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.14577765545293866,
+     "gain_per_sample": 0.16297962957736126,
      "extra_nfe_per_sample": 127.0,
-     "d_entropy_per_sample": -0.026188642978668214,
+     "gain_minus_temporal": -0.19016326487174134,
+     "gain_minus_temporal_ci": [
+      -0.22207463604471311,
+      -0.15628449737472191
+     ],
+     "d_entropy_per_sample": -0.03289581459760666,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.009018714413625931,
+     "gain_minus_uniform": -0.0023446977533521773,
      "gain_minus_uniform_ci": [
-      -0.044455199267755846,
-      0.0612620575998929
+      -0.026299023566391907,
+      0.022537700818772877
      ],
      "share_cells_by_checkpoint": [
       0.5,
@@ -364,127 +444,157 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.20614636658262583,
-     "extra_nfe_per_sample": 127.31,
-     "d_entropy_per_sample": -0.04848603069782257,
+     "gain_per_sample": 0.2090120405531672,
+     "extra_nfe_per_sample": 127.278,
+     "gain_minus_temporal": -0.14413085389593544,
+     "gain_minus_temporal_ci": [
+      -0.1720884501759723,
+      -0.11627613152709
+     ],
+     "d_entropy_per_sample": -0.04592366689443588,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.0693874255433131,
+     "gain_minus_uniform": 0.04368771322245374,
      "gain_minus_uniform_ci": [
-      0.020056787415992858,
-      0.12003264222213222
+      0.020899145956985755,
+      0.06683886875561745
      ],
      "share_cells_by_checkpoint": [
-      0.465,
-      0.475,
-      0.61,
-      0.72,
-      0.565,
-      0.46,
-      0.36,
-      0.345
+      0.479,
+      0.481,
+      0.611,
+      0.675,
+      0.557,
+      0.441,
+      0.395,
+      0.361
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.30559008449847247,
-     "extra_nfe_per_sample": 127.61,
-     "d_entropy_per_sample": -0.06659995079040527,
+     "gain_per_sample": 0.3490584677837761,
+     "extra_nfe_per_sample": 127.778,
+     "gain_minus_temporal": -0.004084426665326531,
+     "gain_minus_temporal_ci": [
+      -0.012635325702673162,
+      0.004813930178272887
+     ],
+     "d_entropy_per_sample": -0.07387594884634018,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.16883114345915978,
+     "gain_minus_uniform": 0.18373414045306266,
      "gain_minus_uniform_ci": [
-      0.11896383601013476,
-      0.225372828939473
+      0.16086391684927237,
+      0.20533294670198715
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.625,
-      1.0,
-      0.985,
-      0.88,
-      0.295,
-      0.02,
-      0.195
+      0.931,
+      0.99,
+      0.976,
+      0.834,
+      0.129,
+      0.029,
+      0.111
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.3021875848958811,
-     "extra_nfe_per_sample": 127.33,
-     "d_entropy_per_sample": -0.06229978144168854,
+     "gain_per_sample": 0.35500864635525076,
+     "extra_nfe_per_sample": 127.63,
+     "gain_minus_temporal": 0.001865751906148097,
+     "gain_minus_temporal_ci": [
+      -0.00951148291027182,
+      0.012557482271067342
+     ],
+     "d_entropy_per_sample": -0.07073014324903489,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.16542864385656833,
+     "gain_minus_uniform": 0.18968431902453728,
      "gain_minus_uniform_ci": [
-      0.11089525070270942,
-      0.2270759615210517
+      0.16663894621236017,
+      0.21071887348922896
      ],
      "share_cells_by_checkpoint": [
-      0.265,
-      0.19,
+      0.173,
+      0.576,
+      0.999,
       1.0,
-      1.0,
-      0.945,
-      0.255,
-      0.01,
-      0.335
+      0.94,
+      0.113,
+      0.014,
+      0.185
      ]
     },
-    "heuristic_conf_sd": {
-     "gain_per_sample": 0.2850964715743352,
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.3494824030681688,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.03982039034366608,
+     "gain_minus_temporal": -0.0036604913809338236,
+     "gain_minus_temporal_ci": [
+      -0.010469399587253694,
+      0.003021559176157771
+     ],
+     "d_entropy_per_sample": -0.07408043533563614,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.14833753053502247,
+     "gain_minus_uniform": 0.18415807573745535,
      "gain_minus_uniform_ci": [
-      0.09770846113278714,
-      0.19915746016321625
+      0.16200064530266575,
+      0.2061825352442589
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.97,
-      0.73,
-      0.995,
-      0.945,
-      0.36,
-      0.0,
+      1.0,
+      1.0,
+      0.988,
+      0.843,
+      0.168,
+      0.001,
       0.0
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.826971843216719,
-     "extra_nfe_per_sample": 127.2,
-     "d_entropy_per_sample": -0.11392898976802826,
+     "gain_per_sample": 0.853712745863696,
+     "extra_nfe_per_sample": 127.296,
+     "gain_minus_temporal": 0.5005698514145932,
+     "gain_minus_temporal_ci": [
+      0.47869909230697477,
+      0.5226137029927921
+     ],
+     "d_entropy_per_sample": -0.12584437036514282,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.6902129021774063,
+     "gain_minus_uniform": 0.6883884185329824,
      "gain_minus_uniform_ci": [
-      0.6536981680373637,
-      0.7260922217453809
+      0.6729007630376457,
+      0.7040662667311025
      ],
      "share_cells_by_checkpoint": [
-      0.505,
-      0.52,
+      0.494,
+      0.508,
+      0.599,
+      0.652,
       0.56,
-      0.645,
-      0.575,
-      0.45,
-      0.345,
-      0.4
+      0.447,
+      0.388,
+      0.352
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.13675894103931274,
+     "gain_per_sample": 0.16532432733071345,
      "extra_nfe_per_sample": 127.0,
-     "d_entropy_per_sample": -0.02515427827835083,
+     "d_entropy_per_sample": -0.03171897116303444,
      "entropy_flag": true
     }
    },
    "0.750": {
     "temporal_oracle": {
-     "gain_per_sample": 0.31318765822622924,
+     "gain_per_sample": 0.35854094356333244,
      "extra_nfe_per_sample": 190.0,
-     "d_entropy_per_sample": -0.06977757036685944,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.0759878175854683,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.10804924666726017,
+     "gain_minus_uniform": 0.1105544525672623,
      "gain_minus_uniform_ci": [
-      0.07673937250312508,
-      0.14016616467380494
+      0.09628166441318307,
+      0.12587273036253346
      ],
      "share_cells_by_checkpoint": [
       1.0,
@@ -498,14 +608,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.2012726423068847,
+     "gain_per_sample": 0.2556508009362021,
      "extra_nfe_per_sample": 190.5,
-     "d_entropy_per_sample": -0.04380147576332092,
+     "gain_minus_temporal": -0.10289014262713037,
+     "gain_minus_temporal_ci": [
+      -0.12942361883517384,
+      -0.0785336946257386
+     ],
+     "d_entropy_per_sample": -0.049090761721134184,
      "entropy_flag": true,
-     "gain_minus_uniform": -0.0038657692520843723,
+     "gain_minus_uniform": 0.00766430994013194,
      "gain_minus_uniform_ci": [
-      -0.05430508942438941,
-      0.042944986550007856
+      -0.013241138455071482,
+      0.027570165964895497
      ],
      "share_cells_by_checkpoint": [
       0.75,
@@ -519,122 +634,152 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.22702278538490397,
-     "extra_nfe_per_sample": 190.09,
-     "d_entropy_per_sample": -0.03955430507659912,
+     "gain_per_sample": 0.24745017001551015,
+     "extra_nfe_per_sample": 190.1,
+     "gain_minus_temporal": -0.11109077354782235,
+     "gain_minus_temporal_ci": [
+      -0.13527981214109036,
+      -0.08757889865299179
+     ],
+     "d_entropy_per_sample": -0.050657829225063324,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.021884373825934902,
+     "gain_minus_uniform": -0.0005363209805600549,
      "gain_minus_uniform_ci": [
-      -0.017366427293582818,
-      0.06326421772710816
+      -0.019435911187802232,
+      0.019368851918930778
      ],
      "share_cells_by_checkpoint": [
-      0.715,
-      0.71,
-      0.7,
-      0.825,
-      0.725,
-      0.68,
-      0.69,
-      0.955
+      0.713,
+      0.721,
+      0.701,
+      0.773,
+      0.716,
+      0.671,
+      0.755,
+      0.95
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.3126748724311846,
-     "extra_nfe_per_sample": 190.77,
-     "d_entropy_per_sample": -0.06154605031013489,
+     "gain_per_sample": 0.35900044394270325,
+     "extra_nfe_per_sample": 190.872,
+     "gain_minus_temporal": 0.00045950037937077216,
+     "gain_minus_temporal_ci": [
+      -0.008700553949357228,
+      0.008703169733020355
+     ],
+     "d_entropy_per_sample": -0.07371968513727188,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.10753646087221551,
+     "gain_minus_uniform": 0.11101395294663306,
      "gain_minus_uniform_ci": [
-      0.07643124381169443,
-      0.14047952649670198
+      0.09619508429874811,
+      0.1254657989598377
      ],
      "share_cells_by_checkpoint": [
-      0.8,
-      0.915,
       1.0,
-      0.995,
-      0.915,
-      0.58,
-      0.18,
-      0.615
+      1.0,
+      0.993,
+      0.987,
+      0.916,
+      0.401,
+      0.139,
+      0.564
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.3049580388317236,
-     "extra_nfe_per_sample": 190.32,
-     "d_entropy_per_sample": -0.06243875920772553,
+     "gain_per_sample": 0.35418660523873563,
+     "extra_nfe_per_sample": 190.726,
+     "gain_minus_temporal": -0.0043543383245968886,
+     "gain_minus_temporal_ci": [
+      -0.012547156046302835,
+      0.0029192046812047084
+     ],
+     "d_entropy_per_sample": -0.07268400985002518,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.09981962727275452,
+     "gain_minus_uniform": 0.10620011424266539,
      "gain_minus_uniform_ci": [
-      0.06637444589338586,
-      0.13330241867407
+      0.09295225752106037,
+      0.12113073477710704
      ],
      "share_cells_by_checkpoint": [
-      0.89,
-      0.71,
+      0.996,
+      0.948,
       1.0,
       1.0,
       0.975,
-      0.475,
-      0.11,
-      0.84
+      0.314,
+      0.13,
+      0.637
      ]
     },
-    "heuristic_conf_sd": {
-     "gain_per_sample": 0.2757985974817205,
-     "extra_nfe_per_sample": 191.77,
-     "d_entropy_per_sample": -0.047175828218460086,
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.32616832746335833,
+     "extra_nfe_per_sample": 191.708,
+     "gain_minus_temporal": -0.0323726160999742,
+     "gain_minus_temporal_ci": [
+      -0.05031828065513291,
+      -0.015562462209625509
+     ],
+     "d_entropy_per_sample": -0.062214692294597626,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.0706601859227514,
+     "gain_minus_uniform": 0.07818183646728809,
      "gain_minus_uniform_ci": [
-      0.03928059670310134,
-      0.10539615177646591
+      0.06373149235927092,
+      0.09152428762012152
      ],
      "share_cells_by_checkpoint": [
       0.0,
       1.0,
       1.0,
       1.0,
-      0.995,
-      0.975,
-      0.915,
-      0.115
+      0.997,
+      0.974,
+      0.883,
+      0.146
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.7508107213518991,
-     "extra_nfe_per_sample": 190.07,
-     "d_entropy_per_sample": -0.10807165503501892,
+     "gain_per_sample": 0.7922910718505257,
+     "extra_nfe_per_sample": 190.086,
+     "gain_minus_temporal": 0.4337501282871932,
+     "gain_minus_temporal_ci": [
+      0.4114342180090435,
+      0.45678875165666083
+     ],
+     "d_entropy_per_sample": -0.12286132740974426,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.54567230979293,
+     "gain_minus_uniform": 0.5443045808544554,
      "gain_minus_uniform_ci": [
-      0.5073285278514291,
-      0.5823403415561003
+      0.527738214454722,
+      0.5607882275949196
      ],
      "share_cells_by_checkpoint": [
-      0.735,
-      0.74,
-      0.675,
-      0.765,
-      0.71,
-      0.65,
-      0.76,
-      0.965
+      0.746,
+      0.741,
+      0.709,
+      0.752,
+      0.698,
+      0.656,
+      0.741,
+      0.957
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.2051384115589691,
+     "gain_per_sample": 0.24798649099607017,
      "extra_nfe_per_sample": 190.5,
-     "d_entropy_per_sample": -0.037731417417526246,
+     "d_entropy_per_sample": -0.04757845674455166,
      "entropy_flag": true
     }
    },
    "1.000": {
     "temporal_oracle": {
-     "gain_per_sample": 0.27351788207862543,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -653,9 +798,14 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.27351788207862543,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -674,9 +824,14 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.27351788207862543,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -695,9 +850,14 @@
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.27351788207862543,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -716,9 +876,14 @@
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.27351788207862543,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -736,10 +901,15 @@
       1.0
      ]
     },
-    "heuristic_conf_sd": {
-     "gain_per_sample": 0.27351788207862543,
+    "heuristic_pred_change_4": {
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -758,9 +928,14 @@
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.27351788207862543,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -779,9 +954,9 @@
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.2735178820786255,
+     "gain_per_sample": 0.3306486546614269,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.05030855655670166,
+     "d_entropy_per_sample": -0.06343794232606888,
      "entropy_flag": true
     }
    }
@@ -801,14 +976,19 @@
   "results": {
    "0.125": {
     "temporal_oracle": {
-     "gain_per_sample": 0.368342345576129,
+     "gain_per_sample": 0.39320941646165736,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.15461090862751006,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.14179911637306214,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.29394471088436247,
+     "gain_minus_uniform": 0.30475781664144685,
      "gain_minus_uniform_ci": [
-      0.22877442536111828,
-      0.3652271331039796
+      0.2729972244568024,
+      0.3354410507273573
      ],
      "share_cells_by_checkpoint": [
       0.0,
@@ -822,14 +1002,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.12171723957241,
+     "gain_per_sample": 0.09578793837769009,
      "extra_nfe_per_sample": 127.0,
-     "d_entropy_per_sample": -0.03535663664340973,
+     "gain_minus_temporal": -0.29742147808396724,
+     "gain_minus_temporal_ci": [
+      -0.3351432056372554,
+      -0.25801184158436286
+     ],
+     "d_entropy_per_sample": -0.022319537103176117,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.0473196048806434,
+     "gain_minus_uniform": 0.007336338557479591,
      "gain_minus_uniform_ci": [
-      -0.008338465011731647,
-      0.09951941042938535
+      -0.015951276758055636,
+      0.029134000633207306
      ],
      "share_cells_by_checkpoint": [
       0.125,
@@ -843,127 +1028,157 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.29780678975993097,
+     "gain_per_sample": 0.290763963488449,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.08373383402824403,
+     "gain_minus_temporal": -0.10244545297320842,
+     "gain_minus_temporal_ci": [
+      -0.13587022793060527,
+      -0.06857044427822843
+     ],
+     "d_entropy_per_sample": -0.07138022148609162,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.22340915506816436,
+     "gain_minus_uniform": 0.20231236366823846,
      "gain_minus_uniform_ci": [
-      0.15411324347256528,
-      0.2959153538938789
+      0.17347551878869497,
+      0.2319091813775022
      ],
      "share_cells_by_checkpoint": [
-      0.0,
-      0.06,
-      0.46,
-      0.325,
-      0.14,
-      0.01,
-      0.005,
+      0.014,
+      0.086,
+      0.439,
+      0.344,
+      0.105,
+      0.011,
+      0.001,
       0.0
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.3160094710981184,
+     "gain_per_sample": 0.33444195392931386,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.07809287309646606,
+     "gain_minus_temporal": -0.05876746253234354,
+     "gain_minus_temporal_ci": [
+      -0.0956153195255058,
+      -0.021424932211126718
+     ],
+     "d_entropy_per_sample": -0.0645230324268341,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.2416118364063518,
+     "gain_minus_uniform": 0.24599035410910336,
      "gain_minus_uniform_ci": [
-      0.17581083864172672,
-      0.31060640702969033
+      0.21576345423481197,
+      0.274665442555499
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
-      0.365,
-      0.61,
-      0.025,
+      0.339,
+      0.641,
+      0.02,
       0.0,
       0.0,
       0.0
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.36377373402012175,
+     "gain_per_sample": 0.39251193544977353,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.1510753720998764,
+     "gain_minus_temporal": -0.0006974810118838352,
+     "gain_minus_temporal_ci": [
+      -0.007084736299427028,
+      0.005288747338142317
+     ],
+     "d_entropy_per_sample": -0.14014366507530213,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.2893760993283551,
+     "gain_minus_uniform": 0.304060335629563,
      "gain_minus_uniform_ci": [
-      0.22286250809144847,
-      0.3600162830781851
+      0.2736252406695469,
+      0.33572108699218167
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
-      0.985,
-      0.015,
+      0.978,
+      0.022,
       0.0,
       0.0,
       0.0,
       0.0
      ]
     },
-    "heuristic_pred_change_4": {
-     "gain_per_sample": 0.27686196628994636,
+    "heuristic_pred_change_1": {
+     "gain_per_sample": 0.3156840930302425,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.0982927656173706,
+     "gain_minus_temporal": -0.07752532343141494,
+     "gain_minus_temporal_ci": [
+      -0.10593281319484765,
+      -0.04722773074571266
+     ],
+     "d_entropy_per_sample": -0.09961188387870788,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.20246433159817975,
+     "gain_minus_uniform": 0.22723249321003192,
      "gain_minus_uniform_ci": [
-      0.1376444011140122,
-      0.2675989826949606
+      0.19275522448429402,
+      0.2599688833273755
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.19,
-      0.585,
-      0.22,
-      0.005,
+      0.156,
+      0.649,
+      0.194,
+      0.001,
       0.0,
       0.0,
       0.0
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.7567039734016393,
+     "gain_per_sample": 0.7603659217733527,
      "extra_nfe_per_sample": 128.0,
-     "d_entropy_per_sample": -0.19343656599521636,
+     "gain_minus_temporal": 0.36715650531169536,
+     "gain_minus_temporal_ci": [
+      0.33604434323278426,
+      0.3978537566801321
+     ],
+     "d_entropy_per_sample": -0.1858512223958969,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.6823063387098725,
+     "gain_minus_uniform": 0.6719143219531423,
      "gain_minus_uniform_ci": [
-      0.6053573707491946,
-      0.7644753244509916
+      0.6353498868182881,
+      0.7092859731312173
      ],
      "share_cells_by_checkpoint": [
-      0.025,
-      0.085,
-      0.435,
-      0.335,
-      0.1,
-      0.02,
+      0.017,
+      0.082,
+      0.447,
+      0.352,
+      0.092,
+      0.01,
       0.0,
       0.0
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.07439763469176658,
+     "gain_per_sample": 0.0884515998202105,
      "extra_nfe_per_sample": 127.0,
-     "d_entropy_per_sample": -0.017821424677968024,
+     "d_entropy_per_sample": -0.018082599200308323,
      "entropy_flag": false
     }
    },
    "0.250": {
     "temporal_oracle": {
-     "gain_per_sample": 0.6043409992123072,
+     "gain_per_sample": 0.6736775882988468,
      "extra_nfe_per_sample": 256.0,
-     "d_entropy_per_sample": -0.1739018577337265,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.16527315092086792,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.455545729828774,
+     "gain_minus_uniform": 0.49677438865842566,
      "gain_minus_uniform_ci": [
-      0.3809061158990246,
-      0.5302259079416766
+      0.46430165823031294,
+      0.5288280243344883
      ],
      "share_cells_by_checkpoint": [
       0.0,
@@ -977,14 +1192,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.17387119734015055,
+     "gain_per_sample": 0.1772285140821863,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.037419919967651365,
+     "gain_minus_temporal": -0.4964490742166604,
+     "gain_minus_temporal_ci": [
+      -0.5420946963475022,
+      -0.4541417847152993
+     ],
+     "d_entropy_per_sample": -0.03429744440317154,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.02507592795661738,
+     "gain_minus_uniform": 0.0003253144417652729,
      "gain_minus_uniform_ci": [
-      -0.04320783753808809,
-      0.09502297406711503
+      -0.029051329507466212,
+      0.031176052657161
      ],
      "share_cells_by_checkpoint": [
       0.25,
@@ -998,127 +1218,157 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.4577791030010728,
-     "extra_nfe_per_sample": 255.96,
-     "d_entropy_per_sample": -0.13143426060676575,
+     "gain_per_sample": 0.4514010211785173,
+     "extra_nfe_per_sample": 255.992,
+     "gain_minus_temporal": -0.2222765671203294,
+     "gain_minus_temporal_ci": [
+      -0.2567932811747374,
+      -0.1879072991225701
+     ],
+     "d_entropy_per_sample": -0.10294787573814392,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.3089838336175396,
+     "gain_minus_uniform": 0.2744978215380963,
      "gain_minus_uniform_ci": [
-      0.23446532532695447,
-      0.3881124984910437
+      0.24099763450657974,
+      0.3066576141240781
      ],
      "share_cells_by_checkpoint": [
-      0.11,
-      0.18,
-      0.67,
-      0.59,
-      0.31,
-      0.12,
-      0.015,
-      0.005
+      0.116,
+      0.214,
+      0.638,
+      0.581,
+      0.314,
+      0.116,
+      0.02,
+      0.001
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.5803198088034115,
+     "gain_per_sample": 0.6555144599441676,
      "extra_nfe_per_sample": 256.0,
-     "d_entropy_per_sample": -0.1623114049434662,
+     "gain_minus_temporal": -0.018163128354679137,
+     "gain_minus_temporal_ci": [
+      -0.0319097754901832,
+      -0.0036145817457909654
+     ],
+     "d_entropy_per_sample": -0.15903297042846679,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.4315245394198783,
+     "gain_minus_uniform": 0.47861126030374657,
      "gain_minus_uniform_ci": [
-      0.35583395727415945,
-      0.5086996774174846
+      0.44478222637361503,
+      0.5119783852281481
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.015,
-      0.965,
-      0.815,
-      0.205,
+      0.007,
+      0.983,
+      0.822,
+      0.188,
       0.0,
       0.0,
       0.0
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.6035578607445151,
+     "gain_per_sample": 0.676842310441778,
      "extra_nfe_per_sample": 256.0,
-     "d_entropy_per_sample": -0.17287239849567412,
+     "gain_minus_temporal": 0.00316472214293125,
+     "gain_minus_temporal_ci": [
+      -0.004981675106548562,
+      0.010706199054881934
+     ],
+     "d_entropy_per_sample": -0.16389565801620484,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.4547625913609819,
+     "gain_minus_uniform": 0.49993911080135695,
      "gain_minus_uniform_ci": [
-      0.3815447806637536,
-      0.5301905904376778
+      0.46710478279022105,
+      0.5320223283906232
      ],
      "share_cells_by_checkpoint": [
       0.0,
       0.0,
       1.0,
-      0.965,
-      0.035,
+      0.932,
+      0.068,
       0.0,
       0.0,
       0.0
      ]
     },
-    "heuristic_pred_change_4": {
-     "gain_per_sample": 0.4794471096284245,
+    "heuristic_pred_change_1": {
+     "gain_per_sample": 0.5585430538354753,
      "extra_nfe_per_sample": 256.0,
-     "d_entropy_per_sample": -0.15481781005859374,
+     "gain_minus_temporal": -0.1151345344633713,
+     "gain_minus_temporal_ci": [
+      -0.13859432525212856,
+      -0.08846194339888572
+     ],
+     "d_entropy_per_sample": -0.16443745386600495,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.33065184024489125,
+     "gain_minus_uniform": 0.38163985419505436,
      "gain_minus_uniform_ci": [
-      0.2561081630639231,
-      0.4037448787681429
+      0.34859271943197456,
+      0.41849464967227523
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.545,
-      0.91,
-      0.535,
-      0.01,
+      0.532,
+      0.921,
+      0.538,
+      0.009,
       0.0,
       0.0,
       0.0
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 1.0241793425936212,
+     "gain_per_sample": 1.0485650548798715,
      "extra_nfe_per_sample": 256.0,
-     "d_entropy_per_sample": -0.2271537357568741,
+     "gain_minus_temporal": 0.3748874665810247,
+     "gain_minus_temporal_ci": [
+      0.35093941221917757,
+      0.4000552181941015
+     ],
+     "d_entropy_per_sample": -0.21863154983520508,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.875384073210088,
+     "gain_minus_uniform": 0.8716618552394505,
      "gain_minus_uniform_ci": [
-      0.8067249812651008,
-      0.9479262729438834
+      0.8406031934062259,
+      0.9027020323056772
      ],
      "share_cells_by_checkpoint": [
-      0.14,
-      0.225,
-      0.625,
-      0.55,
-      0.32,
-      0.11,
-      0.03,
+      0.124,
+      0.199,
+      0.638,
+      0.598,
+      0.3,
+      0.109,
+      0.032,
       0.0
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.14879526938353316,
+     "gain_per_sample": 0.176903199640421,
      "extra_nfe_per_sample": 254.0,
-     "d_entropy_per_sample": -0.03564284935593605,
+     "d_entropy_per_sample": -0.03616519840061665,
      "entropy_flag": true
     }
    },
    "0.500": {
     "temporal_oracle": {
-     "gain_per_sample": 0.6988344196866221,
+     "gain_per_sample": 0.7799365892142016,
      "extra_nfe_per_sample": 512.0,
-     "d_entropy_per_sample": -0.17894857227802277,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.17609429532289506,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.4012438809195558,
+     "gain_minus_uniform": 0.4261301899333596,
      "gain_minus_uniform_ci": [
-      0.3387023751781879,
-      0.4615492042033532
+      0.399479016815487,
+      0.4524221218572485
      ],
      "share_cells_by_checkpoint": [
       0.0,
@@ -1132,14 +1382,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.30239543725272794,
+     "gain_per_sample": 0.36372332030393706,
      "extra_nfe_per_sample": 508.0,
-     "d_entropy_per_sample": -0.07732898712158204,
+     "gain_minus_temporal": -0.4162132689102646,
+     "gain_minus_temporal_ci": [
+      -0.4644761884155733,
+      -0.37239986790752566
+     ],
+     "d_entropy_per_sample": -0.0748323490023613,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.004804898485661591,
+     "gain_minus_uniform": 0.009916921023094993,
      "gain_minus_uniform_ci": [
-      -0.0710474354053637,
-      0.08401285554257396
+      -0.026558879172018983,
+      0.043948243579131435
      ],
      "share_cells_by_checkpoint": [
       0.5,
@@ -1153,127 +1408,157 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.5390223009640613,
-     "extra_nfe_per_sample": 509.84,
-     "d_entropy_per_sample": -0.14379020273685456,
+     "gain_per_sample": 0.5566903814278787,
+     "extra_nfe_per_sample": 509.768,
+     "gain_minus_temporal": -0.2232462077863229,
+     "gain_minus_temporal_ci": [
+      -0.25482639166999305,
+      -0.19201149177500604
+     ],
+     "d_entropy_per_sample": -0.12232090801000595,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.24143176219699494,
+     "gain_minus_uniform": 0.20288398214703673,
      "gain_minus_uniform_ci": [
-      0.17754137682701854,
-      0.3025962496946858
+      0.17402637132322185,
+      0.2330192072131646
      ],
      "share_cells_by_checkpoint": [
-      0.445,
-      0.49,
-      0.78,
-      0.78,
-      0.54,
-      0.38,
-      0.315,
-      0.27
+      0.454,
+      0.508,
+      0.763,
+      0.756,
+      0.553,
+      0.393,
+      0.294,
+      0.279
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.6759067969717413,
-     "extra_nfe_per_sample": 511.08,
-     "d_entropy_per_sample": -0.18100255846977234,
+     "gain_per_sample": 0.7671673650090872,
+     "extra_nfe_per_sample": 510.832,
+     "gain_minus_temporal": -0.012769224205114376,
+     "gain_minus_temporal_ci": [
+      -0.021190008047155318,
+      -0.0035669807476076997
+     ],
+     "d_entropy_per_sample": -0.1792140238881111,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.37831625820467496,
+     "gain_minus_uniform": 0.41336096572824527,
      "gain_minus_uniform_ci": [
-      0.31590106222225217,
-      0.4358701652897768
+      0.3872122246510313,
+      0.44126979631840474
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.98,
-      0.995,
-      0.965,
-      0.765,
-      0.135,
-      0.045,
-      0.115
+      1.0,
+      0.993,
+      0.968,
+      0.755,
+      0.09,
+      0.048,
+      0.146
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.692928187467081,
-     "extra_nfe_per_sample": 510.88,
-     "d_entropy_per_sample": -0.17117227971553803,
+     "gain_per_sample": 0.7721605833409246,
+     "extra_nfe_per_sample": 511.304,
+     "gain_minus_temporal": -0.007776005873277007,
+     "gain_minus_temporal_ci": [
+      -0.012440726846516158,
+      -0.0025167104131061757
+     ],
+     "d_entropy_per_sample": -0.17676774781942367,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.39533764870001464,
+     "gain_minus_uniform": 0.4183541840600826,
      "gain_minus_uniform_ci": [
-      0.33212675482873444,
-      0.4563060274765145
+      0.3906952367331851,
+      0.44424516314957185
      ],
      "share_cells_by_checkpoint": [
       0.0,
-      0.84,
       1.0,
       1.0,
-      0.9,
-      0.115,
-      0.005,
-      0.14
+      1.0,
+      0.898,
+      0.015,
+      0.0,
+      0.087
      ]
     },
-    "heuristic_pred_change_4": {
-     "gain_per_sample": 0.6789931121797497,
+    "heuristic_pred_change_1": {
+     "gain_per_sample": 0.7705509244791625,
      "extra_nfe_per_sample": 512.0,
-     "d_entropy_per_sample": -0.17725526034832,
+     "gain_minus_temporal": -0.009385664735039066,
+     "gain_minus_temporal_ci": [
+      -0.016477007422836358,
+      -0.0016639459961788965
+     ],
+     "d_entropy_per_sample": -0.17470812767744065,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.38140257341268324,
+     "gain_minus_uniform": 0.4167445251983206,
      "gain_minus_uniform_ci": [
-      0.31798975285101017,
-      0.4411989804704051
+      0.390331158943631,
+      0.4428583168806952
      ],
      "share_cells_by_checkpoint": [
       0.0,
       1.0,
       1.0,
-      0.99,
-      0.83,
-      0.18,
+      0.987,
+      0.857,
+      0.156,
       0.0,
       0.0
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 1.1770529164893397,
-     "extra_nfe_per_sample": 509.16,
-     "d_entropy_per_sample": -0.22943255186080933,
+     "gain_per_sample": 1.227308066834312,
+     "extra_nfe_per_sample": 509.936,
+     "gain_minus_temporal": 0.4473714776201101,
+     "gain_minus_temporal_ci": [
+      0.424953285764836,
+      0.4694115452032759
+     ],
+     "d_entropy_per_sample": -0.22400454127788544,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.8794623777222733,
+     "gain_minus_uniform": 0.8735016675534697,
      "gain_minus_uniform_ci": [
-      0.8388571317441113,
-      0.9269682710199026
+      0.8553000258417367,
+      0.8927881757420798
      ],
      "share_cells_by_checkpoint": [
-      0.405,
-      0.51,
-      0.745,
-      0.735,
-      0.535,
-      0.39,
-      0.325,
-      0.355
+      0.446,
+      0.504,
+      0.762,
+      0.769,
+      0.545,
+      0.392,
+      0.324,
+      0.258
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.2975905387670663,
+     "gain_per_sample": 0.353806399280842,
      "extra_nfe_per_sample": 508.0,
-     "d_entropy_per_sample": -0.0712856987118721,
+     "d_entropy_per_sample": -0.0723303968012333,
      "entropy_flag": true
     }
    },
    "0.750": {
     "temporal_oracle": {
-     "gain_per_sample": 0.6927152530703309,
+     "gain_per_sample": 0.776226877687546,
      "extra_nfe_per_sample": 760.0,
-     "d_entropy_per_sample": -0.17679285168647765,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.17519068115949632,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.24632944491973136,
+     "gain_minus_uniform": 0.24551727876628296,
      "gain_minus_uniform_ci": [
-      0.20695861007301974,
-      0.283439092522649
+      0.22784460830807074,
+      0.2628716069456323
      ],
      "share_cells_by_checkpoint": [
       1.0,
@@ -1287,14 +1572,19 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.44335047375180037,
+     "gain_per_sample": 0.5292466657701566,
      "extra_nfe_per_sample": 762.0,
-     "d_entropy_per_sample": -0.11397789657115937,
+     "gain_minus_temporal": -0.2469802119173893,
+     "gain_minus_temporal_ci": [
+      -0.28173347193259396,
+      -0.21380931623586774
+     ],
+     "d_entropy_per_sample": -0.10551463717222213,
      "entropy_flag": true,
-     "gain_minus_uniform": -0.00303533439879911,
+     "gain_minus_uniform": -0.001462933151106371,
      "gain_minus_uniform_ci": [
-      -0.07172884672756308,
-      0.06580229701336214
+      -0.03428128963060985,
+      0.02953124327309246
      ],
      "share_cells_by_checkpoint": [
       0.75,
@@ -1308,122 +1598,152 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.52819080227737,
-     "extra_nfe_per_sample": 760.52,
-     "d_entropy_per_sample": -0.13125160038471223,
+     "gain_per_sample": 0.5949866094465499,
+     "extra_nfe_per_sample": 760.552,
+     "gain_minus_temporal": -0.18124026824099615,
+     "gain_minus_temporal_ci": [
+      -0.21060633668825365,
+      -0.15245300216592786
+     ],
+     "d_entropy_per_sample": -0.1268783544898033,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.0818049941267705,
+     "gain_minus_uniform": 0.06427701052528681,
      "gain_minus_uniform_ci": [
-      0.02519382451410425,
-      0.13766622874348003
+      0.03959912033457932,
+      0.08919701808196673
      ],
      "share_cells_by_checkpoint": [
-      0.71,
-      0.705,
-      0.81,
-      0.855,
-      0.68,
-      0.65,
-      0.655,
-      0.935
+      0.713,
+      0.733,
+      0.813,
+      0.837,
+      0.718,
+      0.599,
+      0.656,
+      0.931
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.6504719569631476,
-     "extra_nfe_per_sample": 763.6,
-     "d_entropy_per_sample": -0.16580929458141327,
+     "gain_per_sample": 0.7590276440921677,
+     "extra_nfe_per_sample": 763.368,
+     "gain_minus_temporal": -0.017199233595378234,
+     "gain_minus_temporal_ci": [
+      -0.026162145947934423,
+      -0.007309559644642447
+     ],
+     "d_entropy_per_sample": -0.16959818691015244,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.20408614881254802,
+     "gain_minus_uniform": 0.22831804517090473,
      "gain_minus_uniform_ci": [
-      0.16790603994396436,
-      0.23718492894532534
+      0.21133412408847044,
+      0.24448762458039747
      ],
      "share_cells_by_checkpoint": [
-      0.835,
+      0.999,
       1.0,
-      1.0,
-      0.985,
-      0.89,
-      0.47,
-      0.27,
-      0.55
+      0.997,
+      0.982,
+      0.877,
+      0.354,
+      0.212,
+      0.579
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.6631349656630917,
-     "extra_nfe_per_sample": 762.44,
-     "d_entropy_per_sample": -0.1668142569065094,
+     "gain_per_sample": 0.7690889282567053,
+     "extra_nfe_per_sample": 761.88,
+     "gain_minus_temporal": -0.007137949430840831,
+     "gain_minus_temporal_ci": [
+      -0.012547220457135268,
+      -0.0013623370204724375
+     ],
+     "d_entropy_per_sample": -0.1713980810046196,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.21674915751249216,
+     "gain_minus_uniform": 0.23837932933544212,
      "gain_minus_uniform_ci": [
-      0.17835112259494135,
-      0.25325937956779115
+      0.22093551772506376,
+      0.25579528930157647
      ],
      "share_cells_by_checkpoint": [
-      0.895,
       1.0,
       1.0,
       1.0,
-      0.95,
-      0.35,
-      0.11,
-      0.695
+      1.0,
+      0.985,
+      0.169,
+      0.081,
+      0.765
      ]
     },
-    "heuristic_pred_change_4": {
-     "gain_per_sample": 0.6027736628006575,
-     "extra_nfe_per_sample": 766.72,
-     "d_entropy_per_sample": -0.1455243408679962,
+    "heuristic_pred_change_1": {
+     "gain_per_sample": 0.7136093766944211,
+     "extra_nfe_per_sample": 766.856,
+     "gain_minus_temporal": -0.06261750099312482,
+     "gain_minus_temporal_ci": [
+      -0.08155716259801588,
+      -0.04439023048490858
+     ],
+     "d_entropy_per_sample": -0.14633207422494887,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.1563878546500579,
+     "gain_minus_uniform": 0.18289977777315816,
      "gain_minus_uniform_ci": [
-      0.12115199275701183,
-      0.19302837935398356
+      0.1669881715946644,
+      0.19825483708685507
      ],
      "share_cells_by_checkpoint": [
       0.0,
       1.0,
       1.0,
       1.0,
-      0.995,
-      0.975,
-      0.87,
-      0.16
+      0.993,
+      0.982,
+      0.882,
+      0.143
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 1.109605999757067,
-     "extra_nfe_per_sample": 760.44,
-     "d_entropy_per_sample": -0.21774546980857848,
+     "gain_per_sample": 1.1740003881338372,
+     "extra_nfe_per_sample": 760.592,
+     "gain_minus_temporal": 0.3977735104462913,
+     "gain_minus_temporal_ci": [
+      0.3735976210614551,
+      0.42096702794779084
+     ],
+     "d_entropy_per_sample": -0.21414802068471908,
      "entropy_flag": true,
-     "gain_minus_uniform": 0.6632201916064676,
+     "gain_minus_uniform": 0.6432907892125743,
      "gain_minus_uniform_ci": [
-      0.6215739817941356,
-      0.707046951713987
+      0.6275976694339036,
+      0.6599686630279644
      ],
      "share_cells_by_checkpoint": [
-      0.745,
-      0.705,
-      0.79,
-      0.815,
-      0.715,
-      0.655,
-      0.63,
-      0.945
+      0.712,
+      0.709,
+      0.821,
+      0.832,
+      0.719,
+      0.609,
+      0.672,
+      0.926
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.4463858081505995,
+     "gain_per_sample": 0.530709598921263,
      "extra_nfe_per_sample": 762.0,
-     "d_entropy_per_sample": -0.10692854806780815,
+     "d_entropy_per_sample": -0.10849559520184994,
      "entropy_flag": true
     }
    },
    "1.000": {
     "temporal_oracle": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1442,9 +1762,14 @@
      ]
     },
     "example_oracle": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1463,9 +1788,14 @@
      ]
     },
     "state_oracle(t x example)": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1484,9 +1814,14 @@
      ]
     },
     "learned_state_only(E)": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1505,9 +1840,14 @@
      ]
     },
     "learned_state+t(F)": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1525,10 +1865,15 @@
       1.0
      ]
     },
-    "heuristic_pred_change_4": {
-     "gain_per_sample": 0.5951810775341326,
+    "heuristic_pred_change_1": {
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1547,9 +1892,14 @@
      ]
     },
     "in-sample_oracle(optimistic,B on B)": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "gain_minus_temporal": 0.0,
+     "gain_minus_temporal_ci": [
+      0.0,
+      0.0
+     ],
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true,
      "gain_minus_uniform": 0.0,
      "gain_minus_uniform_ci": [
@@ -1568,9 +1918,9 @@
      ]
     },
     "uniform": {
-     "gain_per_sample": 0.5951810775341326,
+     "gain_per_sample": 0.707612798561684,
      "extra_nfe_per_sample": 1016.0,
-     "d_entropy_per_sample": -0.1425713974237442,
+     "d_entropy_per_sample": -0.1446607936024666,
      "entropy_flag": true
     }
    }

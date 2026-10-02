@@ -307,6 +307,8 @@ def oracle(Q, E, arm: int, pr: Dict) -> Dict:
             sels[name] = take_top(sc, k)
         row = {}
         uni = f * gB.mean() * N_SEG  # expected per-sample gain of random selection
+        sel_t = sels["temporal_oracle"]
+        g_temporal = np.bincount(rows_n[sel_t], weights=gB[sel_t], minlength=N)
         for name, sel in sels.items():
             g = np.bincount(rows_n[sel], weights=gB[sel], minlength=N)  # per-sample gain (sum over cells)
             nfe = np.bincount(rows_n[sel], weights=nfe_cell[sel], minlength=N)
@@ -315,7 +317,9 @@ def oracle(Q, E, arm: int, pr: Dict) -> Dict:
             u = f * np.bincount(rows_n, weights=gB, minlength=N)
             diff = g - u
             dent = np.bincount(rows_n[sel], weights=eB[sel], minlength=N)
-            row[name] = dict(gain_per_sample=per_sample, extra_nfe_per_sample=float(nfe.mean()),
+            dt = g - g_temporal
+            row_extra = dict(gain_minus_temporal=float(dt.mean()), gain_minus_temporal_ci=_ci(dt[idx].mean(1)))
+            row[name] = dict(gain_per_sample=per_sample, extra_nfe_per_sample=float(nfe.mean()), **row_extra,
                              d_entropy_per_sample=float(dent.mean()),
                              entropy_flag=bool(abs(dent.mean()) > 0.02),
                              gain_minus_uniform=float(diff.mean()), gain_minus_uniform_ci=_ci(diff[idx].mean(1)),
