@@ -407,8 +407,113 @@ def main(out_root: Path, results_root: Path, batches: Optional[List[int]] = None
                         f"{r['frac_tokens_changed']:.5f}", f"{r['frac_tokens_changed_net']:.5f}",
                         f"{r['genppl_ref']:.3f}", f"{r['genppl_branch']:.3f}",
                         f"{r['top10_share_signed']:.3f}", f"{r['top10_share_abs']:.3f}"])
+    run3_pilot(results_root)
+    r3 = run3(out_root, results_root)
+    if r3 is not None:
+        print("[analyze] run3:", json.dumps({k: r3.get(k) for k in ("paired_diffs_modified_minus_baseline", "mean_diff", "ci95")}))
     print(f"[analyze] wrote {adir}")
     if "anchor" in out:
         print("[analyze] anchor:", json.dumps(out["anchor"]))
     if "decision" in out:
         print("[analyze] decision:", json.dumps(out["decision"]))
+
+
+# -----------------------------------------------------------------------------
+# Run 3 (uncorrected-errors variant): GenPPL at matched entropy 4.31, paired over seeds
+# -----------------------------------------------------------------------------
+T_975_DF2 = 4.302652729911275
+TARGET_ENTROPY = 4.31
+
+
+def run3(out_root: Path, results_root: Path) -> Optional[Dict]:
+    rdir = results_root / "run3"
+    cal_p = rdir / "calibration.json"
+    if not cal_p.exists():
+        return None
+    cal = _load_json(cal_p)
+    c_star, k_in, s_star = float(cal["c_out"]), float(cal["k_in"]), int(cal["s_star"])
+    gammas, batches = cal["gammas"], cal["batches"]
+
+    def name(cond, g, b):
+        if cond == "baseline":
+            return f"baseline_g{g:.3f}_b{b}"
+        return f"modified_s{s_star}_k{k_in:g}_c{c_star:.4f}_g{g:.3f}_b{b}"
+
+    cells, fits = {}, {}
+    for cond in ("baseline", "modified"):
+        for b in batches:
+            pts = []
+            for g in gammas:
+                p = rdir / f"{name(cond, g, b)}.json"
+                if not p.exists():
+                    continue
+                d = _load_json(p)
+                cells[f"{cond}|{g:.3f}|{b}"] = dict(genppl=d["genppl"], entropy=d["mean_entropy"], source=str(p))
+                pts.append((d["mean_entropy"], math.log(d["genppl"])))
+            if len(pts) >= 2:
+                e, lp = np.array(pts).T
+                slope, icpt = np.polyfit(e, lp, 1)
+                fits[f"{cond}|{b}"] = dict(
+                    n_points=len(pts), slope_logppl_per_nat=float(slope),
+                    genppl_at_431=float(math.exp(icpt + slope * TARGET_ENTROPY)),
+                    entropy_range=[float(e.min()), float(e.max())],
+                    bracketed=bool(e.min() <= TARGET_ENTROPY <= e.max()))
+    diffs = []
+    for b in batches:
+        fb, fm = fits.get(f"baseline|{b}"), fits.get(f"modified|{b}")
+        if fb and fm:
+            diffs.append(fm["genppl_at_431"] - fb["genppl_at_431"])
+    out = dict(calibration=cal, cells=cells, fits=fits, paired_diffs_modified_minus_baseline=diffs)
+    if len(diffs) >= 2:
+        dd = np.array(diffs)
+        half = T_975_DF2 * dd.std(ddof=1) / math.sqrt(dd.size) if dd.size == 3 else float("nan")
+        out.update(mean_diff=float(dd.mean()), sd_diff=float(dd.std(ddof=1)),
+                   ci95=[float(dd.mean() - half), float(dd.mean() + half)],
+                   ci_method="t, df=2 (3 paired seeds)" if dd.size == 3 else "n/a")
+    # matched-entropy check and identity of the γ=0.2/seed-42 baseline with Run 1
+    me = {}
+    for g in gammas:
+        for b in batches:
+            kb, km = f"baseline|{g:.3f}|{b}", f"modified|{g:.3f}|{b}"
+            if kb in cells and km in cells:
+                me[f"{g:.3f}|{b}"] = cells[km]["entropy"] - cells[kb]["entropy"]
+    out["entropy_modified_minus_baseline"] = me
+    b0 = out_root / "run3" / f"{name('baseline', 0.2, 0)}.pt"
+    r0 = out_root / "batch0" / "reference.pt"
+    if b0.exists() and r0.exists():
+        out["baseline_g0.200_b0_equals_run1_reference"] = bool(
+            torch.equal(torch.load(b0)["bits"], torch.load(r0)["bits"]))
+    (results_root / "analysis" / "run3_analysis.json").write_text(json.dumps(out, indent=1))
+    return out
+
+
+def run3_pilot(results_root: Path) -> Optional[Dict]:
+    """Paired comparison of Run 3 pilot cells at base γ=0.2, seed 42 against the Run 1 reference
+    (identical spec tag and chunk seeds, so initial and churn noise are shared), plus the
+    unpaired baseline γ grid. Pilot data only — not the §9 matched-entropy result."""
+    rdir = results_root / "run3"
+    ref = _scores(results_root, 0, "reference")
+    if ref is None or not rdir.exists():
+        return None
+    out = {"paired_vs_run1_reference": {}, "baseline_gamma_grid_seed42": {}}
+    for p in sorted(rdir.glob("*.json")):
+        if p.name == "calibration.json":
+            continue
+        d = _load_json(p)
+        m = d["meta"]
+        rec = dict(genppl=d["genppl"], mean_entropy=d["mean_entropy"], source=str(p),
+                   condition=m["condition"], base_gamma=m["base_gamma"], c_out=m.get("c_out"),
+                   k_in=m.get("k_in"), s_star=m.get("s_star"), batch=m["batch"])
+        if m["condition"] == "modified" and abs(m["base_gamma"] - 0.2) < 1e-9 and m["batch"] == 0:
+            ps = d["per_sample"]
+            br = dict(nll=np.asarray(ps["nll"], float), ntok=np.asarray(ps["ntok"], float),
+                      ent=np.asarray(ps["entropy"], float))
+            rec["paired"] = paired_stats(ref, br)
+            out["paired_vs_run1_reference"][p.stem] = rec
+        elif m["condition"] == "baseline" and m["batch"] == 0:
+            out["baseline_gamma_grid_seed42"][f"{m['base_gamma']:.3f}"] = rec
+    out["baseline_gamma_grid_seed42"]["0.200"] = dict(
+        genppl=ref["genppl"], mean_entropy=ref["mean_entropy"], source=ref["path"],
+        note="Run 1 reference = baseline γ=0.2 seed 42 (same code path)")
+    (results_root / "analysis" / "run3_pilot.json").write_text(json.dumps(out, indent=1))
+    return out

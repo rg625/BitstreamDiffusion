@@ -624,6 +624,58 @@ def cmd_identity_check(args) -> None:
     print(json.dumps({k: v for k, v in res.items() if k != "meta"}, indent=1))
 
 
+def _run3_name(cond: str, gamma: float, batch: int, k_in: float, c_out: float, s_star: int) -> str:
+    if cond == "baseline":
+        return f"baseline_g{gamma:.3f}_b{batch}"
+    return f"modified_s{s_star}_k{k_in:g}_c{c_out:.4f}_g{gamma:.3f}_b{batch}"
+
+
+def cmd_run3(args) -> None:
+    """One Run 3 cell (uncorrected-errors variant): uniform γ vs γ_in = k·γ in s*, γ_out = c·γ elsewhere."""
+    out_root, results_root = Path(args.out_root), Path(args.results_root)
+    cells = [(cond, g, b) for cond in args.condition for g in args.gamma for b in args.batch]
+    todo = []
+    for cond, g, b in cells:
+        name = _run3_name(cond, g, b, args.k_in, args.c_out, args.s_star)
+        small = results_root / "run3" / f"{name}.json"
+        if small.exists() and not args.force:
+            print(f"[run3] skip {name} (done)")
+            continue
+        todo.append((cond, g, b, name))
+    ctx = None
+    for cond, g, b, name in todo:
+        _check_cap(results_root, upcoming_hours=0.04)
+        t0 = time.perf_counter()
+        if ctx is None or abs(ctx.gamma - g) > 1e-12:
+            if ctx is not None:
+                ctx.sampler = None
+                ctx.model = None
+                ctx.torch.cuda.empty_cache()
+            ctx = Ctx(gamma=g, compile_model=not args.no_compile)
+        n_int = int(ctx.spec["num_steps"]) - 1
+        g_step = float(ctx.spec["s_churn"]) / n_int  # per-step γ exactly as _compute_edm_gamma
+        overrides = None
+        if cond == "modified":
+            overrides = {s: {"gamma": (args.k_in if s == args.s_star else args.c_out) * g_step}
+                         for s in range(N_SEGMENTS)}
+        seed = batch_seed(b)
+        run = ctx.run(seed=seed, seeded_churn=True, segment_overrides=overrides)
+        sc = ctx.score(run["bits"])
+        total = time.perf_counter() - t0
+        print(f"[run3] {name}: GenPPL {sc['genppl']:.3f} entropy {sc['mean_entropy']:.4f} "
+              f"gen {run['wall']:.1f}s", flush=True)
+        meta = _meta(ctx, run3=True, condition=cond, base_gamma=g, gamma_step=g_step, batch=b, seed=seed,
+                     s_star=args.s_star, k_in=args.k_in, c_out=args.c_out, pilot=bool(args.pilot),
+                     overrides={str(k): v for k, v in (overrides or {}).items()},
+                     generation_wall_sec=run["wall"], scoring_wall_sec=sc["score_wall"],
+                     process_wall_sec=total, nfe_per_sample=run["nfe_calls"] // math.ceil(N_SAMPLES / MICRO_BATCH))
+        _atomic_torch_save(out_root / "run3" / f"{name}.pt", dict(bits=run["bits"].cpu(), tokens=sc["tokens"]))
+        _atomic_json(results_root / "run3" / f"{name}.json", dict(
+            meta=meta, genppl=sc["genppl"], nll_per_token=sc["nll_per_token"], mean_entropy=sc["mean_entropy"],
+            per_sample=dict(nll=sc["nll"], ntok=sc["ntok"], entropy=sc["entropy"])))
+        _ledger_add(results_root, f"run3 {name}", total)
+
+
 def cmd_analyze(args) -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import analysis
@@ -658,12 +710,23 @@ def main():
     ic.add_argument("--n", type=int, default=512)
     ic.add_argument("--no-compile", action="store_true")
 
+    r3 = sub.add_parser("run3")
+    r3.add_argument("--condition", nargs="+", choices=["baseline", "modified"], required=True)
+    r3.add_argument("--gamma", type=float, nargs="+", required=True)
+    r3.add_argument("--batch", type=int, nargs="+", default=[0])
+    r3.add_argument("--s-star", type=int, default=5)
+    r3.add_argument("--k-in", type=float, default=1.75)
+    r3.add_argument("--c-out", type=float, default=1.0)
+    r3.add_argument("--pilot", action="store_true")
+    r3.add_argument("--no-compile", action="store_true")
+    r3.add_argument("--force", action="store_true")
+
     a = sub.add_parser("analyze")
     a.add_argument("--batches", type=int, nargs="+", default=None)
 
     args = ap.parse_args()
     {"reference": cmd_reference, "probe": cmd_probe, "identity-check": cmd_identity_check,
-     "analyze": cmd_analyze}[args.cmd](args)
+     "run3": cmd_run3, "analyze": cmd_analyze}[args.cmd](args)
 
 
 if __name__ == "__main__":

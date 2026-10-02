@@ -264,3 +264,69 @@ c calibrated by a pilot at base γ = 0.2, seed 42, so that mean entropy matches 
 3 seeds (42, 43, 44) × 1024 samples, both conditions share seeds and chunk seeds (same spec tag).
 Per condition×seed: fit log GenPPL linear in entropy over the 3 γ points, evaluate at 4.31;
 paired difference per seed; report mean and t-based 95% CI (t₀.₉₇₅,₂ = 4.303) over the 3 seeds.
+
+## 2026-10-02 18:00–18:02 — Batch 1 reference (job `batch1_reference`, PID 136740)
+
+Seed 43, same spec/chunk layout: GenPPL 59.924, entropy 4.3102 (`results/batch1/reference.json`).
+Generation 103.4 s, process ≈ 120 s.
+
+**Mistake, caught immediately:** my first batch-1 probe launch (18:02:05, PID 141055) used
+`--kind null refine nochurn --segment 0 5 7`, which would have run nochurn_5/nochurn_7 (not
+borderline) and skipped nochurn_1..3. Killed within ~20 s, before any branch finished; nothing
+written (log kept as `logs/batch1_probes_killed.log`; those ~20 s are not in the ledger).
+Relaunched as two jobs: `batch1_probes_a` (null, refine_0/5/7) then `batch1_probes_b`
+(nochurn_0/1/2/3).
+
+Also not in the ledger: the failed launches at 17:22–17:29 (allocator option, Triton crash,
+SDPA error), each < 15 s of GPU time.
+
+## 2026-10-02 18:03–18:16 — Batch 1 borderline branches (jobs `batch1_probes_a`, `batch1_probes_b`)
+
+null (batch 1) bit-identical to the batch-1 reference again (ΔNLL 0, 0 tokens changed).
+Pooled (batch 0+1, 2048 paired samples) results in `results/analysis/run2_table.csv`.
+After pooling: refine_5 +0.029 [+0.017, +0.042] (material, worse); nochurn_3 +0.032 [+0.009, +0.054]
+(material, but not "much more": median nochurn ΔNLL is 0.045); refine_0, refine_7, nochurn_0..2 not
+material. **Still borderline after the one extra batch §7 allows:** refine_0, refine_7, nochurn_0,
+nochurn_1, nochurn_2, nochurn_3 — reported as unresolved; no further batches run.
+**§8 per segment (pooled): seg 4 both; segs 5, 6, 7 uncorrected errors; segs 0–3 none** (refine_1..3
+material but entropy-flagged). Run 3 rule → uncorrected-errors variant, s* = 5 (unchanged by batch 1).
+
+## 2026-10-02 18:17–18:31 — Run 3 calibration pilot → STOP CONDITION
+
+Pilot cells (modified: γ_in = 1.75·γ_step in seg 5, γ_out = c·γ_step elsewhere; base γ 0.2, seed 42,
+paired with Run 1 via identical spec tag / chunk seeds), `results/run3/*.json`,
+`results/analysis/run3_pilot.json`:
+
+| c | GenPPL | entropy | Δent vs Run 1 [95% CI] | ΔNLL/token [95% CI] |
+|---|---|---|---|---|
+| 0.5 | 58.869 | 4.3061 | −0.0068 [−0.0219, +0.0087] | −0.0220 [−0.0602, +0.0166] |
+| 0.8 | 58.872 | 4.3040 | −0.0089 [−0.0199, +0.0020] | −0.0219 [−0.0534, +0.0112] |
+| 0.9 | 58.832 | 4.3043 | −0.0086 [−0.0175, +0.0005] | −0.0226 [−0.0513, +0.0068] |
+| 1.0 | 59.103 | 4.3023 | −0.0106 [−0.0152, −0.0059] | −0.0180 [−0.0373, +0.0008] |
+| 1.3 | 63.327 | 4.3076 | −0.0053 [−0.0174, +0.0068] | +0.0510 [+0.0187, +0.0837] |
+
+Raising γ in s* lowers entropy slightly (−0.011 at c = 1) and **no c in [0.5, 1.3] restores it**: the
+entropy response to γ_out is non-monotone and within paired noise. To check whether γ can bracket
+entropy at all, two baseline cells: γ 0.185 → GenPPL 59.554, entropy 4.3115; γ 0.215 → 58.808,
+4.3004 (γ 0.2 = Run 1: 60.176, 4.3129). Entropy over the planned γ range moves by ≤ 0.013 and
+non-monotonically, the same size as seed-to-seed noise (batch 0 vs 1 at γ 0.2: 4.3129 vs 4.3102).
+
+**Conclusion: the §9 Run 3 design cannot be implemented as specified on this model**: (i) the
+entropy cannot be matched by lowering γ outside s* (the calibration step), and (ii) three γ values
+in the 0.185–0.215 range do not move entropy measurably, so "GenPPL interpolated to entropy 4.31"
+would divide noise by noise. Per the brief's stop condition I stopped Run 3 here (no main Run 3
+cells run) and describe alternatives in the report. GPU used for Run 3 pilot: 0.231 h.
+
+## 2026-10-02 18:31–18:33 — Step-log rerun (job `steplogs_rerun`)
+
+`reference --step-logs-only`: rerun of the batch-0 reference trajectory with the fixed entropy clamp.
+**Rerun bits identical to the saved reference (0 bits differ)**, `results/batch0/step_logs_rerun.json`.
+`runs/compute_allocation/batch0/step_logs.pt` replaced; settling analysis regenerated (guess-based
+quantities unchanged, bit-entropy summary now finite).
+
+## 2026-10-02 18:35 — Totals
+
+GPU ledger (`results/gpu_ledger.jsonl`): **1.021 RTX 4090 GPU-hours** over 36 logged jobs/branches
+(identity check 0.044; Run 1 0.033; Run 2 batch 0 0.428; batch 1 reference 0.033 + 8 branches 0.223;
+Run 3 pilot 0.231; step-log rerun 0.030), plus < 2 min unlogged failed launches. Cap: 6 h.
+Measured cost per full 1024-sample cell: ≈ 104 s generation + 12 s scoring + ≈ 4 s load ≈ 0.033 GPU-h.
