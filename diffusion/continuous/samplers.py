@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 import torch
 from tqdm import tqdm
@@ -212,12 +212,17 @@ def _apply_edm_churn(
     *,
     gamma: float,
     s_noise: float,
+    generator: Optional[torch.Generator] = None,
+    eps_out: Optional[list] = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     EDM Algorithm 2:
       sigma_hat = sigma_cur * (1 + gamma)
       x_hat = x + sqrt(sigma_hat^2 - sigma_cur^2) * eps,
       eps ~ N(0, S_noise^2 I)
+
+    `generator=None` draws from the global RNG stream (default behaviour).
+    If `eps_out` is a list, the drawn (scaled) noise is appended to it.
     """
     if gamma <= 0.0:
         return x, sigma_cur
@@ -225,9 +230,35 @@ def _apply_edm_churn(
     sigma_hat = sigma_cur * (1.0 + float(gamma))
     sigma_delta = (sigma_hat.square() - sigma_cur.square()).clamp_min(0.0).sqrt()
 
-    eps = torch.randn_like(x) * float(s_noise)
+    if generator is None:
+        eps = torch.randn_like(x) * float(s_noise)
+    else:
+        eps = torch.randn(
+            x.shape, generator=generator, device=x.device, dtype=x.dtype
+        ) * float(s_noise)
+    if eps_out is not None:
+        eps_out.append(eps)
     x_hat = x + sigma_delta.to(device=x.device, dtype=x.dtype) * eps
     return x_hat, sigma_hat
+
+
+def _churn_step_seed(base_seed: int, step_index: int) -> int:
+    """
+    Seed for the churn noise of original step `step_index`, derived only from
+    (base_seed, step_index), so extra sub-steps never shift later draws.
+    """
+    import numpy as np
+
+    state = np.random.SeedSequence(
+        [int(base_seed) % (2**63), int(step_index), 0xC0B17]
+    ).generate_state(2, dtype=np.uint32)
+    return (int(state[0]) << 31 | int(state[1]) >> 1) % (2**63 - 1)
+
+
+def _churn_generator(device: torch.device, base_seed: int, step_index: int) -> torch.Generator:
+    g = torch.Generator(device=device)
+    g.manual_seed(_churn_step_seed(base_seed, step_index))
+    return g
 
 
 # -----------------------------------------------------------------------------
@@ -946,6 +977,74 @@ class SigmaSchedule:
 
         return self._karras_schedule(N, sigma_min=sigma_min, sigma_max=sigma_max)
 
+    def entropic_substep_sigmas(
+        self,
+        sigmas: torch.Tensor,
+        step_index: int,
+        num_substeps: int,
+        *,
+        entropy_run_dir: Optional[Path] = None,
+        sigma_min_override: Optional[float] = None,
+        sigma_max_override: Optional[float] = None,
+    ) -> torch.Tensor:
+        """
+        Split original step `step_index` (sigmas[i] -> sigmas[i+1]) of an
+        entropic grid into `num_substeps` sub-steps spaced evenly in
+        entropy-CDF quantile. Returns K+1 sigmas whose endpoints are exactly
+        sigmas[i] and sigmas[i+1].
+
+        The quantile grid is rebuilt with the same formulas as
+        `_inverse_cdf_sample_truncated`; interior points are inverted with
+        the same piecewise-linear interpolation.
+        """
+        K = int(num_substeps)
+        i = int(step_index)
+        if K <= 1:
+            return sigmas[i : i + 2]
+
+        _, cdf, sigmas_base = self._load_entropy_tables(entropy_run_dir=entropy_run_dir)
+        if cdf is None or sigmas_base is None:
+            raise FileNotFoundError("entropic_substep_sigmas requires the entropy tables.")
+
+        F = cdf.to(self.device).clone().float()
+        F[-1] = 1.0
+        sig = sigmas_base.to(self.device).float()
+
+        sigma_min, sigma_max = _resolve_sigma_bounds(
+            self.cfg,
+            sigma_min_override=sigma_min_override,
+            sigma_max_override=sigma_max_override,
+        )
+        sigma_min_eff = float(max(sigma_min, float(sig[0].item())))
+        sigma_max_eff = float(min(sigma_max, float(sig[-1].item())))
+        s_min_t = torch.tensor(sigma_min_eff, device=self.device, dtype=torch.float32)
+        s_max_t = torch.tensor(sigma_max_eff, device=self.device, dtype=torch.float32)
+        F_min = self._interp1d_monotone(sig, F, s_min_t)
+        F_max = self._interp1d_monotone(sig, F, s_max_t)
+        if float((F_max - F_min).abs().item()) < 1e-12:
+            raise ValueError("Degenerate entropy CDF range; sub-steps undefined.")
+
+        N = int(sigmas.numel())
+        u = torch.linspace(0.0, 1.0, N, device=self.device, dtype=torch.float32)
+        u = F_min + u * (F_max - F_min)
+        u = u.clamp(min=F[0].item(), max=1.0 - 1e-7)
+        u_desc = torch.flip(u, dims=[0])  # aligned with the descending sigma grid
+
+        frac = torch.arange(1, K, device=self.device, dtype=torch.float32) / float(K)
+        u_sub = u_desc[i] + frac * (u_desc[i + 1] - u_desc[i])
+
+        idx = torch.searchsorted(F, u_sub, right=False).clamp(min=1, max=F.numel() - 1)
+        F_lo, F_hi = F[idx - 1], F[idx]
+        s_lo, s_hi = sig[idx - 1], sig[idx]
+        w = (u_sub - F_lo) / (F_hi - F_lo).clamp_min(1e-20)
+        interior = s_lo + w * (s_hi - s_lo)
+
+        out = torch.empty(K + 1, device=sigmas.device, dtype=sigmas.dtype)
+        out[0] = sigmas[i]
+        out[1:K] = interior.to(device=sigmas.device, dtype=sigmas.dtype)
+        out[K] = sigmas[i + 1]
+        return out
+
 
 # -----------------------------------------------------------------------------
 # Heun sampler
@@ -1526,6 +1625,26 @@ class DDIMSampler:
         self.is_cont_tokens = (self.repr_mode == "tokens")
         self.vocab_size = int(getattr(cfg.data, "vocab_size", 1)) if self.is_cont_tokens else 1
 
+    @staticmethod
+    def _snapshot_state(i, sigmas, x, x0_hat, x0_hat_c, x0_hat_u) -> Dict[str, Any]:
+        """Loop state at the start of original step i (before churn)."""
+
+        def _c(t):
+            return None if t is None else t.detach().clone()
+
+        state: Dict[str, Any] = dict(
+            i=int(i),
+            x=_c(x),
+            x0_hat=_c(x0_hat),
+            x0_hat_c=_c(x0_hat_c),
+            x0_hat_u=_c(x0_hat_u),
+            sigmas=_c(sigmas),
+            cpu_rng=torch.get_rng_state(),
+        )
+        if x.device.type == "cuda":
+            state["cuda_rng"] = torch.cuda.get_rng_state(x.device)
+        return state
+
     @torch.no_grad()
     def sample(
         self,
@@ -1547,6 +1666,13 @@ class DDIMSampler:
         ati_eta: Optional[float] = None,
         return_probs: bool = False,
         progress: bool = True,
+        churn_noise_seed: Optional[int] = None,
+        save_states_at: Optional[Iterable[int]] = None,
+        state_hook: Optional[Callable[[Dict[str, Any]], None]] = None,
+        init_state: Optional[Dict[str, Any]] = None,
+        segment_overrides: Optional[Dict[int, Dict[str, Any]]] = None,
+        segment_len: int = 32,
+        step_callback: Optional[Callable[..., None]] = None,
     ):
         sc_refresh_mode = _normalize_sc_refresh_mode(sc_refresh_mode)
         ati_eta = _resolve_ati_eta(self.cfg, ati_eta)
@@ -1589,15 +1715,19 @@ class DDIMSampler:
         guidance_scale = float(guidance_scale)
         use_cfg = bool(cond_enabled and (guidance_scale > 0.0))
 
-        if self.is_cont_tokens:
-            x = torch.randn(B, S, self.vocab_size, device=self.device, dtype=torch.float32) * sigma0
+        if init_state is None:
+            if self.is_cont_tokens:
+                x = torch.randn(B, S, self.vocab_size, device=self.device, dtype=torch.float32) * sigma0
+            else:
+                x = torch.randn(B, S, device=self.device, dtype=torch.float32) * sigma0
+            x = x + self.data_center
         else:
-            x = torch.randn(B, S, device=self.device, dtype=torch.float32) * sigma0
-        x = x + self.data_center
+            x = init_state["x"].to(device=self.device, dtype=torch.float32).clone()
 
         if cond_enabled:
             _clamp_mask_(x, prefix_full, prefix_mask)
 
+        x0_hat = x0_hat_c = x0_hat_u = None
         if self.sc_enabled:
             if use_cfg:
                 x0_hat_c = torch.zeros_like(x)
@@ -1612,183 +1742,266 @@ class DDIMSampler:
             x0_hat_c = x0_hat_u = None
             x0_hat = None
 
-        indices = range(len(sigmas) - 1)
+        if init_state is not None:
+            saved_sigmas = init_state.get("sigmas", None)
+            if saved_sigmas is not None and not torch.equal(
+                saved_sigmas.to(device=sigmas.device, dtype=sigmas.dtype), sigmas
+            ):
+                raise ValueError("init_state was saved with a different sigma grid.")
+            start_index = int(init_state["i"])
+
+            def _restored(name):
+                t = init_state.get(name, None)
+                return None if t is None else t.to(device=self.device, dtype=x.dtype).clone()
+
+            x0_hat = _restored("x0_hat")
+            x0_hat_c = _restored("x0_hat_c")
+            x0_hat_u = _restored("x0_hat_u")
+            if churn_noise_seed is None:
+                # Legacy global-stream churn: resume the RNG where it was.
+                if init_state.get("cpu_rng", None) is not None:
+                    torch.set_rng_state(init_state["cpu_rng"])
+                if self.device.type == "cuda" and init_state.get("cuda_rng", None) is not None:
+                    torch.cuda.set_rng_state(init_state["cuda_rng"], self.device)
+        else:
+            start_index = 0
+
+        n_intervals = max(1, len(sigmas) - 1)
+        seg_len = max(1, int(segment_len))
+        overrides = {int(s): dict(v) for s, v in (segment_overrides or {}).items()}
+        save_at = set(int(s) for s in (save_states_at or []))
+
+        indices = range(start_index, len(sigmas) - 1)
         if progress:
             indices = tqdm(indices, desc="DDIM Sampler", leave=False)
 
         for i in indices:
-            sigma_cur, sigma_next = sigmas[i], sigmas[i + 1]
-            sigma_prev = sigmas[i - 1] if i > 0 else None
+            if state_hook is not None and i in save_at:
+                state_hook(self._snapshot_state(i, sigmas, x, x0_hat, x0_hat_c, x0_hat_u))
 
-            if cond_enabled:
-                _clamp_mask_(x, prefix_full, prefix_mask)
+            ov = overrides.get(i // seg_len) if overrides else None
+            n_sub = max(1, int(ov.get("substeps", 1) or 1)) if ov else 1
+            gamma_override = ov.get("gamma", None) if ov else None
 
-            # ------------------------------------------------------------
-            # Optional EDM-style stochastic churn before the denoiser call.
-            # ------------------------------------------------------------
-            gamma_i = _compute_edm_gamma(
-                sigma_cur,
-                num_intervals=max(1, len(sigmas) - 1),
-                s_churn=stoch_cfg.s_churn,
-                s_tmin=stoch_cfg.s_tmin,
-                s_tmax=stoch_cfg.s_tmax,
-            ) if stoch_cfg.enabled else 0.0
+            # Sub-steps (refine) are spaced evenly in entropy-CDF quantile
+            # inside the original step; n_sub == 1 is the original step.
+            sub_sigmas = None
+            if n_sub > 1:
+                sub_sigmas = self.sigmas.entropic_substep_sigmas(
+                    sigmas,
+                    i,
+                    n_sub,
+                    entropy_run_dir=entropy_run_dir,
+                    sigma_min_override=sigma_min_override,
+                    sigma_max_override=sigma_max_override,
+                )
 
-            x_state, sigma_state = _apply_edm_churn(
-                x,
-                sigma_cur,
-                gamma=gamma_i,
-                s_noise=stoch_cfg.s_noise,
-            )
-
-            if cond_enabled:
-                _clamp_mask_(x_state, prefix_full, prefix_mask)
-
-            sigma_eval_cur = _ati_shift_sigma_label(sigma_state, sigma_prev, ati_eta)
-            sigma_eval_next = _ati_shift_sigma_label(sigma_next, sigma_state, ati_eta)
-            h = sigma_next - sigma_state
-
-            # ------------------------------------------------------------
-            # Evaluate at (x_state, sigma_state)
-            # ------------------------------------------------------------
-            if use_cfg:
-                x_cat = torch.cat([x_state, x_state], dim=0)
-                sig_cat = sigma_eval_cur.expand(2 * B)
-
-                _clamp_mask_(x_cat[:B], prefix_full, prefix_mask)
-                _clamp_mask_(x_cat[B:], null_full, prefix_mask)
-
-                if self.sc_enabled:
-                    cond_cat = torch.cat([x0_hat_c, x0_hat_u], dim=0)
-                    _clamp_mask_(cond_cat[:B], prefix_full, prefix_mask)
-                    _clamp_mask_(cond_cat[B:], null_full, prefix_mask)
+            for k in range(n_sub):
+                if sub_sigmas is None:
+                    sigma_cur, sigma_next = sigmas[i], sigmas[i + 1]
+                    sigma_prev = sigmas[i - 1] if i > 0 else None
                 else:
-                    cond_cat = torch.zeros_like(x_cat)
+                    sigma_cur, sigma_next = sub_sigmas[k], sub_sigmas[k + 1]
+                    if k == 0:
+                        sigma_prev = sigmas[i - 1] if i > 0 else None
+                    else:
+                        sigma_prev = sub_sigmas[k - 1]
 
-                logits_cat = _model_logits_continuous(self.model, self.cfg, x_cat, sig_cat, cond_cat)
-                probs_c = logits_to_x0_hat(
-                    logits_cat[:B],
-                    dtype=x.dtype,
-                    is_cont_tokens=self.is_cont_tokens,
-                )
-                probs_u = logits_to_x0_hat(
-                    logits_cat[B:],
-                    dtype=x.dtype,
-                    is_cont_tokens=self.is_cont_tokens,
-                )
-
-                x0_hat_cur_c = probs_c
-                x0_hat_cur_u = probs_u
-
-                _clamp_mask_(x0_hat_cur_c, prefix_full, prefix_mask)
-                _clamp_mask_(x0_hat_cur_u, null_full, prefix_mask)
-                _clamp_mask_(probs_c, prefix_full, prefix_mask)
-                _clamp_mask_(probs_u, null_full, prefix_mask)
-
-                probs_g = probs_u + guidance_scale * (probs_c - probs_u)
-                _clamp_mask_(probs_g, prefix_full, prefix_mask)
-
-                score_cur = _score_from_probs(
-                    probs_g,
-                    x_state,
-                    sigma_state,
-                    is_cont_tokens=self.is_cont_tokens,
-                )
-                d_cur = -sigma_state * score_cur
-                _zero_mask_(d_cur, prefix_mask)
-
-                x = x_state + h * d_cur
                 if cond_enabled:
                     _clamp_mask_(x, prefix_full, prefix_mask)
 
-                if self.sc_enabled:
-                    if sc_refresh_mode == "refined":
-                        x_ref_cat = torch.cat([x, x], dim=0)
-                        sig_ref_cat = sigma_eval_next.expand(2 * B)
+                # ------------------------------------------------------------
+                # Optional EDM-style stochastic churn before the denoiser call.
+                # Applied once per original step, at its first sub-step.
+                # ------------------------------------------------------------
+                if k == 0:
+                    gamma_i = _compute_edm_gamma(
+                        sigma_cur,
+                        num_intervals=n_intervals,
+                        s_churn=stoch_cfg.s_churn,
+                        s_tmin=stoch_cfg.s_tmin,
+                        s_tmax=stoch_cfg.s_tmax,
+                    ) if stoch_cfg.enabled else 0.0
+                    if gamma_override is not None:
+                        gamma_i = max(0.0, min(float(gamma_override), math.sqrt(2.0) - 1.0))
+                else:
+                    gamma_i = 0.0
 
-                        _clamp_mask_(x_ref_cat[:B], prefix_full, prefix_mask)
-                        _clamp_mask_(x_ref_cat[B:], null_full, prefix_mask)
+                churn_gen = (
+                    _churn_generator(x.device, churn_noise_seed, i)
+                    if (churn_noise_seed is not None and gamma_i > 0.0)
+                    else None
+                )
+                eps_list = [] if step_callback is not None else None
 
-                        cond_ref_cat = torch.cat([x0_hat_cur_c, x0_hat_cur_u], dim=0)
-                        _clamp_mask_(cond_ref_cat[:B], prefix_full, prefix_mask)
-                        _clamp_mask_(cond_ref_cat[B:], null_full, prefix_mask)
-
-                        logits_ref_cat = _model_logits_continuous(
-                            self.model,
-                            self.cfg,
-                            x_ref_cat,
-                            sig_ref_cat,
-                            cond_ref_cat,
-                        )
-                        x0_hat_c = logits_to_x0_hat(
-                            logits_ref_cat[:B],
-                            dtype=x.dtype,
-                            is_cont_tokens=self.is_cont_tokens,
-                        )
-                        x0_hat_u = logits_to_x0_hat(
-                            logits_ref_cat[B:],
-                            dtype=x.dtype,
-                            is_cont_tokens=self.is_cont_tokens,
-                        )
-                        _clamp_mask_(x0_hat_c, prefix_full, prefix_mask)
-                        _clamp_mask_(x0_hat_u, null_full, prefix_mask)
-                    else:
-                        x0_hat_c = x0_hat_cur_c
-                        x0_hat_u = x0_hat_cur_u
-
-            else:
-                sig_B = sigma_eval_cur.expand(B)
-                cond_in = x0_hat if self.sc_enabled else torch.zeros_like(x_state)
+                x_state, sigma_state = _apply_edm_churn(
+                    x,
+                    sigma_cur,
+                    gamma=gamma_i,
+                    s_noise=stoch_cfg.s_noise,
+                    generator=churn_gen,
+                    eps_out=eps_list,
+                )
 
                 if cond_enabled:
                     _clamp_mask_(x_state, prefix_full, prefix_mask)
+
+                sigma_eval_cur = _ati_shift_sigma_label(sigma_state, sigma_prev, ati_eta)
+                sigma_eval_next = _ati_shift_sigma_label(sigma_next, sigma_state, ati_eta)
+                h = sigma_next - sigma_state
+
+                # ------------------------------------------------------------
+                # Evaluate at (x_state, sigma_state)
+                # ------------------------------------------------------------
+                if use_cfg:
+                    x_cat = torch.cat([x_state, x_state], dim=0)
+                    sig_cat = sigma_eval_cur.expand(2 * B)
+
+                    _clamp_mask_(x_cat[:B], prefix_full, prefix_mask)
+                    _clamp_mask_(x_cat[B:], null_full, prefix_mask)
+
                     if self.sc_enabled:
-                        _clamp_mask_(cond_in, prefix_full, prefix_mask)
-
-                logits = _model_logits_continuous(self.model, self.cfg, x_state, sig_B, cond_in)
-                probs = logits_to_x0_hat(
-                    logits,
-                    dtype=x.dtype,
-                    is_cont_tokens=self.is_cont_tokens,
-                )
-
-                x0_hat_cur = probs
-                if cond_enabled:
-                    _clamp_mask_(x0_hat_cur, prefix_full, prefix_mask)
-                    _clamp_mask_(probs, prefix_full, prefix_mask)
-
-                score_cur = _score_from_probs(
-                    probs,
-                    x_state,
-                    sigma_state,
-                    is_cont_tokens=self.is_cont_tokens,
-                )
-                d_cur = -sigma_state * score_cur
-                _zero_mask_(d_cur, prefix_mask)
-
-                x = x_state + h * d_cur
-                if cond_enabled:
-                    _clamp_mask_(x, prefix_full, prefix_mask)
-
-                if self.sc_enabled:
-                    if sc_refresh_mode == "refined":
-                        sig_next_B = sigma_eval_next.expand(B)
-                        logits_ref = _model_logits_continuous(
-                            self.model,
-                            self.cfg,
-                            x,
-                            sig_next_B,
-                            x0_hat_cur,
-                        )
-                        x0_hat = logits_to_x0_hat(
-                            logits_ref,
-                            dtype=x.dtype,
-                            is_cont_tokens=self.is_cont_tokens,
-                        )
-                        if cond_enabled:
-                            _clamp_mask_(x0_hat, prefix_full, prefix_mask)
+                        cond_cat = torch.cat([x0_hat_c, x0_hat_u], dim=0)
+                        _clamp_mask_(cond_cat[:B], prefix_full, prefix_mask)
+                        _clamp_mask_(cond_cat[B:], null_full, prefix_mask)
                     else:
-                        x0_hat = x0_hat_cur
+                        cond_cat = torch.zeros_like(x_cat)
+
+                    logits_cat = _model_logits_continuous(self.model, self.cfg, x_cat, sig_cat, cond_cat)
+                    probs_c = logits_to_x0_hat(
+                        logits_cat[:B],
+                        dtype=x.dtype,
+                        is_cont_tokens=self.is_cont_tokens,
+                    )
+                    probs_u = logits_to_x0_hat(
+                        logits_cat[B:],
+                        dtype=x.dtype,
+                        is_cont_tokens=self.is_cont_tokens,
+                    )
+
+                    x0_hat_cur_c = probs_c
+                    x0_hat_cur_u = probs_u
+
+                    _clamp_mask_(x0_hat_cur_c, prefix_full, prefix_mask)
+                    _clamp_mask_(x0_hat_cur_u, null_full, prefix_mask)
+                    _clamp_mask_(probs_c, prefix_full, prefix_mask)
+                    _clamp_mask_(probs_u, null_full, prefix_mask)
+
+                    probs_g = probs_u + guidance_scale * (probs_c - probs_u)
+                    _clamp_mask_(probs_g, prefix_full, prefix_mask)
+
+                    score_cur = _score_from_probs(
+                        probs_g,
+                        x_state,
+                        sigma_state,
+                        is_cont_tokens=self.is_cont_tokens,
+                    )
+                    d_cur = -sigma_state * score_cur
+                    _zero_mask_(d_cur, prefix_mask)
+
+                    x = x_state + h * d_cur
+                    if cond_enabled:
+                        _clamp_mask_(x, prefix_full, prefix_mask)
+
+                    if self.sc_enabled:
+                        if sc_refresh_mode == "refined":
+                            x_ref_cat = torch.cat([x, x], dim=0)
+                            sig_ref_cat = sigma_eval_next.expand(2 * B)
+
+                            _clamp_mask_(x_ref_cat[:B], prefix_full, prefix_mask)
+                            _clamp_mask_(x_ref_cat[B:], null_full, prefix_mask)
+
+                            cond_ref_cat = torch.cat([x0_hat_cur_c, x0_hat_cur_u], dim=0)
+                            _clamp_mask_(cond_ref_cat[:B], prefix_full, prefix_mask)
+                            _clamp_mask_(cond_ref_cat[B:], null_full, prefix_mask)
+
+                            logits_ref_cat = _model_logits_continuous(
+                                self.model,
+                                self.cfg,
+                                x_ref_cat,
+                                sig_ref_cat,
+                                cond_ref_cat,
+                            )
+                            x0_hat_c = logits_to_x0_hat(
+                                logits_ref_cat[:B],
+                                dtype=x.dtype,
+                                is_cont_tokens=self.is_cont_tokens,
+                            )
+                            x0_hat_u = logits_to_x0_hat(
+                                logits_ref_cat[B:],
+                                dtype=x.dtype,
+                                is_cont_tokens=self.is_cont_tokens,
+                            )
+                            _clamp_mask_(x0_hat_c, prefix_full, prefix_mask)
+                            _clamp_mask_(x0_hat_u, null_full, prefix_mask)
+                        else:
+                            x0_hat_c = x0_hat_cur_c
+                            x0_hat_u = x0_hat_cur_u
+
+                else:
+                    sig_B = sigma_eval_cur.expand(B)
+                    cond_in = x0_hat if self.sc_enabled else torch.zeros_like(x_state)
+
+                    if cond_enabled:
+                        _clamp_mask_(x_state, prefix_full, prefix_mask)
+                        if self.sc_enabled:
+                            _clamp_mask_(cond_in, prefix_full, prefix_mask)
+
+                    logits = _model_logits_continuous(self.model, self.cfg, x_state, sig_B, cond_in)
+                    probs = logits_to_x0_hat(
+                        logits,
+                        dtype=x.dtype,
+                        is_cont_tokens=self.is_cont_tokens,
+                    )
+
+                    x0_hat_cur = probs
+                    if cond_enabled:
+                        _clamp_mask_(x0_hat_cur, prefix_full, prefix_mask)
+                        _clamp_mask_(probs, prefix_full, prefix_mask)
+
+                    score_cur = _score_from_probs(
+                        probs,
+                        x_state,
+                        sigma_state,
+                        is_cont_tokens=self.is_cont_tokens,
+                    )
+                    d_cur = -sigma_state * score_cur
+                    _zero_mask_(d_cur, prefix_mask)
+
+                    x = x_state + h * d_cur
+                    if cond_enabled:
+                        _clamp_mask_(x, prefix_full, prefix_mask)
+
+                    if self.sc_enabled:
+                        if sc_refresh_mode == "refined":
+                            sig_next_B = sigma_eval_next.expand(B)
+                            logits_ref = _model_logits_continuous(
+                                self.model,
+                                self.cfg,
+                                x,
+                                sig_next_B,
+                                x0_hat_cur,
+                            )
+                            x0_hat = logits_to_x0_hat(
+                                logits_ref,
+                                dtype=x.dtype,
+                                is_cont_tokens=self.is_cont_tokens,
+                            )
+                            if cond_enabled:
+                                _clamp_mask_(x0_hat, prefix_full, prefix_mask)
+                        else:
+                            x0_hat = x0_hat_cur
+
+                if step_callback is not None:
+                    step_callback(
+                        i=i, sub=k, n_sub=n_sub, final=False,
+                        sigma=sigma_state, sigma_next=sigma_next, gamma=gamma_i,
+                        D=(probs_g if use_cfg else probs), x=x,
+                        eps=(eps_list[0] if eps_list else None),
+                    )
+
+        if state_hook is not None and (len(sigmas) - 1) in save_at:
+            state_hook(self._snapshot_state(len(sigmas) - 1, sigmas, x, x0_hat, x0_hat_c, x0_hat_u))
 
         # ------------------------------------------------------------
         # Final denoised probabilities
@@ -1843,6 +2056,13 @@ class DDIMSampler:
                 probs_g = probs_u + guidance_scale * (probs_c - probs_u)
                 _clamp_mask_(probs_g, prefix_full, prefix_mask)
 
+                if step_callback is not None:
+                    step_callback(
+                        i=len(sigmas) - 1, sub=0, n_sub=1, final=True,
+                        sigma=sigma_final, sigma_next=None, gamma=0.0,
+                        D=probs_g, x=x, eps=None,
+                    )
+
                 return x, probs_g
 
             sig_B = sigma_final.expand(B)
@@ -1864,6 +2084,13 @@ class DDIMSampler:
 
             if cond_enabled:
                 _clamp_mask_(probs, prefix_full, prefix_mask)
+
+            if step_callback is not None:
+                step_callback(
+                    i=len(sigmas) - 1, sub=0, n_sub=1, final=True,
+                    sigma=sigma_final, sigma_next=None, gamma=0.0,
+                    D=probs, x=x, eps=None,
+                )
 
             return x, probs
 
