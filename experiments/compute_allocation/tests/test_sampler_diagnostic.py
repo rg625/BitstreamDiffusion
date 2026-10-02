@@ -72,6 +72,11 @@ def tiny():
     cfg = _tiny_cfg()
     torch.manual_seed(0)
     model = create_model(cfg).eval()
+    # zero-initialised layers make a fresh SDT ignore its self-conditioning input;
+    # perturb every weight so all input paths are live
+    with torch.no_grad():
+        for prm in model.parameters():
+            prm.add_(0.05 * torch.randn_like(prm))
     return cfg, model
 
 
@@ -272,3 +277,49 @@ def test_branch_from_saved_state_equals_branch_from_scratch(tiny, kind):
         assert _eq(full, part), f"{kind}[{s}] from saved state differs"
         ref = _run(smp, 8, S, churn_noise_seed=9, segment_len=SEG_LEN)
         assert not torch.equal(full[1], ref[1]), f"{kind}[{s}] had no effect at all"
+
+
+# ---------------------------------------------------------------------------
+# sc_refresh override (experiments/adaptive_compute): extra self-conditioning passes
+# ---------------------------------------------------------------------------
+def test_sc_refresh_one_everywhere_equals_refined_mode(tiny):
+    cfg, model = tiny
+    S = cfg.data.sequence_len
+    smp = DDIMSampler(model, None, cfg)
+    allseg = {s: {"sc_refresh": 1} for s in range(4)}
+    a = _run(smp, 31, S, churn_noise_seed=6, segment_len=SEG_LEN, segment_overrides=allseg)
+    b = _run(smp, 31, S, churn_noise_seed=6, segment_len=SEG_LEN, sc_refresh_mode="refined")
+    assert _eq(a, b)
+
+
+def test_sc_refresh_zero_is_noop_and_counts_nfe(tiny):
+    cfg, model = tiny
+    S = cfg.data.sequence_len
+    cm = CountingModel(model)
+    smp = DDIMSampler(cm, None, cfg)
+    ref = _run(smp, 2, S, churn_noise_seed=1, segment_len=SEG_LEN)
+    z = _run(smp, 2, S, churn_noise_seed=1, segment_len=SEG_LEN, segment_overrides={0: {"sc_refresh": 0}})
+    assert _eq(ref, z)
+    for c in (1, 2, 4):
+        cm.calls = 0
+        out = _run(smp, 2, S, churn_noise_seed=1, segment_len=SEG_LEN, segment_overrides={0: {"sc_refresh": c}})
+        assert cm.calls == (NUM_STEPS - 1) + 1 + c * SEG_LEN
+        assert not torch.equal(out[0], ref[0])  # tiny model: D saturates at low sigma, so test at high sigma (segment 0)
+
+
+def test_sc_refresh_keeps_churn_noise_and_prefix(tiny):
+    cfg, model = tiny
+    S = cfg.data.sequence_len
+    smp = DDIMSampler(model, None, cfg)
+    ref_eps, _ = _collect_eps(smp, S, churn_noise_seed=8)
+    br_eps, _ = _collect_eps(smp, S, churn_noise_seed=8, segment_overrides={1: {"sc_refresh": 4}})
+    assert sorted(br_eps) == sorted(ref_eps)
+    for i in ref_eps:
+        assert torch.equal(br_eps[i], ref_eps[i])
+    # trajectory before segment 1 is untouched: identical saved state at step 8
+    sa, sb = {}, {}
+    _run(smp, 3, S, churn_noise_seed=8, segment_len=SEG_LEN, save_states_at=[8],
+         state_hook=lambda st: sa.__setitem__(st["i"], st))
+    _run(smp, 3, S, churn_noise_seed=8, segment_len=SEG_LEN, save_states_at=[8],
+         segment_overrides={1: {"sc_refresh": 4}}, state_hook=lambda st: sb.__setitem__(st["i"], st))
+    assert torch.equal(sa[8]["x"], sb[8]["x"]) and torch.equal(sa[8]["x0_hat"], sb[8]["x0_hat"])

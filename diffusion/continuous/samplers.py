@@ -1782,6 +1782,13 @@ class DDIMSampler:
             ov = overrides.get(i // seg_len) if overrides else None
             n_sub = max(1, int(ov.get("substeps", 1) or 1)) if ov else 1
             gamma_override = ov.get("gamma", None) if ov else None
+            # extra self-conditioning refreshes per (sub-)step: x0_hat <- D(x, sigma_next, x0_hat),
+            # same sigma path, x unchanged by the refresh itself (+n_sc_extra NFE per step)
+            n_sc_extra = max(0, int(ov.get("sc_refresh", 0) or 0)) if ov else 0
+            if n_sc_extra and use_cfg:
+                raise NotImplementedError("sc_refresh override is not implemented for CFG sampling")
+            if n_sc_extra and not self.sc_enabled:
+                raise ValueError("sc_refresh override requires a self-conditioned model")
 
             # Sub-steps (refine) are spaced evenly in entropy-CDF quantile
             # inside the original step; n_sub == 1 is the original step.
@@ -1991,6 +1998,22 @@ class DDIMSampler:
                                 _clamp_mask_(x0_hat, prefix_full, prefix_mask)
                         else:
                             x0_hat = x0_hat_cur
+
+                    for _ in range(n_sc_extra):
+                        logits_ref = _model_logits_continuous(
+                            self.model,
+                            self.cfg,
+                            x,
+                            sigma_eval_next.expand(B),
+                            x0_hat,
+                        )
+                        x0_hat = logits_to_x0_hat(
+                            logits_ref,
+                            dtype=x.dtype,
+                            is_cont_tokens=self.is_cont_tokens,
+                        )
+                        if cond_enabled:
+                            _clamp_mask_(x0_hat, prefix_full, prefix_mask)
 
                 if step_callback is not None:
                     step_callback(
