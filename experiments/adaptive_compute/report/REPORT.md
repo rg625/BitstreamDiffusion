@@ -108,7 +108,7 @@ Every large gain comes with lower unigram entropy:
 
 - **Per checkpoint:** −0.146 at checkpoint 2, −0.027 at checkpoint 3 (+4).
 - **End to end:** −0.069 and −0.172.
-- **Per state:** the correlation between a state's marginal value and its entropy change is −0.3 to −0.7 at every checkpoint (`corr_M_dentropy`).
+- **Per state:** the correlation between a state's marginal value and its entropy change is negative at every checkpoint and arm, from −0.17 (checkpoint 7) to −0.66 (`corr_M_dentropy`).
 
 By the rule from the compute-allocation study (|Δentropy| > 0.02 means ΔNLL can't be read as quality on its own), every high-gain policy here is flagged. GenPPL 36.4 at entropy 4.14 is not comparable to 60.2 at 4.31.
 

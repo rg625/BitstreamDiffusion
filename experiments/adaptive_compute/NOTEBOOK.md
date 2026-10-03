@@ -168,3 +168,11 @@ gains on their own.
 This study 3.329 GPU-h (phase 1 incl. smoke 0.641, phase 2 2.564, confirm 0.123); session total
 4.350 of 6 GPU-h. Phase 3 of PLAN §16 (separate expensive evaluation on a stratified subset) was not
 run: every rollout already used the final metric (GPT-2-large on the full sample).
+
+## 2026-10-03 — Short PDF report; one correction to REPORT.md
+
+Built `report/CoBit_adaptive_compute_report.pdf` (4 pages) with `report/pdf/build_pdf.py` (reportlab, run from a
+throwaway virtualenv, not `sedd`) and single-panel figures from `report/pdf/make_figs.py` (same data/code as
+`report/figs.py`). While checking numbers for it, found that REPORT.md §6 overstated the per-state correlation
+between marginal value and entropy change ("−0.3 to −0.7 at every checkpoint"); the values in
+`analysis/heterogeneity.json` range from −0.17 (checkpoint 7) to −0.66, negative everywhere. Corrected in both.
