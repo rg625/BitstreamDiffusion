@@ -105,16 +105,20 @@ story = []
 story += [
     P("Where should extra compute go in a diffusion language model? Timestep versus state in CoBit-S", "title"),
     P("Short research report · CoBit-S (130M) on LM1B · counterfactual adaptive-compute study · October 2026<br/>"
-      "Summarises <font face='Sans-I'>experiments/adaptive_compute/report/REPORT.md</font> (commit f136ced); "
-      "all numbers are from that study’s result files.", "subtitle"),
+      "Summarises <font face='Sans-I'>experiments/compute_allocation/report/REPORT.md</font> (Study 1) and "
+      "<font face='Sans-I'>experiments/adaptive_compute/report/REPORT.md</font> (Study 2); all numbers are from "
+      "those studies’ result files.", "subtitle"),
 ]
 
 # 1 ---------------------------------------------------------------------------------------------
 story += [P("1. Executive summary", "h1"),
-          P("We asked whether CoBit-S would benefit from spending inference compute <i>adaptively</i>: giving extra "
-            "denoiser evaluations to the states that need them most, rather than spending compute uniformly. Using "
-            "counterfactual branches from saved denoising states, we measured how much one more unit of compute "
-            "changes the final sample’s quality, at different points in the trajectory and for different samples."),
+          P("This report covers two linked studies of CoBit-S. Study 1 asked which part of the denoising trajectory "
+            "limits quality under the fixed production budget, and found that the value of compute changes strongly "
+            "along the trajectory. That raised the question this report focuses on (Study 2): would it help to spend "
+            "inference compute <i>adaptively</i>, giving extra denoiser evaluations to the individual states that need "
+            "them most rather than following a fixed schedule? Using counterfactual branches from saved denoising "
+            "states, we measured how much one more unit of compute changes the final sample’s quality, at different "
+            "points in the trajectory and for different samples."),
           bullets([
               "<b>Compute value depends strongly on the timestep.</b> The same extra compute lowers GPT-2 NLL by up to "
               "0.39 nats/token when spent in the middle of denoising (steps 64–127), but does almost nothing early and "
@@ -136,10 +140,43 @@ story += [P("1. Executive summary", "h1"),
           ]
 
 # 2 ---------------------------------------------------------------------------------------------
-story += [P("2. Experimental setup", "h1"),
+story += [P("2. Background: why we ran these experiments", "h1"),
+          P("<b>Study 1: where does the fixed budget limit quality?</b> The production sampler spends its 255 model "
+            "evaluations on a step schedule that gives every stretch of the denoising trajectory the same share of "
+            "compute. We tested that assumption directly. The 254 steps were split into 8 segments of 32, and from saved "
+            "states of one reference run (1,024 samples; GenPPL 60.2 at entropy 4.31, consistent with the published 59.8) "
+            "we changed one segment at a time: making its steps 4× finer (+96 NFE), or switching off its stochastic "
+            "error-correcting noise (“churn”, no extra NFE). Comparing each branch with the same samples’ reference "
+            "isolates the effect of that one segment."),
+          P("<b>What Study 1 found.</b>"),
+          bullets([
+              "<b>Compute is not equally useful everywhere.</b> Only 5.5% of final token decisions are made in segments "
+              "0–2, which receive 37.5% of the compute; most decisions are made in segments 3–6.",
+              "<b>The middle responds strongly to finer steps.</b> Finer steps in segments 1–4 lowered GPT-2 NLL by 0.05 "
+              "to 0.35 nats/token (segment 4: −0.087 [−0.111, −0.063]). In segments 1–3 this came with entropy drops "
+              "beyond 0.02, so it could not be read as a quality gain.",
+              "<b>Late segments depend on error correction, not resolution.</b> Removing churn in segments 4–7 cost "
+              "+0.06 to +0.11 nats/token, while finer steps there did not help and in segments 5–6 made samples worse "
+              "(+0.029, +0.038).",
+              "<b>The planned fixed-budget confirmation could not be run:</b> changing γ from 0.185 to 0.215 moved "
+              "entropy by at most 0.013, within seed noise, so entropy could not be held fixed.",
+          ]),
+          P("<b>Why a second study.</b> Study 1 showed that the value of compute changes along the trajectory, but it "
+            "treated every sample the same. It left open whether part of that variation is sample-specific, that is, "
+            "whether a controller reading the current state could spend compute better than a fixed schedule. Study 2 "
+            "asks exactly that. Two lessons from Study 1 shaped its design. Finer steps change the trajectory and its "
+            "entropy, so Study 2 uses a cleaner unit of extra compute that keeps the noise path fixed. And a single "
+            "continuation per sample is dominated by randomness: in segment 0, finer steps changed per-sample NLL with "
+            "a standard deviation of 0.25 nats/token while the mean effect was only −0.008, and removing churn, which "
+            "adds no compute, produced the same spread. Study 2 therefore continues every state four times."),
+          ]
+
+# 3 ---------------------------------------------------------------------------------------------
+story += [P("3. Study 2 setup", "h1"),
           P("<b>Model and sampler.</b> CoBit-S on LM1B with the production stochastic sampler (255 model evaluations, "
-            "NFE, per sample). We took 1,000 unconditional samples and saved each one’s state at 8 checkpoints "
-            "(the start of steps 0, 32, …, 224; noise level σ from 77 down to 0.34)."),
+            "NFE, per sample). We took 1,000 of Study 1’s reference samples and used their saved states at 8 checkpoints "
+            "(the start of steps 0, 32, …, 224; noise level σ from 77 down to 0.34). Checkpoint s is the start of "
+            "Study 1’s segment s."),
           P("<b>Unit of extra compute.</b> “+c” adds c extra self-conditioning passes at every step of the 32-step "
             "window after a checkpoint (+32c NFE, i.e. +12.5% of baseline compute per unit). The noise schedule, the "
             "update rule and the random noise are unchanged, so the branch differs only in compute. We tested +1, "
@@ -152,8 +189,8 @@ story += [P("2. Experimental setup", "h1"),
             "3.3 GPU-hours on one RTX 4090."),
           ]
 
-# 3 ---------------------------------------------------------------------------------------------
-story += [P("3. Main finding: compute value varies substantially by timestep", "h1"),
+# 4 ---------------------------------------------------------------------------------------------
+story += [P("4. Main finding: compute value varies substantially by timestep", "h1"),
           P("The average benefit of extra compute changes sharply along the trajectory (Figure 1). With +4 "
             "(+128 NFE), mean Q improves by <b>0.393</b> nats/token [95% CI 0.368, 0.418] at checkpoint 2 and "
             "<b>0.278</b> [0.260, 0.297] at checkpoint 3, by 0.068 at checkpoint 4 and by only 0.002–0.048 at "
@@ -162,7 +199,7 @@ story += [P("3. Main finding: compute value varies substantially by timestep", "
           figure(HERE / "pdf_fig1.png", 1,
                  "Mean gain in Q from extra self-conditioning compute applied in the 32 steps after each checkpoint "
                  "(1,000 states, 95% CIs). The benefit is concentrated in the middle of denoising (shaded, steps "
-                 "64–127) and is near zero or negative elsewhere. Gains here are partly entropy reductions (Section 5)."),
+                 "64–127) and is near zero or negative elsewhere. Gains here are partly entropy reductions (Section 6).", width=TEXT_W * 0.86),
           P("End-to-end runs over all 1,024 samples confirm the pattern at matched compute. Spending +4 only in "
             "checkpoints 2–3 (511 NFE) lowered GenPPL from 60.2 to <b>36.4</b> (ΔQ 0.510 [0.464, 0.556]); spreading "
             "the same budget as +1 everywhere (509 NFE) reached 45.8 (ΔQ 0.276 [0.236, 0.314]). Gains from different "
@@ -170,8 +207,8 @@ story += [P("3. Main finding: compute value varies substantially by timestep", "
             "effects."),
           ]
 
-# 4 ---------------------------------------------------------------------------------------------
-story += [P("4. State-dependent compute: evidence is weak and not practically exploitable", "h1"),
+# 5 ---------------------------------------------------------------------------------------------
+story += [P("5. State-dependent compute: evidence is weak and not practically exploitable", "h1"),
           P("For state-dependent allocation to help, three things must hold: states at the same timestep must "
             "differ in how much they gain, those differences must be predictable, and acting on the prediction must "
             "beat a simpler schedule. The evidence is weak on the first point and negative on the other two."),
@@ -203,8 +240,8 @@ story += [P("4. State-dependent compute: evidence is weak and not practically ex
                  "a full end-to-end run, which achieves 76% of the curve’s additive estimate.", width=TEXT_W * 0.93),
           ]
 
-# 5 ---------------------------------------------------------------------------------------------
-story += [KeepTogether([P("5. The entropy confound and what remains unresolved", "h1"),
+# 6 ---------------------------------------------------------------------------------------------
+story += [KeepTogether([P("6. The entropy confound and what remains unresolved", "h1"),
           P("GPT-2 NLL falls when samples become less diverse, so an NLL gain is only a quality gain if diversity is "
             "held fixed. Here, every large gain comes with lower unigram entropy of the samples:"),
           table([["Sampler (all 1,024 samples, paired)", "NFE", "ΔQ (nats/token)", "GenPPL", "Δ entropy (nats)"],
@@ -215,7 +252,7 @@ story += [KeepTogether([P("5. The entropy confound and what remains unresolved",
           Spacer(1, 8),
           P("Per checkpoint, the +4 branch lowers entropy by 0.146 at checkpoint 2 and 0.027 at checkpoint 3, and "
             "across states the size of the gain correlates with the size of the entropy drop (r from −0.17 to "
-            "−0.66, negative at every checkpoint). By the rule used in our earlier compute-allocation study, an entropy change "
+            "−0.66, negative at every checkpoint). By the rule from Study 1, an entropy change "
             "beyond 0.02 means an NLL change cannot be read as quality on its own; every high-gain policy here "
             "exceeds it. A GenPPL of 36.4 at entropy 4.14 is therefore <i>not</i> directly comparable with 60.2 at "
             "4.31, and we do not claim that mid-trajectory compute makes samples better."),
@@ -226,16 +263,18 @@ story += [KeepTogether([P("5. The entropy confound and what remains unresolved",
             "and a single quality metric (GPT-2 NLL)."),
           ]
 
-# 6 ---------------------------------------------------------------------------------------------
-story += [P("6. Conclusion and recommended next experiment", "h1"),
+# 7 ---------------------------------------------------------------------------------------------
+story += [P("7. Conclusion and recommended next experiment", "h1"),
           P("The value of extra inference compute in CoBit-S is mainly a function of <i>when</i> it is spent along "
             "the denoising trajectory, not of <i>which</i> sample or state receives it. This supports, at most, a "
             "fixed timestep-dependent compute schedule. It does not support building state-dependent routing, "
             "mixture-of-experts or token-level adaptive compute: the opportunity is small, poorly predictable and "
-            "adds nothing over the schedule."),
+            "adds nothing over the schedule. The two studies, using different kinds of extra compute (finer steps and "
+            "extra self-conditioning passes), point the same way: compute in the middle of the trajectory gives large "
+            "NLL gains that coincide with lower entropy, and compute after about step 160 slightly hurts."),
           P("<b>Recommended next experiment.</b> Test the timestep schedule at matched entropy before adopting it: "
             "compare extra self-conditioning passes in steps 64–127 (and none after step 160) against the baseline "
-            "sampler with an entropy lever adjusted so that both produce the same entropy. In the earlier study the "
+            "sampler with an entropy lever adjusted so that both produce the same entropy. In Study 1 the "
             "churn parameter γ barely moved entropy, so another lever such as the churn noise scale or a decoding "
             "temperature is needed. Report an entropy-insensitive metric such as MAUVE alongside GPT-2 NLL. If the "
             "gain survives, adopt a fixed per-timestep schedule; if it disappears, the mid-trajectory effect was an "
