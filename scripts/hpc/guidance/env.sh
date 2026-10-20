@@ -41,9 +41,24 @@ export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export TOKENIZERS_PARALLELISM=false
 
+# sbatch --export=ALL carries the LOGIN node's TMPDIR (/local/user/<uid> on
+# Isambard) into the job. torch creates a temp dir at import, and all ranks died
+# there before step 0 (jobs 6840804, 6841368). In 6841368 the directory passed an
+# exists-and-writable check in the batch script and was still missing inside the
+# srun step, so inside a job it is not trusted at all: node-local /tmp (TmpFS).
+if [ -n "${SLURM_JOB_ID:-}" ] || [ -z "${TMPDIR:-}" ] || [ ! -d "$TMPDIR" ] || [ ! -w "$TMPDIR" ]; then
+  export TMPDIR=/tmp
+fi
+
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 export PYTHONPATH="$PROJECT_DIR:${PYTHONPATH:-}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+# srun has not inherited sbatch's --cpus-per-task since SLURM 22.05 (Isambard
+# runs 24.11). Without this, `srun torchrun` gets ONE core for four ranks and
+# all their dataloader workers.
+if [ -n "${SLURM_CPUS_PER_TASK:-}" ]; then
+  export SRUN_CPUS_PER_TASK="${SRUN_CPUS_PER_TASK:-$SLURM_CPUS_PER_TASK}"
+fi
 
 # Determinism knobs. cuBLAS workspace config is required for reproducible
 # reductions; without it, repeated runs of the same seed can differ slightly and

@@ -41,7 +41,11 @@ done
 #                               continue rather than restart.
 #   tok_b512_*/last.pt          the V-way run in flight.
 #   results/                    the measured numbers, so analysis runs there.
+#   datasets/gsm8k/             the 1319-problem test set every eval reads. The
+#                               first transfer omitted it: vendored from s-flm,
+#                               gitignored, and not rebuildable byte-identically.
 ITEMS=(
+  "datasets/gsm8k/gsm8k_test.json"
   "datasets/tinygsm/tinygsm_bs512_answeronly_trainonpad_filtered_HuggingFaceTB__SmolLM-135M_capall_vr0.01_vs42.meta.json"
   "datasets/tinygsm/tinygsm_bs512_answeronly_trainonpad_filtered_HuggingFaceTB__SmolLM-135M_capall_vr0.01_vs42_train_ids.uint16"
   "datasets/tinygsm/tinygsm_bs512_answeronly_trainonpad_filtered_HuggingFaceTB__SmolLM-135M_capall_vr0.01_vs42_train_plen.int32"

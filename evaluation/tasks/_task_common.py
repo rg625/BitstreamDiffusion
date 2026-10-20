@@ -141,6 +141,9 @@ def load_model_and_sampler(cfg, ckpt_path: str, device, *, apply_ema: bool = Tru
                                 noise_table=noise_table)
     elif kind in {"heun", "karras"}:
         sampler = HeunSampler(model, proc, cfg)
+    elif kind in {"ancestral", "ddpm"}:
+        from diffusion.continuous.samplers import AncestralSampler
+        sampler = AncestralSampler(model, proc, cfg)
     elif kind in {"em", "euler_maruyama"}:
         # em_step_gamma_cap=None -> use EulerMaruyamaSampler's own default (1.0).
         # The per-step churn cap bounds injected noise to <= sqrt(2*cap)*sigma; EDM's
@@ -277,6 +280,8 @@ def sample_bits(
     codeword_topk: Optional[int] = None,
     score_temp_tau: float = 1.0,
     score_temp_clean_var: float = 0.25,
+    score_temp_mode: str = "local",
+    score_temp_final: str = "sharpened",
 ) -> torch.Tensor:
     """Run conditional sampling and return decoded bits [B, S] (long, 0/1).
 
@@ -327,9 +332,15 @@ def sample_bits(
         "codeword_topk": codeword_topk,
         "score_temp_tau": score_temp_tau,
         "score_temp_clean_var": score_temp_clean_var,
+        "score_temp_mode": score_temp_mode,
+        "score_temp_final": score_temp_final,
     }
     _supported = inspect.signature(sampler.sample).parameters
-    temp_kwargs = {k: v for k, v in _temp_kwargs_all.items() if k in _supported}
+    # Samplers that forward **kwargs to DDIMSampler.sample (EM, ancestral) accept every knob.
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in _supported.values()):
+        temp_kwargs = dict(_temp_kwargs_all)
+    else:
+        temp_kwargs = {k: v for k, v in _temp_kwargs_all.items() if k in _supported}
     if _switch_on and len(temp_kwargs) < len(_temp_kwargs_all):
         # A tempering setting was actually requested and this sampler cannot
         # honour it. Silently dropping it would corrupt results far more

@@ -593,3 +593,279 @@ so the origin is outside the window and a bigger buffer is not the answer
 agreement check: all-gather each rank's `num_train_batches` and abort loudly on
 disagreement, turning a silent 20-hour deadlock into an immediate, informative
 crash.
+
+## 24 Sep: token vs bits on Isambard -- evaluation, batch limits, multi-node
+
+**Scope (decided 24 Sep).** V-way softmax over the full 49,153-token
+vocabulary, matched to the bits control at effective batch **512** (every
+earlier result is at 512 or 128). More GPUs are for wall-clock only.
+
+**Evaluation kit.** `scripts/hpc/arch/tokens_eval_gh200.sh` (probe | pick | gate
+| sweep | report) submits one 1-GPU job per (arm, checkpoint, seed) cell of
+`tokens_eval.slurm` into `results/tokens/eval_gh200/`, never pooled with CSD3.
+Both arms decode identically: Karras, DDIM, gamma 0, EMA, 256 steps, full 1319,
+no `--codeword_topk`. `sweep` is idempotent: it submits only cells with neither
+a result nor a queued job, at every archived `step=*.pt` (every 100k), so the
+output is a learning curve. `experiments/tokens/analyze.py` gives per-seed
+paired deltas and a pooled delta that bootstraps over problems with the three
+seeds of a problem kept together.
+
+**Gate passed on GH200** (DDIM path):
+
+| anchor | s0 | s1 | s2 | reference |
+|---|---|---|---|---|
+| production bits | 0.1281 | 0.1350 | 0.1312 | band 0.12-0.20 |
+| tok_fs500k (batch 128) | 0.0235 | 0.0250 | 0.0205 | CSD3: 0.022/0.026/0.029 |
+
+The batch-128 pair, re-read through the new analysis, is token - bits =
+**-0.0238 [-0.0321, -0.0157]** pooled, significant on every seed. The loss is
+execution: 1,249/1,319 token programs fail to run (T1) against 1,038 for bits.
+
+**Eval batch: 64.** Memory is ~1.4 GB/sample and deterministic (every batch is
+[B,512,49153]); 64 peaks at 91.3 of 95 GB, 80 OOMs. Throughput is flat from
+16 up (~6.3 samples/s at 16 steps; a full 256-step cell takes ~30 min).
+
+**Training batch: 112/GPU is the ceiling; 128 OOMs** on the 12 GiB fp32 copy of
+the logits in `token_score_interpolation_loss` (`logits_2d.float()`); a
+chunked CE would lift it. Per-node throughput is flat at ~710 samples/s from
+64 to 112/GPU -- the GPU is saturated -- so per-GPU batch buys nothing.
+
+**Multi-node works and scales to 2 nodes, not 4.** aws-ofi-nccl over cxi with
+GPU Direct RDMA (`scripts/site/multinode_env.sh`; `nccl_check.slurm`: 147 GB/s
+bus bandwidth across 2 nodes, 337 GB/s within one). At effective 512:
+
+| layout | optimiser steps/s |
+|---|---|
+| 1 node, 64/GPU x accum 2 | 1.39 |
+| 2 nodes, 64/GPU | **2.70** |
+| 2 nodes, 32/GPU x accum 2 | 2.45 |
+| 4 nodes, 32/GPU | ~2.4 |
+
+At 32/GPU fixed per-step costs dominate, so 4 nodes is no faster than 2. The
+token arm was moved to 2 nodes at step 5,000 (cancelled 26 s after a last.pt
+write), resuming the same run: same effective batch, LR and step count.
+
+**Resume bug fixed.** `train.py` merges the saved `config.json` over the fresh
+config, which silently discarded `TOK_ACCUM` (and `TOK_RESUME_EVERY`): the first
+2-node link ran 32/GPU x accum 2. `RESUME_LAYOUT_KEYS` now lets the fresh config
+win for `train.grad_accum_steps` and the resume cadence only; the effective
+batch still comes from the snapshot (`tests/test_resume_layout.py`).
+
+**Side finding, not fixed.** `experiments/ordering/analyze_train.py` computes
+T3 from `r.get("text")`, but eval records store `response`, so its T3 is always
+the record count (the `T3: 100` in every row of the 500k GH200 summary).
+
+## 24 Sep: the w=0.25 study was not an ordering test; the window-ordering study
+
+**Audit of the w=0.25 arms (ord_fs500k_*).** The per-position-sigma plumbing
+is correct (per-token AdaLN, per-bit c_in, per-position EDM weight, one time map
+for training and sampling, Karras endpoints matching the training range). The
+DESIGN did not test ordering:
+
+* `ordering_ranks` normalises priority over the whole generated suffix, and on
+  TinyGSM that suffix is 73% padding (median 123 answer tokens in a 466-token
+  canvas). Re-measured on 1,024 real validation examples
+  (`experiments/ordering/window_sigma_field.py`): under the old l2r/r2l, 93-99%
+  of answer tokens are active at once, adjacent answer tokens differ by
+  |d log sigma| = 0.006, and the whole answer spans a 2x sigma range. That is
+  simultaneous denoising with a global noise shift (l2r ~2x cleaner, r2l ~2x
+  noisier) plus an ordered padding tail. Only `random` perturbed the answer's
+  noise field (13.7x span), and that is noise heterogeneity, not an order.
+* One training seed per arm; the decode seeds re-sample one set of weights.
+* The adaptive (entropic) training schedule was refitted per arm and drifted:
+  25% quantile of the training sigma draw 0.92 (control), 0.99 (l2r), 0.56
+  (random). The random arm trained at systematically lower noise.
+
+So the w=0.25 results are NOT evidence about temporal ordering, in either
+direction. Its one robust finding is that the random arm, decoded uniformly,
+leads its control at every checkpoint (learning curve below) -- a statement
+about heterogeneous-noise training confounded with a different training noise
+distribution, from a single seed.
+
+**Learning curves, GH200, Karras/Euler 256, full 1319** (`train_curve_gh200.json`):
+mean over 3 decode seeds; delta vs the control at the same step, paired over
+problems; "k/3" = decode seeds whose 95% CI excludes 0. ONE training seed per
+arm throughout, and checkpoints of one run are not independent replications.
+
+| step | control | l2r matched | l2r uniform | r2l matched | r2l uniform | random matched | random uniform |
+|---|---|---|---|---|---|---|---|
+| 100k | 0.034 | -0.009 (0/3) | -0.014 (3/3) | -0.007 (1/3) | -0.031 (3/3) | +0.008 (2/3) | +0.011 (1/3) |
+| 200k | 0.080 | -0.014 (1/3) | -0.046 (3/3) | -0.020 (3/3) | -0.075 (3/3) | +0.007 (0/3) | +0.021 (3/3) |
+| 300k | 0.101 | -0.017 (2/3) | -0.055 (3/3) | -0.019 (2/3) | -0.101 (3/3) | +0.015 (1/3) | +0.024 (2/3) |
+| 400k | 0.125 | -0.016 (2/3) | -0.080 (3/3) | -0.026 (3/3) | -0.125 (3/3) | +0.005 (0/3) | +0.019 (1/3) |
+| 500k | 0.130 | -0.008 (0/3) | -0.093 (3/3) | -0.011 (0/3) | -0.130 (3/3) | +0.020 (2/3) | +0.040 (3/3) |
+
+The random arm decoded uniformly is ahead at all five checkpoints (+1.1 to
++4.0 pp): persistent within this run, not a 500k fluke. l2r/r2l decoded with
+their own schedule trail by 1-2.6 pp through 400k and close to within noise at
+500k; decoded uniformly they degrade steadily with training (captive to their
+schedule). The control's decode-seed SD is 0.2-1.1 pp at a fixed checkpoint,
+and it is already at 62% of its 500k accuracy by 200k, so accuracy is
+measurable well before 500k.
+
+### Window-ordering design
+
+    t_j(tau) = clip( tau*(1 + L/k) - r_j/k , 0, 1 )        sigma_j = F^-1(t_j)
+
+* `r_j` is an ABSOLUTE integer priority over the generated canvas (l2r: first
+  answer token highest; r2l: last canvas position highest; random: a fresh
+  permutation per example per step). `k` is the active-window width in tokens,
+  so padding after the answer cannot dilute its order. k = inf is the uniform
+  model. The canvas, not the answer, is ranked because the answer length is
+  unknown at sampling time: r2l therefore resolves the padding (the length)
+  first, and under random ~k*123/466 of the k active positions are answer.
+* **Identical training noise.** tau ~ U(0,1] for every arm, mapped through one
+  frozen CDF `assets/noise_tables/tinygsm_window_F_v1.pt` (the fs500k control's
+  own adapted schedule; median sigma 1.95). No per-arm refitting. Loss only on
+  tokens strictly inside the window, so every loss-bearing token has sigma ~ F
+  in every arm, with the same probability k/(k+L) in every mode. (Supervising
+  the not-yet-entered atom too was tried on paper and rejected: it made 27% of
+  answer tokens loss-bearing under l2r against 85% under r2l at k=64.)
+* **Matched streams.** tau and random keys come from generators keyed to
+  (seed, rank, step, micro-batch), never the global RNG: for one training seed,
+  every arm sees identical data order, Gaussian noise and tau; arms at one k see
+  an identical multiset of sigmas and differ only in its assignment.
+* **Supervision cost, measured.** Loss-bearing token-noise pairs per example per
+  step: 462 (control), 56 (k=64), 15 (k=16), 4 (k=4). Any arm-vs-control delta
+  therefore mixes ordering with 8-116x less supervision; the
+  **supervision-matched control** (`WIN_LOSSMATCH=k`: uniform sigma, each token
+  supervised w.p. k/(k+L)) separates the two. Cross-mode comparisons at one k
+  are unaffected.
+* **Matched compute at decode.** `own` = the arm's window sampler through F on a
+  uniform tau grid; `standard` = Karras deterministic Euler, w=0. Both spend
+  exactly NFE evaluations (NFE-1 steps + final denoise). Per-token steps inside
+  the window at NFE 256: 256 (k=inf), 31 (64), 8.6 (16), 2.2 (4); hence a second
+  budget at NFE 1024.
+
+**Verification before training** (`results/ordering/window_sigma_field.json`,
+1,024 real examples x 8 draws, answer tokens only):
+
+| k | mode | answer tokens active | Spearman(pos, sigma) | adj \|d log sigma\| | KS(active, F) | supervised/ex | steps/token @256 |
+|---|---|---|---|---|---|---|---|
+| inf | control | all | - | 0 | 0.007 | 462 | 256 |
+| 64 | l2r / r2l / random | 43.5 / 43.0 / 16.6 | +1.00 / -1.00 / -0.01 | 0.09 / 0.09 / 1.32 | <=0.002 | 56 | 31 |
+| 16 | l2r / r2l / random | 14.4 / 14.4 / 4.7 | +1.00 / -1.00 / 0.00 | 0.31 / 0.31 / 1.39 | <=0.004 | 15 | 8.6 |
+| 4 | l2r / r2l / random | 3.9 / 3.9 / 1.6 | +1.00 / -1.00 / -0.04 | 1.0 / 1.0 / 1.5 | <=0.007 | 4 | 2.2 |
+| old w=0.25 | l2r / r2l | 131.7 / 130.2 | +1 / -1 | 0.006 | - | 462 | - |
+
+Sigma multisets identical across modes at every k. `tests/test_window_ordering.py`
+(20 tests) pins k=inf equivalence, absolute ranks, interior-uniformity, the
+multiset and supervision-share identities, RNG isolation, resume-exact streams,
+and N-evaluation Euler.
+
+**Sampler smoke** on the old fs500k control, 256 problems, NFE 256: window k=inf
+(F-quantile grid) 0.141, standard Karras 0.133.
+
+### Launched 24 Sep (Isambard GH200)
+
+26 runs x 300,000 steps, from scratch, 2 x 24 h links each, via
+`bash scripts/hpc/arch/window_study.sh train --go` (jobs 6851000-6851051):
+control (k=inf); {l2r, r2l, random} x k in {64, 16, 4}; supervision-matched
+controls lm64/lm16/lm4; each at training seeds 42 and 43. Budget ~2,550 GPU-h
+training + ~130 GPU-h evaluation (decision: 300k, full design). 300k chosen from
+the curves above: the control is at ~0.10 there (78% of its 500k accuracy) and
+the window arms get 8-116x less supervision per step. 1-GPU smoke: 3.60 / 3.48 /
+3.36 micro-batches/s for control / l2r k=16 / random k=4, i.e. window overhead
+3-7%.
+
+Evaluation (idempotent; re-run as checkpoints land every 50k):
+`bash scripts/hpc/arch/window_study.sh eval --go` -> own + standard decoders x
+3 seeds at NFE 256 for every checkpoint, plus NFE 1024 at 300k, into
+`results/ordering/window_eval_gh200/`. Analysis:
+`python experiments/ordering/analyze_window.py` reports per-arm training-seed SD,
+a problem-bootstrap CI conditional on the weights, and a Welch-t CI over
+training seeds (the claim about the method).
+
+**Pre-registered reading.** The ordering hypothesis (AR-like l2r helps) predicts
+l2r > r2l and l2r > random at the same k, growing as k shrinks, under the own
+decoder, and l2r > its supervision-matched control. The mixed-noise hypothesis
+(from the w=0.25 random arm) predicts random >= l2r ~ r2l and the gain showing
+up under the standard decoder. Either claim needs the Welch interval over
+training seeds to exclude zero; a problem-bootstrap-only effect is reported as
+a property of those checkpoints.
+
+### Result (26 Sep) -- stopped at the budget; 250k is the last complete checkpoint
+
+All 26 runs reached 300k with **no crash, divergence or hang** (the epoch-
+boundary deadlock never recurred on GH200). The study was **stopped by decision
+at ~2,780 GPU-h** (2,716 training + 63 eval) before any 300k evaluation cell
+saved, so there is **no 300k point and no NFE-1024 comparison**. Everything
+below is at 250k, NFE 256 (matched compute, both decoders), 2 training seeds x 3
+sampling seeds, full 1319; intervals are Welch over TRAINING seeds.
+
+Accuracy, own decoder (mean of 2 training seeds), %:
+
+| arm | 50k | 100k | 150k | 200k | 250k |
+|---|---|---|---|---|---|
+| control k=inf | 0.8 | 3.4 | 5.8 | 7.7 | **9.6** (seeds 9.6 / 9.5) |
+| l2r k=64 | 0.5 | 2.8 | 4.5 | 6.4 | **8.0** |
+| random k=64 | 0.6 | 3.5 | 4.3 | 5.1 | 6.0 |
+| r2l k=64 | 0.1 | 0.6 | 1.4 | 2.0 | 3.0 |
+| supervision-matched lm64 | 0.1 | 1.0 | 2.3 | 3.2 | 4.3 |
+| l2r k=16 | 0.1 | 1.7 | 2.8 | 5.5 | **6.5** |
+| random k=16 | 0.1 | 0.2 | 1.0 | 2.4 | 3.2 |
+| r2l k=16 | 0.0 | 0.8 | 1.6 | 2.1 | 2.7 |
+| supervision-matched lm16 | 0.1 | 0.3 | 0.6 | 0.6 | 1.1 |
+| l2r / r2l / random k=4 | 0 | 0-0.3 | 0-0.6 | 0-0.8 | 1.2 / 1.0 / 0.0 |
+
+Head-to-head at 250k (pp, Welch over training seeds, * = excludes 0):
+
+| k | l2r - r2l | l2r - random | l2r - matched control | l2r - full control |
+|---|---|---|---|---|
+| 64 | +5.0 [-3.7, +13.6] | +2.0 [-7.6, +11.6] | +3.7 [-1.8, +9.2] | -1.5 [-2.0, -1.1]* |
+| 16 | **+3.8 [+0.3, +7.3]*** | +3.2 [-1.0, +7.5] | **+5.3 [+0.1, +10.6]*** | -3.1 [-9.6, +3.5] |
+| 4 | +0.2 (both ~1%) | +1.1 | +1.1 | -8.4* |
+
+(At 200k l2r - matched control was significant at both k: k=64 +3.2 [+2.3,+4.2],
+k=16 +4.9 [+1.2,+8.5]; the k=64 intervals widened at 250k because one r2l and
+one random seed moved apart, and with two seeds Welch has ~1 df.)
+
+Standard (Karras, w=0) decoder at 250k: control 9.3%; every l2r and r2l model
+0.0% at every k; random k=64 7.4%; random k=16/4 ~0. Window-trained models are
+captive to their own schedule except the widest random window.
+
+**Reading, against the pre-registration.**
+
+1. **Direction matters, in the AR direction.** At every k where anything is
+   learned, l2r is the best order at every checkpoint from 200k: ahead of r2l
+   (significant at k=16) and of random, with r2l worst. This is the first
+   evidence in this project that temporal ORDER, as opposed to noise
+   heterogeneity, changes what the model learns.
+2. **L2R is far more sample-efficient per supervised token.** Against a
+   control given the same number of supervised token-noise pairs, l2r is ~2x
+   (k=64: 8.0 vs 4.3) and ~6x (k=16: 6.5 vs 1.1) better -- significant at
+   k=16 at 250k and at both k at 200k.
+3. **But no ordering beats the plain uniform model at matched steps.** The
+   control leads l2r k=64 by 1.5 pp at 250k (significant, tight: seed SDs
+   0.07-0.1 pp) and the gap is not closing (-1.3 at 200k, -1.5 at 250k).
+   Ordering buys efficiency per supervised token but supervises 8-116x fewer
+   tokens per step; at this budget the uniform model's supervision volume wins.
+4. **Narrow windows fail at this budget.** k=4 is at ~1% in every arm, its
+   matched control included: supervision-limited (4 tokens/example/step) and
+   step-starved at decode (2.2 Euler steps per token at NFE 256). The missing
+   NFE-1024 cells were the test of the second factor.
+5. The mixed-noise hypothesis from the w=0.25 random arm is **not supported**
+   here: random is never the best window order, and only its widest window
+   survives the standard decoder.
+
+**Open, and what would close it:** (a) the 300k and NFE-1024 cells (~65 GPU-h;
+tells whether k=16 l2r is step-starved at decode); (b) whether l2r's per-token
+efficiency overtakes the control at a longer budget or with a supervision rule
+that also trains the not-yet-entered tokens (the AR-style signal); (c) more
+training seeds where the Welch intervals are ~1 df wide.
+
+### 26 Sep: stopped at the budget line (3,296 GPU-h used on Isambard)
+
+All jobs cancelled at 07:15 on request. Token arm at step ~414k (last.pt
+07:12; archived 100k-400k), bits control finished 500k. Evaluated before the
+stop, pooled over 3 seeds, token - bits:
+
+| step | token | bits | delta | 95% CI |
+|---|---|---|---|---|
+| 100k | 0.016 | 0.030 | -0.014 | [-0.021, -0.007] |
+| 200k | 0.041 | 0.072 | -0.031 | [-0.041, -0.021] |
+
+Bits continued 0.096 (300k), 0.117 (400k). Token reaches ~0.55x bits at both
+evaluated steps, the same ratio as the batch-128 pair at 500k (0.023 vs 0.049),
+so two independent comparisons agree the V-way head learns slower. Not
+evaluated: token 300k/400k, bits 500k (9 cells, ~4 GPU-h).

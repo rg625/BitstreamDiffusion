@@ -414,7 +414,7 @@ def main():
     ap.add_argument("--noise_table", default=None,
                     help="Frozen training noise CDF for --sampler_kind window.")
     ap.add_argument("--sampler_kind", default="ddim",
-                    choices=["ddim", "heun", "em", "pc", "fkc_em", "ordered", "window"],
+                    choices=["ddim", "heun", "em", "pc", "fkc_em", "ordered", "window", "ancestral"],
                     help="ddim = CoBit ddim_entropic headline path (EDM churn, capped at gamma<=sqrt(2)-1); "
                          "heun = 2nd-order ablation; em = Euler-Maruyama entropy-gated reverse SDE "
                          "(stochasticity via lambda_zero, NO churn cap -> exceed the EDM ceiling); "
@@ -535,6 +535,12 @@ def main():
     ap.add_argument("--score_temp_clean_var", type=float, default=0.25,
                     help="Track A1 clean-bit variance v (default 0.25 = Var of ideal 0/1 bits, mean 0.5). "
                          "This is NOT the EDM preconditioning sigma_data; keep it separate.")
+    ap.add_argument("--score_temp_mode", default="local", choices=["local", "global"],
+                    help="local = Track A1 kappa(sigma) (late sharpening only); global = Sigma/CDCD "
+                         "score temperature, the drift divided by tau at EVERY sigma "
+                         "(D_tau = x + (D - x)/tau), applied after the CFG mix.")
+    ap.add_argument("--score_temp_final", default="sharpened", choices=["sharpened", "unsharpened"],
+                    help="unsharpened = the last step (onto sigma_min, the readout) uses the untempered drift.")
     # ---- FKC (sampler_kind=fkc_em): Feynman-Kac SMC for the tempered target p^beta ----
     ap.add_argument("--beta", type=float, default=1.0,
                     help="FKC tempering exponent (>=1). beta=1 is the untempered base (K=1 == EM; "
@@ -683,6 +689,7 @@ def main():
     per_problem_idx = []
     per_problem_correct = []
     per_problem_answer = []
+    n_executable = 0
     all_texts = []
     guidance_traces = []
     traj_rows = {}          # feature -> {global_idx: [value per logged step]}
@@ -720,6 +727,8 @@ def main():
             codeword_topk=args.codeword_topk,
             score_temp_tau=args.score_temp_tau,
             score_temp_clean_var=args.score_temp_clean_var,
+            score_temp_mode=args.score_temp_mode,
+            score_temp_final=args.score_temp_final,
         )
         if args.collect_diagnostics:
             bits, trace = bits
@@ -773,6 +782,7 @@ def main():
             # with no extra sampling. `predict_answer` returns None when the
             # program does not run or returns nothing.
             per_problem_answer.append(_answer_to_str(_pred))
+            n_executable += int(_pred is not None)
             if len(records) < 100:
                 records.append({
                     "idx": gi,
@@ -826,6 +836,8 @@ def main():
         "codeword_topk": args.codeword_topk,
         "score_temp_tau": args.score_temp_tau,
         "score_temp_clean_var": args.score_temp_clean_var,
+        "score_temp_mode": args.score_temp_mode,
+        "score_temp_final": args.score_temp_final,
         "steps": steps,
         "sigma_data": sigma_data_used,
         "num_examples": int(n),
@@ -835,6 +847,9 @@ def main():
         "ci95_high": hi,
         "num_correct": int(correct.sum()),
         "invalid_token_rate": n_invalid_tok / max(1, n_gen_tokens),
+        # Programs that ran to a number at all (right or wrong): the readout
+        # breaking under aggressive sharpening shows up here before accuracy.
+        "executable_rate": n_executable / max(1, len(per_correct)),
         "timeout_s": timeout_s,
         "executor": args.executor,
         "seed": int(args.seed),
@@ -877,7 +892,10 @@ def main():
     if args.tag:
         tag += f"_{args.tag}"
     if abs(float(args.score_temp_tau) - 1.0) > 1e-8:
-        tag += f"_tau{args.score_temp_tau:g}"
+        # "local" keeps the pre-existing A1 filenames; "global" must not collide.
+        tag += f"_{'g' if args.score_temp_mode == 'global' else ''}tau{args.score_temp_tau:g}"
+        if args.score_temp_final == "unsharpened":
+            tag += "_ufin"
     if args.sigma_max is not None:
         tag += f"_smax{args.sigma_max:g}"
     if args.sigma_min is not None:

@@ -23,9 +23,9 @@ SCALARS = [
     "task", "checkpoint", "sampler", "sampler_kind", "schedule", "gamma", "steps",
     "guidance_scale", "ag_scale", "bad_checkpoint", "bad_ema",
     "sg_scale", "sg_variant", "sg_delta", "sg_mf_mode",
-    "posterior_temp", "posterior_temp_target", "score_temp_tau",
+    "posterior_temp", "posterior_temp_target", "score_temp_tau", "score_temp_mode",
     "sigma_data", "num_examples", "accuracy", "bootstrap_accuracy",
-    "ci95_low", "ci95_high", "num_correct", "invalid_token_rate",
+    "ci95_low", "ci95_high", "num_correct", "invalid_token_rate", "executable_rate",
     "seed", "batch_size",
 ]
 NESTED = {

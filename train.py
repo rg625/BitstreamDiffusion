@@ -99,10 +99,14 @@ def _update_cfg_from_dict(cfg, d, skip_sections=("logging", "system", "evaluatio
 # saved. Without this, moving a run to more nodes with TOK_ACCUM=1 silently
 # kept the saved accumulation (32/GPU x 8 GPUs x 2 instead of 64/GPU x 8, ~10%
 # slower), because the merge below overwrote what the config had just read
-# from the environment.
+# from the environment. stop_at_step and the explicit checkpoint steps are
+# here for the same reason: they say where a run pauses and what it keeps, and
+# resuming a run stopped at 250k must be able to move both.
 RESUME_LAYOUT_KEYS = (
     ("train", "grad_accum_steps"),
+    ("train", "stop_at_step"),
     ("train", "checkpointing", "resume_interval", "every_steps"),
+    ("train", "checkpointing", "interval", "at_steps"),
 )
 
 

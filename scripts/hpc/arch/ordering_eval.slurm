@@ -37,7 +37,12 @@ set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-/rds/user/rg625/hpc-work/BitstreamDiffusion}"
 export COBIT_PYTHON="${COBIT_PYTHON:-/home/rg625/miniforge3/envs/sedd310/bin/python}"
 source "$PROJECT_DIR/scripts/hpc/guidance/env.sh"
-cd "$PROJECT_DIR"; mkdir -p logs/arch results/ordering/train_eval
+# EV_OUT_DIR / EV_REGIME: a fresh directory and label per machine. Evaluations
+# from different clusters are never pooled in a paired comparison, and
+# analyze_train.py compares everything it finds in one directory.
+EV_OUT_DIR="${EV_OUT_DIR:-results/ordering/train_eval}"
+EV_REGIME="${EV_REGIME:-ordering_train}"
+cd "$PROJECT_DIR"; mkdir -p logs/arch "$EV_OUT_DIR"
 
 EV_RUN="${EV_RUN:?set EV_RUN=<label for this arm; also the run dir unless EV_CK_PATH is set>}"
 EV_MODE="${EV_MODE:?set EV_MODE=none|l2r|r2l|random}"
@@ -70,7 +75,7 @@ PYEOF
 
 echo "[ev] commit $(git rev-parse --short HEAD) | python $($COBIT_PYTHON -V 2>&1)"
 echo "[ev] run=$EV_RUN ckpt=$CK step=$EV_STEP train_mode=$EV_MODE w=$EV_W"
-echo "[ev] schedule=karras steps=$EV_STEPS limit=$EV_LIMIT seeds=0,1,2"
+echo "[ev] schedule=karras steps=$EV_STEPS limit=$EV_LIMIT seeds=0,1,2 out=$EV_OUT_DIR regime=$EV_REGIME"
 
 run_one () {   # $1=order_mode $2=order_w $3=seed $4=label
   "$COBIT_PYTHON" evaluation/tasks/gsm8k_eval.py \
@@ -78,8 +83,8 @@ run_one () {   # $1=order_mode $2=order_w $3=seed $4=label
     --schedule karras --sampler_kind ordered \
     --order_w "$2" --order_mode "$1" --order_seed $((1234 + $3)) \
     --steps "$EV_STEPS" --limit "$EV_LIMIT" --seed "$3" \
-    --out_dir results/ordering/train_eval \
-    --regime ordering_train --tag "${EV_RUN}__ck${EV_STEP}__${4}__s${3}" \
+    --out_dir "$EV_OUT_DIR" \
+    --regime "$EV_REGIME" --tag "${EV_RUN}__ck${EV_STEP}__${4}__s${3}" \
     || echo "[ev] FAILED ${EV_RUN} ${4} seed $3"
 }
 

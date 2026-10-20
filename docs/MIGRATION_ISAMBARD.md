@@ -24,13 +24,22 @@ The environment gets **rebuilt**, not copied: `scripts/site/build_env_isambard.s
 |---|---|---|
 | CPU | x86_64 | aarch64 (Grace) |
 | GPU | A100 80 GB, sm_80 | GH200 96 GB, sm_90 |
-| torch wheel | cu128 x86_64 | cu128 **aarch64** (versioned index, not PyPI) |
+| torch wheel | 2.8.0+cu128 x86_64 | 2.8.0+**cu129** aarch64 (versioned index, not PyPI) |
 | GPUs/node | 4 | 4 |
 
 The one trap inside the rebuild: on aarch64, `pip install torch` from PyPI gives
-a **CPU-only** build. It must come from `--index-url
-https://download.pytorch.org/whl/cu128`. The build script's verification catches
-this, which is why it runs before anything else.
+a **CPU-only** build. It must come from the download.pytorch.org index.
+
+**And it is cu129, not cu128.** That index publishes no aarch64 wheel of torch
+2.8.0+cu128 (x86_64 and Windows only); the aarch64 build of 2.8.0 is +cu129. An
+unpinned install from the cu128 index silently gives the newest torch (2.11 on
+23 Sep 2026), which moves torch.compile and DDPOptimizer under every run. The
+build script pins `torch==2.8.0` from cu129, so the CUDA minor version is the
+only thing that moves, and applies requirements.txt's pins (transformers<4.50).
+
+**Login nodes have no GPU driver**, so `torch.cuda.is_available()` is False there
+for a good env and a CPU-only one alike. `scripts/site/verify_env.py` tells them
+apart by `torch.version.cuda`; the device half of gate 1 runs as a job.
 
 ---
 
@@ -68,9 +77,9 @@ does not crash — it just quietly produces the wrong numbers.
 
 | # | Gate | Command | Pass condition |
 |---|------|---------|----------------|
-| 1 | Environment | `bash scripts/site/build_env_isambard.sh` | cuda True, sm_90, bf16 supported |
-| 2 | Test suite | `PYTHONPATH=$PWD python -m pytest tests/ -q` | 464 passed |
-| 3 | **Decode path** | evaluate the production anchor, 3 seeds, karras, 256 steps | accuracy **0.12–0.20** |
+| 1 | Environment | `bash scripts/site/build_env_isambard.sh` (login node), then `submit.sh scripts/site/verify_gpu.slurm` | log ends `GATE 1 PASS`: cuda, sm_90, bf16, kernels match CPU, NCCL over 4 ranks |
+| 2 | Test suite | `PYTHONPATH=$PWD python -m pytest tests/ -q` | all passed |
+| 3 | **Decode path** | `scripts/hpc/arch/ordering_eval_gh200.sh gate3 --go` (anchor, 3 seeds, karras, 256 steps) | accuracy **0.12–0.20** |
 | 4 | Distributed training | `submit.sh scripts/hpc/arch/deadlock_repro.slurm` | 400 steps, 8 epoch boundaries, `rc=0` |
 
 Gate 3 is the one that matters. A sampler bug on CSD3 once returned
@@ -113,12 +122,20 @@ a cross-machine confound anywhere in it.
   512 may fit at accum 2 or even 1, which removes 3 of every 4 backward passes'
   worth of redundant all-reduces. Re-smoke with
   `TOK_STEPS=300 TOK_TAG=smoke_gh` before trusting it; do not assume.
-- **Wall limits differ.** `COBIT_WALL_MAX` in `scripts/site/site.sh` is set to
-  24 h as a guess. Correct it from the grant documentation — `submit.sh` refuses
-  an over-cap request rather than letting SLURM silently truncate it.
-- **`COBIT_ACCOUNT` and `COBIT_PARTITION` are not guessable.** They come from
-  the grant email. `site.sh` refuses to run with an unset account, because a
-  wrong one is a job that pends forever without saying why.
+- **Wall limits differ.** `workq_qos` caps jobs at `1-00:00:00`, so
+  `COBIT_WALL_MAX=24:00:00` is right. CSD3's 36 h chain links do not fit.
+- **Account and partition.** SLURM lists them: `sacctmgr -nP show assoc
+  user=$USER format=account` (this project: `brics.u6ya`) and `sinfo -s` (one
+  partition, `workq`, now the default). `site.sh` still refuses an unset account.
+- **Allocation is per socket.** One GPU comes with one 72-core Grace socket and
+  115 GB (`DefCpuPerGPU=72`). `submit.sh` reads each launcher's own
+  `#SBATCH --gres=gpu:N` and asks for `72·N` CPUs. It used to force `gpu:4` on
+  everything, which billed four GPUs for every 1-GPU eval.
+- **Home is capped at 101 GB.** `df -h` reports the whole 15 PB filesystem and
+  will not warn you; `quota -s` is the real figure. The env lives under
+  `$PROJECTDIR/$USER/miniforge3` and `runs/`, `datasets/`, `tinigsm_gsm8k/`
+  are symlinks into `$PROJECTDIR/$USER/BitstreamDiffusion-data` (200 TB project
+  quota: `lfs quota -h -p <projid> /lus/lfs1aip2`).
 
 ## 7. Submitting
 
@@ -127,7 +144,8 @@ through the wrapper, which passes this site's flags on the command line, where
 SLURM's precedence puts them above the in-script directives:
 
 ```bash
-export COBIT_SITE=isambard COBIT_ACCOUNT=<project> COBIT_PYTHON=<env>/bin/python
+export COBIT_SITE=isambard COBIT_ACCOUNT=brics.u6ya \
+       COBIT_PYTHON=$PROJECTDIR/$USER/miniforge3/envs/cobit-gh/bin/python
 bash scripts/site/submit.sh scripts/hpc/arch/token_train.slurm \
      --time=24:00:00 --export=ALL,TOK_BATCH=512,TOK_ACCUM=2,TOK_LR=1e-4,TOK_TAG=gh
 ```

@@ -1746,19 +1746,35 @@ class DDIMSampler:
         codeword_topk: Optional[int] = None,
         score_temp_tau: float = 1.0,
         score_temp_clean_var: float = 0.25,
+        score_temp_mode: str = "local",
+        score_temp_final: str = "sharpened",
     ):
         sc_refresh_mode = _normalize_sc_refresh_mode(sc_refresh_mode)
         ati_eta = _resolve_ati_eta(self.cfg, ati_eta)
 
-        # Track A1: local score-level temperature. kappa(sigma) rescales the PF-ODE
-        # score/drift to sharpen the locally-Gaussian clean posterior to variance
-        # tau*v (tau<1). Applied to the drift only; the base posterior probs/x0_hat
-        # is left untouched for self-conditioning, decoding, and entropy diagnostics.
-        # tau == 1.0 is a bit-identical no-op.
+        # Score-level temperature, applied to the drift only; the base posterior
+        # probs/x0_hat is left untouched for self-conditioning, decoding, and
+        # entropy diagnostics. tau == 1.0 is a bit-identical no-op in both modes.
+        #   "local"  (Track A1): kappa(sigma) sharpens the locally-Gaussian clean
+        #            posterior to variance tau*v -- ~1 at high sigma, 1/tau as
+        #            sigma -> 0.
+        #   "global" (Sigma / CDCD score temperature): constant 1/tau at every
+        #            sigma, i.e. D_tau = x + (D - x)/tau. With CFG the mix comes
+        #            first, so the drift is -sigma [s_u + w (s_c - s_u)] / tau.
         score_temp_tau = float(score_temp_tau)
         if score_temp_tau <= 0.0:
             raise ValueError(f"score_temp_tau must be > 0, got {score_temp_tau}")
+        score_temp_mode = str(score_temp_mode).lower()
+        if score_temp_mode not in ("local", "global"):
+            raise ValueError(f"Unknown score_temp_mode='{score_temp_mode}'")
         apply_score_temp = abs(score_temp_tau - 1.0) > 1e-8
+        # "unsharpened": the last integration step (onto sigma_min, the readout) uses the
+        # untempered drift. On the entropic grid that step covers ~99% of the remaining
+        # sigma, so a sharpened drift overshoots the denoiser output by ~1/tau and, after
+        # churn has re-noised the state, flips decided bits (docs: sampler maths note).
+        score_temp_final = str(score_temp_final).lower()
+        if score_temp_final not in ("sharpened", "unsharpened"):
+            raise ValueError(f"Unknown score_temp_final='{score_temp_final}'")
 
         def _temp_at(sigma_val) -> float:
             return _posterior_temp_at(
@@ -1908,10 +1924,14 @@ class DDIMSampler:
             )
             d_cur = -sigma_state * score_cur
             _zero_mask_(d_cur, prefix_mask)
-            if apply_score_temp:
-                d_cur = d_cur * _score_temp_kappa(
-                    sigma_state, score_temp_tau, score_temp_clean_var, ndim=d_cur.dim()
-                )
+            is_last = i == len(sigmas) - 2
+            if apply_score_temp and not (is_last and score_temp_final == "unsharpened"):
+                if score_temp_mode == "global":
+                    d_cur = d_cur / score_temp_tau
+                else:
+                    d_cur = d_cur * _score_temp_kappa(
+                        sigma_state, score_temp_tau, score_temp_clean_var, ndim=d_cur.dim()
+                    )
 
             x = self._integrate_step(
                 x_state, h, d_cur,
@@ -1988,6 +2008,45 @@ class DDIMSampler:
         if collect_diagnostics:
             return x, guidance_trace
         return x
+
+class AncestralSampler(DDIMSampler):
+    """Variance-exploding ancestral (DDPM-style) sampler.
+
+    Each step draws x_next from the exact Gaussian bridge q(x_next | x, x0 = D) of the
+    VE process with the denoiser's prediction D plugged in:
+
+        x_next = D + rho^2 (x - D) + sigma_next * sqrt(1 - rho^2) * z,   rho = sigma_next / sigma
+
+    It is the exact one-step solution of the reverse SDE with lambda = 1 (the standard
+    reverse-time SDE) for a constant D, the VE analogue of DDPM. Compared with EDM churn
+    it injects noise in proportion to the step instead of inflating sigma by (1 + gamma)
+    on every step, so its per-step gain towards D is 1 - rho^2 (~2 Delta sigma / sigma)
+    rather than ~gamma / (1 + gamma), which keeps score temperature stable down to much
+    smaller tau (docs/pdf_reports/sampler_math.pdf). D is recovered from the drift the shared loop
+    hands over, D = x - sigma * d, so guidance and score temperature apply unchanged.
+    EDM churn is refused: the bridge already supplies the stochasticity.
+    """
+
+    def _integrate_step(self, x_state, h, d_cur, *, sigma_cur, sigma_next, prefix_mask):
+        def _b(s):
+            s = torch.as_tensor(s, device=x_state.device, dtype=torch.float32)
+            return s.view(*([s.shape[0]] + [1] * (x_state.dim() - 1))) if s.dim() == 1 else s
+        sc, sn = _b(sigma_cur), _b(sigma_next)
+        D = x_state.float() - sc * d_cur.float()
+        rho2 = (sn / sc).clamp(0.0, 1.0) ** 2
+        z = torch.randn_like(x_state, dtype=torch.float32)
+        if prefix_mask is not None:
+            _zero_mask_(z, prefix_mask)
+        out = D + rho2 * (x_state.float() - D) + sn * (1.0 - rho2).clamp_min(0.0).sqrt() * z
+        return out.to(x_state.dtype)
+
+    @torch.no_grad()
+    def sample(self, *args, **kwargs):
+        st = getattr(getattr(self.cfg, "evaluation", object()), "stochastic", None)
+        if st is not None and bool(getattr(st, "enabled", False)) and float(getattr(st, "s_churn", 0.0)) > 0.0:
+            raise RuntimeError("AncestralSampler does not support EDM churn; run it with --sampler deterministic.")
+        return super().sample(*args, **kwargs)
+
 
 class EulerMaruyamaSampler(DDIMSampler):
     """Explicit entropy-gated reverse-SDE sampler (Euler-Maruyama).

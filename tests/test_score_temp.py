@@ -97,6 +97,91 @@ def test_end_to_end_tau_changes_trajectory():
     assert torch.equal(x1[pm], xt[pm])
 
 
+# -----------------------------------------------------------------------------
+# score_temp_mode="global": Sigma / CDCD score temperature, constant 1/tau at
+# every sigma (D_tau = x + (D - x)/tau), applied after the CFG mix.
+# -----------------------------------------------------------------------------
+
+def _first_drift(tau, mode, *, guidance_scale=None, steps=12):
+    """Drift handed to the integrator at step 0, where every run shares x_state."""
+    B, S, n_prompt = 2, 16, 4
+    cfg = make_cpu_cfg(num_steps=steps)
+    model = TinyBinaryDenoiser(S, seed=1)
+    sampler = DDIMSampler(model, ContinuousForwardProcess(cfg), cfg)
+    pf, pm = make_conditioning(B, S, n_prompt, seed=7)
+    seen = []
+    orig = sampler._integrate_step
+
+    def spy(x_state, h, d_cur, **kw):
+        seen.append((d_cur.clone(), kw["sigma_cur"]))
+        return orig(x_state, h, d_cur, **kw)
+
+    sampler._integrate_step = spy
+    torch.manual_seed(0)
+    sampler.sample(
+        num_samples=B, seq_len=S, conditioning_prefix_full=pf, cond_prefix_mask=pm,
+        num_steps=steps, schedule="karras", sc_refresh_mode="carry", ati_eta=0.0,
+        return_probs=True, progress=False, guidance_scale=guidance_scale,
+        score_temp_tau=tau, score_temp_mode=mode,
+    )
+    return seen[0]
+
+
+def test_global_tau_one_is_bit_identical():
+    x0, p0, pf, pm = _run(1.0, seed=0)
+    B, S = pf.shape
+    cfg = make_cpu_cfg(num_steps=12)
+    sampler = DDIMSampler(TinyBinaryDenoiser(S, seed=1), ContinuousForwardProcess(cfg), cfg)
+    torch.manual_seed(0)
+    xg, pg = sampler.sample(
+        num_samples=B, seq_len=S, conditioning_prefix_full=pf, cond_prefix_mask=pm,
+        num_steps=12, schedule="karras", sc_refresh_mode="carry", ati_eta=0.0,
+        return_probs=True, progress=False, score_temp_tau=1.0, score_temp_mode="global",
+    )
+    assert torch.equal(xg, x0) and torch.equal(pg, p0)
+
+
+def test_global_divides_drift_by_tau_at_high_sigma():
+    tau = 0.4
+    d1, sig = _first_drift(1.0, "global")
+    dg, _ = _first_drift(tau, "global")
+    dl, _ = _first_drift(tau, "local")
+    assert float(sig) > 10.0                       # step 0 is deep in the high-noise band
+    assert torch.allclose(dg, d1 / tau, rtol=1e-6, atol=0.0)
+    # The A1 multiplier is ~1 here: the two modes differ exactly where modes are chosen.
+    assert torch.allclose(dl, d1, rtol=1e-3, atol=0.0)
+
+
+def test_global_applies_after_cfg_mix():
+    tau, w = 0.5, 2.0
+    d1, _ = _first_drift(1.0, "global", guidance_scale=w)
+    dg, _ = _first_drift(tau, "global", guidance_scale=w)
+    # Drift is -sigma [s_u + w (s_c - s_u)] / tau: the guided drift, rescaled as a whole.
+    assert torch.allclose(dg, d1 / tau, rtol=1e-6, atol=0.0)
+
+
+def test_global_never_moves_prompt_coords():
+    _, _, pf, pm = _run(1.0, seed=0)
+    B, S = pf.shape
+    cfg = make_cpu_cfg(num_steps=12)
+    sampler = DDIMSampler(TinyBinaryDenoiser(S, seed=1), ContinuousForwardProcess(cfg), cfg)
+    torch.manual_seed(0)
+    xg, _ = sampler.sample(
+        num_samples=B, seq_len=S, conditioning_prefix_full=pf, cond_prefix_mask=pm,
+        num_steps=12, schedule="karras", sc_refresh_mode="carry", ati_eta=0.0,
+        return_probs=True, progress=False, score_temp_tau=0.3, score_temp_mode="global",
+    )
+    x1, _, _, _ = _run(1.0, seed=0)
+    assert torch.equal(xg[pm], x1[pm])
+    assert not torch.equal(xg, x1)
+
+
+def test_unknown_score_temp_mode_raises():
+    import pytest
+    with pytest.raises(ValueError, match="score_temp_mode"):
+        _first_drift(0.5, "sigmoid")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

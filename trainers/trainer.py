@@ -169,6 +169,35 @@ def _make_distributed_sampler(dataset, *, world_size: int, rank: int, seed: int,
                               shuffle=shuffle, drop_last=drop_last, seed=int(seed))
 
 
+def _stop_step(cfg) -> int:
+    """Step at which train() returns: optim.total_steps, or cfg.train.stop_at_step
+    if that comes first (0 = no stop).
+
+    stop_at_step ends a run early WITHOUT touching the LR schedule, which keeps
+    reading optim.total_steps: a cosine over 500k stopped at 250k is the first
+    half of that cosine, and resuming with a later stop_at_step continues it.
+    """
+    stops = [int(getattr(cfg.optim, "total_steps", 0) or 0),
+             int(getattr(cfg.train, "stop_at_step", 0) or 0)]
+    stops = [s for s in stops if s > 0]
+    return min(stops) if stops else 0
+
+
+def _data_order_seed(cfg) -> int:
+    """Shuffle seed for the training DistributedSampler.
+
+    cfg.train.data_order_seed when set, else cfg.train.seed. Setting it to 0
+    reproduces the data order of every multi-GPU run trained before T4, whose
+    sampler always shuffled with DistributedSampler's default seed of 0. The
+    global batch at step s is shuffled indices [s*B, (s+1)*B) whatever the
+    world size, so the order carries across GPU counts.
+    """
+    seed = getattr(cfg.train, "data_order_seed", None)
+    if seed is None:
+        seed = getattr(cfg.train, "seed", 0)
+    return int(seed or 0)
+
+
 def _maybe_set_seed(cfg):
     """Set Python/NumPy/Torch seeds for reproducibility if cfg.train.seed is provided."""
     seed = getattr(cfg.train, "seed", None)
@@ -676,6 +705,7 @@ def _resolve_checkpointing_cfg(cfg) -> dict:
     interval_enabled = False
     interval_every_steps = 100_000
     interval_keep_last = 5  # None/0 means keep all
+    interval_at_steps = None  # explicit step list; replaces every_steps when set
 
     # rolling resume checkpoint
     resume_interval_enabled = False
@@ -709,6 +739,9 @@ def _resolve_checkpointing_cfg(cfg) -> dict:
             interval_enabled = bool(getattr(ci, "enabled", interval_enabled))
             interval_every_steps = int(getattr(ci, "every_steps", interval_every_steps))
             interval_keep_last = getattr(ci, "keep_last", interval_keep_last)
+            at_steps = getattr(ci, "at_steps", None)
+            if at_steps:
+                interval_at_steps = frozenset(int(s) for s in at_steps)
 
         if hasattr(ck, "resume_interval"):
             ri = ck.resume_interval
@@ -740,6 +773,7 @@ def _resolve_checkpointing_cfg(cfg) -> dict:
         "interval_enabled": interval_enabled,
         "interval_every_steps": interval_every_steps,
         "interval_keep_last": keep_last_norm,
+        "interval_at_steps": interval_at_steps,
 
         "resume_interval_enabled": resume_interval_enabled,
         "resume_interval_every_steps": resume_interval_every_steps,
@@ -878,6 +912,7 @@ class Trainer:
         self.ckpt_interval_enabled = bool(ck["interval_enabled"])
         self.ckpt_interval_every_steps = int(ck["interval_every_steps"])
         self.ckpt_interval_keep_last = ck["interval_keep_last"]  # None => keep all
+        self.ckpt_interval_at_steps = ck["interval_at_steps"]  # None => every_steps
         self.resume_interval_enabled = bool(ck["resume_interval_enabled"])
         self.resume_interval_every_steps = int(ck["resume_interval_every_steps"])
 
@@ -919,7 +954,7 @@ class Trainer:
 
             train_sampler = _make_distributed_sampler(
                 raw_train_loader.dataset, world_size=self.world_size, rank=self.rank,
-                seed=int(getattr(cfg.train, "seed", 0) or 0), shuffle=True, drop_last=True)
+                seed=_data_order_seed(cfg), shuffle=True, drop_last=True)
             self.train_loader = torch.utils.data.DataLoader(
                 raw_train_loader.dataset,
                 batch_size=batch_size_per_gpu,
@@ -2415,13 +2450,17 @@ class Trainer:
         """
         if (not self.is_master) or (not self.ckpt_interval_enabled):
             return
-        if self._next_interval_ckpt_step is None:
-            return
-        if self.ckpt_interval_every_steps <= 0:
-            return
-
-        if int(self.global_step) < int(self._next_interval_ckpt_step):
-            return
+        if self.ckpt_interval_at_steps:
+            # Explicit list: exactly these steps and no others.
+            if int(self.global_step) not in self.ckpt_interval_at_steps:
+                return
+        else:
+            if self._next_interval_ckpt_step is None:
+                return
+            if self.ckpt_interval_every_steps <= 0:
+                return
+            if int(self.global_step) < int(self._next_interval_ckpt_step):
+                return
 
         # Build checkpoint state (same as others)
         state = self._build_ckpt_state(epoch)
@@ -2444,8 +2483,9 @@ class Trainer:
                     pass
 
         # Advance threshold robustly even if steps jump
-        while int(self._next_interval_ckpt_step) <= int(self.global_step):
-            self._next_interval_ckpt_step += int(self.ckpt_interval_every_steps)
+        if not self.ckpt_interval_at_steps:
+            while int(self._next_interval_ckpt_step) <= int(self.global_step):
+                self._next_interval_ckpt_step += int(self.ckpt_interval_every_steps)
 
 
     # ──────────────────────────────────────────────────────────────────────
@@ -2466,7 +2506,7 @@ class Trainer:
         # Lightning-style sanity: run callbacks once before training
         self._maybe_run_sanity()
 
-        target_total_steps = int(getattr(self.cfg.optim, "total_steps", 0))
+        target_total_steps = _stop_step(self.cfg)
         stop_training = False
 
         # DEBUG KNOB: cap the number of batches per epoch.

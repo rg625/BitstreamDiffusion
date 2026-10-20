@@ -47,7 +47,7 @@
 #   python experiments/ordering/decode_nccl_trace.py logs/arch/nccl_trace_<jobid>_rank --tail 12
 #   cat logs/arch/stack_<jobid>_rank*.txt
 #
-# Writes to runs/tasks/tinygsm/ord_dlrepro_none_s42 -- a throwaway directory,
+# Writes to runs/tasks/tinygsm/ord_dlrepro_<jobid>_none_s42 -- a throwaway directory,
 # never one of the four real arms. No checkpoints are written (400 steps is
 # below every save interval), so this costs no disk.
 set -euo pipefail
@@ -60,7 +60,10 @@ cd "$PROJECT_DIR"; mkdir -p logs/arch
 # not the model.
 export ORD_MODE=none ORD_W=0 ORD_INIT=none ORD_SEED=42
 export ORD_STEPS="${ORD_STEPS:-400}"
-export ORD_TAG=dlrepro
+# One run dir PER JOB. With a fixed tag the second repro (6832047) resumed the
+# first one's last.pt at step 400, trained nothing, and still printed "NO HANG:
+# 8 epoch boundaries passed" -- a pass that tested zero boundaries.
+export ORD_TAG="dlrepro_${SLURM_JOB_ID:-local}"
 export ORD_CKPT_EVERY=1000000
 export COBIT_STEPS_PER_EPOCH="${COBIT_STEPS_PER_EPOCH:-50}"
 

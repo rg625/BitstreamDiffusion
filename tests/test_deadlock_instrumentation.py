@@ -100,7 +100,7 @@ def test_repro_launcher_is_self_contained():
     assert "COBIT_STEPS_PER_EPOCH" in text
     assert "enable_nccl_flight_recorder" in text and "start_stall_watchdog" in text
     # A throwaway run dir: the repro must never write into one of the four arms.
-    assert "ORD_TAG=dlrepro" in text
+    assert 'ORD_TAG="dlrepro_' in text
     # Fast failure is the point; a long timeout wastes the whole reservation.
     assert "DDP_TIMEOUT_MIN:-6" in text
 
@@ -168,8 +168,11 @@ def test_watchdog_signals_only_published_rank_pids(tmp_path):
         # And signalling it must dump stacks, not kill it.
         os.kill(proc.pid, _signal.SIGUSR1)
         dump = tmp_path / "stack_tjob_rank3.txt"
+        # Wait for the frame, not just a non-empty file: faulthandler writes
+        # incrementally, and reading at "non-empty" once caught only
+        # 'Current thread 0x' (1 run in ~20 on a loaded login node).
         for _ in range(40):
-            if dump.exists() and dump.stat().st_size > 0:
+            if dump.exists() and "_sleeper" in dump.read_text():
                 break
             time.sleep(0.25)
         assert proc.poll() is None, "the rank died on SIGUSR1 instead of dumping"
