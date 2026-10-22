@@ -1673,9 +1673,25 @@ class DDIMSampler:
         segment_overrides: Optional[Dict[int, Dict[str, Any]]] = None,
         segment_len: int = 32,
         step_callback: Optional[Callable[..., None]] = None,
+        score_temp_tau: float = 1.0,
+        score_temp_final: str = "sharpened",
     ):
         sc_refresh_mode = _normalize_sc_refresh_mode(sc_refresh_mode)
         ati_eta = _resolve_ati_eta(self.cfg, ati_eta)
+
+        # Global (Sigma / CDCD) score temperature, ported from Isambard cpu-reanalysis 02ef262:
+        # the drift is divided by tau at every sigma, i.e. D_tau = x + (D - x)/tau (after the CFG
+        # mix). tau == 1 is a bit-identical no-op. "unsharpened": the last integration step (onto
+        # sigma_min, the readout) uses the untempered drift; on the entropic grid that step covers
+        # ~99% of the remaining sigma, so a sharpened drift overshoots D by ~1/tau and, after churn
+        # has re-noised the state, flips decided bits (temperature_study_cobit.pdf, Sec. 6 and 8).
+        score_temp_tau = float(score_temp_tau)
+        if score_temp_tau <= 0.0:
+            raise ValueError(f"score_temp_tau must be > 0, got {score_temp_tau}")
+        apply_score_temp = abs(score_temp_tau - 1.0) > 1e-8
+        score_temp_final = str(score_temp_final).lower()
+        if score_temp_final not in ("sharpened", "unsharpened"):
+            raise ValueError(f"Unknown score_temp_final='{score_temp_final}'")
 
         B = int(num_samples)
         S = int(seq_len)
@@ -1856,6 +1872,8 @@ class DDIMSampler:
                 sigma_eval_cur = _ati_shift_sigma_label(sigma_state, sigma_prev, ati_eta)
                 sigma_eval_next = _ati_shift_sigma_label(sigma_next, sigma_state, ati_eta)
                 h = sigma_next - sigma_state
+                is_last = (i == len(sigmas) - 2) and (k == n_sub - 1)
+                temper = apply_score_temp and not (is_last and score_temp_final == "unsharpened")
 
                 # ------------------------------------------------------------
                 # Evaluate at (x_state, sigma_state)
@@ -1905,6 +1923,8 @@ class DDIMSampler:
                     )
                     d_cur = -sigma_state * score_cur
                     _zero_mask_(d_cur, prefix_mask)
+                    if temper:
+                        d_cur = d_cur / score_temp_tau
 
                     x = x_state + h * d_cur
                     if cond_enabled:
@@ -1974,6 +1994,8 @@ class DDIMSampler:
                     )
                     d_cur = -sigma_state * score_cur
                     _zero_mask_(d_cur, prefix_mask)
+                    if temper:
+                        d_cur = d_cur / score_temp_tau
 
                     x = x_state + h * d_cur
                     if cond_enabled:
