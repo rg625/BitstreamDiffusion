@@ -1,0 +1,36 @@
+{"time": "2026-10-02T17:29:03+01:00", "what": "identity-check", "gpu_seconds": 157.44084494560957}
+{"time": "2026-10-02T17:31:39+01:00", "what": "reference batch0", "gpu_seconds": 119.83733063191175}
+{"time": "2026-10-02T17:34:00+01:00", "what": "probe batch0 null", "gpu_seconds": 115.4009255990386}
+{"time": "2026-10-02T17:36:34+01:00", "what": "probe batch0 refine_0", "gpu_seconds": 153.96685903519392}
+{"time": "2026-10-02T17:38:55+01:00", "what": "probe batch0 refine_1", "gpu_seconds": 141.06807631999254}
+{"time": "2026-10-02T17:41:03+01:00", "what": "probe batch0 refine_2", "gpu_seconds": 128.01275184378028}
+{"time": "2026-10-02T17:42:58+01:00", "what": "probe batch0 refine_3", "gpu_seconds": 115.05992048606277}
+{"time": "2026-10-02T17:44:40+01:00", "what": "probe batch0 refine_4", "gpu_seconds": 102.15115167945623}
+{"time": "2026-10-02T17:46:10+01:00", "what": "probe batch0 refine_5", "gpu_seconds": 89.1794980019331}
+{"time": "2026-10-02T17:47:26+01:00", "what": "probe batch0 refine_6", "gpu_seconds": 76.23489325121045}
+{"time": "2026-10-02T17:48:27+01:00", "what": "probe batch0 refine_7", "gpu_seconds": 60.827580850571394}
+{"time": "2026-10-02T17:50:22+01:00", "what": "probe batch0 nochurn_0", "gpu_seconds": 115.06433713808656}
+{"time": "2026-10-02T17:52:05+01:00", "what": "probe batch0 nochurn_1", "gpu_seconds": 102.1946978084743}
+{"time": "2026-10-02T17:53:34+01:00", "what": "probe batch0 nochurn_2", "gpu_seconds": 89.17632595449686}
+{"time": "2026-10-02T17:54:50+01:00", "what": "probe batch0 nochurn_3", "gpu_seconds": 76.20227404683828}
+{"time": "2026-10-02T17:55:53+01:00", "what": "probe batch0 nochurn_4", "gpu_seconds": 63.223916474729776}
+{"time": "2026-10-02T17:56:44+01:00", "what": "probe batch0 nochurn_5", "gpu_seconds": 50.24412755668163}
+{"time": "2026-10-02T17:57:21+01:00", "what": "probe batch0 nochurn_6", "gpu_seconds": 37.35706241801381}
+{"time": "2026-10-02T17:57:46+01:00", "what": "probe batch0 nochurn_7", "gpu_seconds": 24.330488082021475}
+{"time": "2026-10-02T18:02:04+01:00", "what": "reference batch1", "gpu_seconds": 119.05388750880957}
+{"time": "2026-10-02T18:04:30+01:00", "what": "probe batch1 null", "gpu_seconds": 115.45246943458915}
+{"time": "2026-10-02T18:07:04+01:00", "what": "probe batch1 refine_0", "gpu_seconds": 153.98001647368073}
+{"time": "2026-10-02T18:08:34+01:00", "what": "probe batch1 refine_5", "gpu_seconds": 89.19963783025742}
+{"time": "2026-10-02T18:09:35+01:00", "what": "probe batch1 refine_7", "gpu_seconds": 60.84318146109581}
+{"time": "2026-10-02T18:11:41+01:00", "what": "probe batch1 nochurn_0", "gpu_seconds": 115.35580753535032}
+{"time": "2026-10-02T18:13:23+01:00", "what": "probe batch1 nochurn_1", "gpu_seconds": 102.04016561433673}
+{"time": "2026-10-02T18:14:52+01:00", "what": "probe batch1 nochurn_2", "gpu_seconds": 89.08311795070767}
+{"time": "2026-10-02T18:16:09+01:00", "what": "probe batch1 nochurn_3", "gpu_seconds": 76.14753481000662}
+{"time": "2026-10-02T18:18:45+01:00", "what": "run3 modified_s5_k1.75_c0.8000_g0.200_b0", "gpu_seconds": 119.12207341939211}
+{"time": "2026-10-02T18:20:45+01:00", "what": "run3 modified_s5_k1.75_c0.9000_g0.200_b0", "gpu_seconds": 118.87131076678634}
+{"time": "2026-10-02T18:22:46+01:00", "what": "run3 modified_s5_k1.75_c1.0000_g0.200_b0", "gpu_seconds": 118.7104118950665}
+{"time": "2026-10-02T18:24:57+01:00", "what": "run3 modified_s5_k1.75_c0.5000_g0.200_b0", "gpu_seconds": 118.46069568395615}
+{"time": "2026-10-02T18:26:58+01:00", "what": "run3 modified_s5_k1.75_c1.3000_g0.200_b0", "gpu_seconds": 119.09047000855207}
+{"time": "2026-10-02T18:29:16+01:00", "what": "run3 baseline_g0.185_b0", "gpu_seconds": 119.18072667717934}
+{"time": "2026-10-02T18:31:15+01:00", "what": "run3 baseline_g0.215_b0", "gpu_seconds": 118.22831859439611}
+{"time": "2026-10-02T18:33:33+01:00", "what": "reference step-logs rerun batch0", "gpu_seconds": 107.46070535480976}

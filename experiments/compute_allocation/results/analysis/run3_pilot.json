@@ -1,0 +1,194 @@
+{
+ "paired_vs_run1_reference": {
+  "modified_s5_k1.75_c0.5000_g0.200_b0": {
+   "genppl": 58.86911175555825,
+   "mean_entropy": 4.306075690547004,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/modified_s5_k1.75_c0.5000_g0.200_b0.json",
+   "condition": "modified",
+   "base_gamma": 0.2,
+   "c_out": 0.5,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0,
+   "paired": {
+    "n": 1024,
+    "d_nll_tok": -0.02195155088817291,
+    "ci_lo": -0.060181747060800615,
+    "ci_hi": 0.016647622042969896,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.006792830536141992,
+    "d_entropy_ci": [
+     -0.021901734644779937,
+     0.008697229082463306
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 58.86911175555825,
+    "d_genppl": -1.3065563055588143,
+    "top10_share_signed": 5.101339562824883,
+    "top10_share_abs": 0.2887419697490857,
+    "frac_samples_with_nll_change": 0.9814453125
+   }
+  },
+  "modified_s5_k1.75_c0.8000_g0.200_b0": {
+   "genppl": 58.87192243468505,
+   "mean_entropy": 4.3039505302440375,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/modified_s5_k1.75_c0.8000_g0.200_b0.json",
+   "condition": "modified",
+   "base_gamma": 0.2,
+   "c_out": 0.8,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0,
+   "paired": {
+    "n": 1024,
+    "d_nll_tok": -0.021903807479994875,
+    "ci_lo": -0.053431067065269636,
+    "ci_hi": 0.011172386772777536,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.008917990839108825,
+    "d_entropy_ci": [
+     -0.01992008907254785,
+     0.002034631033893674
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 58.87192243468505,
+    "d_genppl": -1.3037456264320184,
+    "top10_share_signed": 4.492646370144988,
+    "top10_share_abs": 0.29807205946264465,
+    "frac_samples_with_nll_change": 0.9716796875
+   }
+  },
+  "modified_s5_k1.75_c0.9000_g0.200_b0": {
+   "genppl": 58.83209434695507,
+   "mean_entropy": 4.30427717929706,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/modified_s5_k1.75_c0.9000_g0.200_b0.json",
+   "condition": "modified",
+   "base_gamma": 0.2,
+   "c_out": 0.9,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0,
+   "paired": {
+    "n": 1024,
+    "d_nll_tok": -0.022580557353772512,
+    "ci_lo": -0.05128207423776761,
+    "ci_hi": 0.006799913024033664,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.00859134178608656,
+    "d_entropy_ci": [
+     -0.017522585595725105,
+     0.0005083779396954909
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 58.83209434695507,
+    "d_genppl": -1.3435737141619981,
+    "top10_share_signed": 3.7943410701029596,
+    "top10_share_abs": 0.29487396355870554,
+    "frac_samples_with_nll_change": 0.9599609375
+   }
+  },
+  "modified_s5_k1.75_c1.0000_g0.200_b0": {
+   "genppl": 59.10259022541615,
+   "mean_entropy": 4.302310326136649,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/modified_s5_k1.75_c1.0000_g0.200_b0.json",
+   "condition": "modified",
+   "base_gamma": 0.2,
+   "c_out": 1.0,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0,
+   "paired": {
+    "n": 1024,
+    "d_nll_tok": -0.01799333428584937,
+    "ci_lo": -0.03730118735746648,
+    "ci_hi": 0.0007522700742091937,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.010558194946497679,
+    "d_entropy_ci": [
+     -0.015231896890327334,
+     -0.005912111781071873
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 59.10259022541615,
+    "d_genppl": -1.0730778357009143,
+    "top10_share_signed": 3.2325691371948397,
+    "top10_share_abs": 0.2790949406783862,
+    "frac_samples_with_nll_change": 0.9677734375
+   }
+  },
+  "modified_s5_k1.75_c1.3000_g0.200_b0": {
+   "genppl": 63.32677720017362,
+   "mean_entropy": 4.307577900821343,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/modified_s5_k1.75_c1.3000_g0.200_b0.json",
+   "condition": "modified",
+   "base_gamma": 0.2,
+   "c_out": 1.3,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0,
+   "paired": {
+    "n": 1024,
+    "d_nll_tok": 0.051040174663323334,
+    "ci_lo": 0.018735224135838103,
+    "ci_hi": 0.08374294569546993,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": -0.005290620261803269,
+    "d_entropy_ci": [
+     -0.017371340881800278,
+     0.006829431210644537
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 63.32677720017362,
+    "d_genppl": 3.151109139056558,
+    "top10_share_signed": 1.9691689084657735,
+    "top10_share_abs": 0.28525461709504135,
+    "frac_samples_with_nll_change": 0.9814453125
+   }
+  }
+ },
+ "baseline_gamma_grid_seed42": {
+  "0.185": {
+   "genppl": 59.55353417444998,
+   "mean_entropy": 4.311525842407718,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/baseline_g0.185_b0.json",
+   "condition": "baseline",
+   "base_gamma": 0.185,
+   "c_out": 1.0,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0
+  },
+  "0.215": {
+   "genppl": 58.808354408262524,
+   "mean_entropy": 4.300392565084621,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/run3/baseline_g0.215_b0.json",
+   "condition": "baseline",
+   "base_gamma": 0.215,
+   "c_out": 1.0,
+   "k_in": 1.75,
+   "s_star": 5,
+   "batch": 0
+  },
+  "0.200": {
+   "genppl": 60.175668061117065,
+   "mean_entropy": 4.312868521083146,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/reference.json",
+   "note": "Run 1 reference = baseline \u03b3=0.2 seed 42 (same code path)"
+  }
+ }
+}

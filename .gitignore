@@ -104,3 +104,13 @@ tinigsm_gsm8k/
 /runs
 /datasets
 /tinigsm_gsm8k
+
+# Per-machine data: copy between cambox and Isambard with rsync / scripts/hpc transfer, not git
+/results/dgc/
+/assets/cobit_m_bits_s42/
+/step=*.pt
+/probe_ok.txt
+experiments/denoising_mse/results*/
+experiments/denoising_mse/**/*.log
+experiments/denoising_mse/report*/*.pdf
+experiments/denoising_mse/report*/*.png

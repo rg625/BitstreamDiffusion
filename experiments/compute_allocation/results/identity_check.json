@@ -1,0 +1,28 @@
+{
+ "n_samples": 512,
+ "probs_bit_identical": true,
+ "bits_identical": true,
+ "max_abs_prob_diff": 0.0,
+ "rerun_probs_identical": true,
+ "nfe_calls_new": 255,
+ "nfe_calls_old": 255,
+ "wall_new": 51.69911340624094,
+ "wall_old": 51.6009740754962,
+ "meta": {
+  "time": "2026-10-02T17:29:03+01:00",
+  "commit": "2f5661dfeae174b56f0d0239fe7a81875890041e",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "torch": "2.0.1+cu118",
+  "cuda": "11.8",
+  "compiled": false,
+  "amp_dtype": "torch.bfloat16",
+  "tag": "ddim_entropic_scr-carry_tnfe-256_anfe-256_steps-255_gs0.0_term-1.10_stoch-ch51-n1.003-q0_1",
+  "gamma_target": 0.2,
+  "s_churn": 51.0,
+  "num_sigma_points": 255,
+  "terminal_sigma": 0.08,
+  "micro_batch": 512,
+  "pid": 63407,
+  "process_wall_sec": 157.44084494560957
+ }
+}

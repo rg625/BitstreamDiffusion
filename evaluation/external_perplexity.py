@@ -166,6 +166,38 @@ class HFExternalPerplexityEvaluator:
         }
 
     @torch.no_grad()
+    def score_texts_per_sample(self, texts: List[str]) -> List[Tuple[float, int]]:
+        """
+        Per-text (nll_nats_sum, n_scored) with exactly the arithmetic of
+        `score_texts`; summing these in order reproduces its totals. Texts that
+        `score_texts` skips get (0.0, 0).
+        """
+        out: List[Tuple[float, int]] = []
+        for txt in texts:
+            if not txt:
+                out.append((0.0, 0))
+                continue
+            enc = self.tokenizer(txt, add_special_tokens=False)
+            ids = torch.tensor(enc["input_ids"], dtype=torch.long, device=self.device)
+            if ids.numel() < 2:
+                out.append((0.0, 0))
+                continue
+            mask = torch.ones_like(ids, dtype=torch.bool)
+            mask[0] = False
+
+            nll_nats, n_scored = _score_ids_with_mask(
+                self.model,
+                ids,
+                mask,
+                device=self.device,
+                max_seq_len=self.max_seq_len,
+                stride=self.stride,
+                use_amp=self.use_amp,
+            )
+            out.append((float(nll_nats), int(n_scored)))
+        return out
+
+    @torch.no_grad()
     def score_prompt_completion_pairs(
         self,
         prompt_texts: List[str],

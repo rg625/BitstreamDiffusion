@@ -1,0 +1,2410 @@
+{
+ "anchor": {
+  "genppl": 60.175668061117065,
+  "mean_entropy": 4.312868521083146,
+  "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/reference.json",
+  "readme_single_seed_range": [
+   59.0,
+   60.0
+  ],
+  "readme_entropy": 4.31,
+  "gate_genppl": true,
+  "gate_entropy": true
+ },
+ "settling_source": "/home/rg625/mnt/BitstreamDiffusion/runs/compute_allocation/batch0/step_logs.pt",
+ "null": {
+  "n": 2048,
+  "d_nll_tok": 0.0,
+  "ci_lo": 0.0,
+  "ci_hi": 0.0,
+  "ci_excludes_0": false,
+  "material": false,
+  "borderline": false,
+  "d_entropy": 0.0,
+  "d_entropy_ci": [
+   0.0,
+   0.0
+  ],
+  "entropy_flag": false,
+  "genppl_ref": 60.04972814441181,
+  "genppl_branch": 60.04972814441181,
+  "d_genppl": 0.0,
+  "top10_share_signed": NaN,
+  "top10_share_abs": NaN,
+  "frac_samples_with_nll_change": 0.0,
+  "batches": [
+   0,
+   1
+  ],
+  "frac_tokens_changed": 0.0,
+  "frac_tokens_changed_net": 0.0,
+  "nfe_per_sample": 255
+ },
+ "rows": {
+  "null": {
+   "n": 2048,
+   "d_nll_tok": 0.0,
+   "ci_lo": 0.0,
+   "ci_hi": 0.0,
+   "ci_excludes_0": false,
+   "material": false,
+   "borderline": false,
+   "d_entropy": 0.0,
+   "d_entropy_ci": [
+    0.0,
+    0.0
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 60.04972814441181,
+   "d_genppl": 0.0,
+   "top10_share_signed": NaN,
+   "top10_share_abs": NaN,
+   "frac_samples_with_nll_change": 0.0,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.0,
+   "nfe_per_sample": 255
+  },
+  "refine_0": {
+   "n": 2048,
+   "d_nll_tok": -0.007506935900469358,
+   "ci_lo": -0.01785980719222253,
+   "ci_hi": 0.0028521780117807404,
+   "ci_excludes_0": false,
+   "material": false,
+   "borderline": true,
+   "d_entropy": -0.0019690688932314515,
+   "d_entropy_ci": [
+    -0.004793595871888101,
+    0.0008727443084353572
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 59.600626482144335,
+   "d_genppl": -0.4491016622674735,
+   "top10_share_signed": 6.198003612245465,
+   "top10_share_abs": 0.33166240376899203,
+   "frac_samples_with_nll_change": 0.8984375,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.2889442443847656,
+   "frac_tokens_changed_net": 0.2889442443847656,
+   "nfe_per_sample": 351
+  },
+  "refine_1": {
+   "n": 1024,
+   "d_nll_tok": -0.05233505374708791,
+   "ci_lo": -0.07681181940970438,
+   "ci_hi": -0.029381330655626738,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": -0.0321702912915498,
+   "d_entropy_ci": [
+    -0.04445102200261317,
+    -0.020440937433158984
+   ],
+   "entropy_flag": true,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 57.10736153068379,
+   "d_genppl": -3.0683065304332757,
+   "top10_share_signed": 1.6034909337801806,
+   "top10_share_abs": 0.39720038861366436,
+   "frac_samples_with_nll_change": 0.9248046875,
+   "frac_tokens_changed": 0.3828582763671875,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.3828582763671875,
+   "nfe_per_sample": 319,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_1.json",
+   "batches": [
+    0
+   ]
+  },
+  "refine_2": {
+   "n": 1024,
+   "d_nll_tok": -0.34523656279550696,
+   "ci_lo": -0.3910684692053881,
+   "ci_hi": -0.3006767029995002,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": -0.13789755501784384,
+   "d_entropy_ci": [
+    -0.15783788452390582,
+    -0.11805105918319897
+   ],
+   "entropy_flag": true,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 42.6075523504166,
+   "d_genppl": -17.568115710700468,
+   "top10_share_signed": 0.5145029079200822,
+   "top10_share_abs": 0.3026349085814122,
+   "frac_samples_with_nll_change": 0.9814453125,
+   "frac_tokens_changed": 0.901702880859375,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.901702880859375,
+   "nfe_per_sample": 287,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_2.json",
+   "batches": [
+    0
+   ]
+  },
+  "refine_3": {
+   "n": 1024,
+   "d_nll_tok": -0.26476824164121915,
+   "ci_lo": -0.29705260703064856,
+   "ci_hi": -0.23239479030219393,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": -0.03768137376755476,
+   "d_entropy_ci": [
+    -0.04958139802329242,
+    -0.025820267183007672
+   ],
+   "entropy_flag": true,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 46.177831438632765,
+   "d_genppl": -13.9978366224843,
+   "top10_share_signed": 0.4691566818569727,
+   "top10_share_abs": 0.2767799238438071,
+   "frac_samples_with_nll_change": 0.97265625,
+   "frac_tokens_changed": 0.8680191040039062,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.8680191040039062,
+   "nfe_per_sample": 255,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_3.json",
+   "batches": [
+    0
+   ]
+  },
+  "refine_4": {
+   "n": 1024,
+   "d_nll_tok": -0.08745319044348498,
+   "ci_lo": -0.11121053863400407,
+   "ci_hi": -0.06318830543578054,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": 0.01851228647865355,
+   "d_entropy_ci": [
+    0.012060444278176874,
+    0.024855814158217977
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 55.13666355415813,
+   "d_genppl": -5.039004506958932,
+   "top10_share_signed": 0.888576168856314,
+   "top10_share_abs": 0.2663097374366437,
+   "frac_samples_with_nll_change": 0.96875,
+   "frac_tokens_changed": 0.6631698608398438,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.6631698608398438,
+   "nfe_per_sample": 223,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_4.json",
+   "batches": [
+    0
+   ]
+  },
+  "refine_5": {
+   "n": 2048,
+   "d_nll_tok": 0.029471074196479208,
+   "ci_lo": 0.017157135752515495,
+   "ci_hi": 0.0415378224929469,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": 0.01741922285873443,
+   "d_entropy_ci": [
+    0.014520922876545227,
+    0.020335113620967602
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 61.84579414013268,
+   "d_genppl": 1.7960659957208733,
+   "top10_share_signed": 1.783243708416598,
+   "top10_share_abs": 0.27812641119050097,
+   "frac_samples_with_nll_change": 0.95458984375,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.399505615234375,
+   "frac_tokens_changed_net": 0.399505615234375,
+   "nfe_per_sample": 191
+  },
+  "refine_6": {
+   "n": 1024,
+   "d_nll_tok": 0.03784564944473079,
+   "ci_lo": 0.02764102475729673,
+   "ci_hi": 0.04834842526491187,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": 0.009274011943489313,
+   "d_entropy_ci": [
+    0.006987467309227213,
+    0.011515015515033155
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 62.49669872975802,
+   "d_genppl": 2.321030668640958,
+   "top10_share_signed": 0.9069317958738996,
+   "top10_share_abs": 0.29051619721369204,
+   "frac_samples_with_nll_change": 0.92578125,
+   "frac_tokens_changed": 0.1739044189453125,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.1739044189453125,
+   "nfe_per_sample": 159,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_6.json",
+   "batches": [
+    0
+   ]
+  },
+  "refine_7": {
+   "n": 2048,
+   "d_nll_tok": 0.009353924579730943,
+   "ci_lo": 0.006303186469680133,
+   "ci_hi": 0.012389667363781751,
+   "ci_excludes_0": true,
+   "material": false,
+   "borderline": true,
+   "d_entropy": 0.0007635640213266015,
+   "d_entropy_ci": [
+    0.0002791692939354107,
+    0.001261557117686607
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 60.6140640354385,
+   "d_genppl": 0.564335891026694,
+   "top10_share_signed": 1.5597405304677177,
+   "top10_share_abs": 0.3323801168918012,
+   "frac_samples_with_nll_change": 0.712890625,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.03015899658203125,
+   "frac_tokens_changed_net": 0.03015899658203125,
+   "nfe_per_sample": 121
+  },
+  "nochurn_0": {
+   "n": 2048,
+   "d_nll_tok": -0.00700671671989106,
+   "ci_lo": -0.01781238722941303,
+   "ci_hi": 0.0036962621156692954,
+   "ci_excludes_0": false,
+   "material": false,
+   "borderline": true,
+   "d_entropy": -0.002207656274549663,
+   "d_entropy_ci": [
+    -0.0052749703434528785,
+    0.0007960444432683287
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 59.63044731654005,
+   "d_genppl": -0.41928082787175924,
+   "top10_share_signed": 6.598430791193051,
+   "top10_share_abs": 0.33040781536028324,
+   "frac_samples_with_nll_change": 0.89892578125,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.29154205322265625,
+   "frac_tokens_changed_net": 0.29154205322265625,
+   "nfe_per_sample": 255
+  },
+  "nochurn_1": {
+   "n": 2048,
+   "d_nll_tok": -0.01632364411269549,
+   "ci_lo": -0.033520016681276535,
+   "ci_hi": 0.0004861733074500129,
+   "ci_excludes_0": false,
+   "material": false,
+   "borderline": true,
+   "d_entropy": -0.01183502608910203,
+   "d_entropy_ci": [
+    -0.019493510300526394,
+    -0.004481971680070279
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 59.07745486396573,
+   "d_genppl": -0.9722732804460819,
+   "top10_share_signed": 4.691624283025373,
+   "top10_share_abs": 0.3707993192002729,
+   "frac_samples_with_nll_change": 0.9306640625,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.4442596435546875,
+   "frac_tokens_changed_net": 0.4442596435546875,
+   "nfe_per_sample": 223
+  },
+  "nochurn_2": {
+   "n": 2048,
+   "d_nll_tok": -0.023739760703406887,
+   "ci_lo": -0.05173770092333334,
+   "ci_hi": 0.004432843740724965,
+   "ci_excludes_0": false,
+   "material": false,
+   "borderline": true,
+   "d_entropy": 0.005670859827660024,
+   "d_entropy_ci": [
+    -0.004810643364908173,
+    0.01625065041880589
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 58.640950156314794,
+   "d_genppl": -1.4087779880970146,
+   "top10_share_signed": 5.007528698459422,
+   "top10_share_abs": 0.31095590232010917,
+   "frac_samples_with_nll_change": 0.98193359375,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.89691162109375,
+   "frac_tokens_changed_net": 0.89691162109375,
+   "nfe_per_sample": 191
+  },
+  "nochurn_3": {
+   "n": 2048,
+   "d_nll_tok": 0.03153535373747118,
+   "ci_lo": 0.008720491645644724,
+   "ci_hi": 0.05439294978524773,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": true,
+   "d_entropy": 0.0190931330434978,
+   "d_entropy_ci": [
+    0.011494635677081533,
+    0.02664581652788911
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.04972814441181,
+   "genppl_branch": 61.973593008585404,
+   "d_genppl": 1.923864864173595,
+   "top10_share_signed": 3.2070211786289913,
+   "top10_share_abs": 0.2816168075498128,
+   "frac_samples_with_nll_change": 0.982421875,
+   "batches": [
+    0,
+    1
+   ],
+   "frac_tokens_changed": 0.9005241394042969,
+   "frac_tokens_changed_net": 0.9005241394042969,
+   "nfe_per_sample": 159
+  },
+  "nochurn_4": {
+   "n": 1024,
+   "d_nll_tok": 0.09295487523004109,
+   "ci_lo": 0.06858659402225473,
+   "ci_hi": 0.11746986969848028,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": 0.010624533286318183,
+   "d_entropy_ci": [
+    0.003989043430192396,
+    0.01750661361147649
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 66.03751309644721,
+   "d_genppl": 5.861845035330148,
+   "top10_share_signed": 0.8699025180769105,
+   "top10_share_abs": 0.26763461442661896,
+   "frac_samples_with_nll_change": 0.9677734375,
+   "frac_tokens_changed": 0.7245635986328125,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.7245635986328125,
+   "nfe_per_sample": 127,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_4.json",
+   "batches": [
+    0
+   ]
+  },
+  "nochurn_5": {
+   "n": 1024,
+   "d_nll_tok": 0.10701283699814201,
+   "ci_lo": 0.08790698373260171,
+   "ci_hi": 0.12615126699632268,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": -0.00401811464689672,
+   "d_entropy_ci": [
+    -0.008492951025255024,
+    0.0003925088909454629
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 66.97242199073322,
+   "d_genppl": 6.796753929616159,
+   "top10_share_signed": 0.6266086810881619,
+   "top10_share_abs": 0.27324115778064245,
+   "frac_samples_with_nll_change": 0.94921875,
+   "frac_tokens_changed": 0.49969482421875,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.49969482421875,
+   "nfe_per_sample": 95,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_5.json",
+   "batches": [
+    0
+   ]
+  },
+  "nochurn_6": {
+   "n": 1024,
+   "d_nll_tok": 0.07453976136430907,
+   "ci_lo": 0.06119930079816305,
+   "ci_hi": 0.08779716172938794,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": -0.00199326709844172,
+   "d_entropy_ci": [
+    -0.0049556030367966745,
+    0.000906308932462704
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 64.83255355851811,
+   "d_genppl": 4.656885497401049,
+   "top10_share_signed": 0.6416666359147465,
+   "top10_share_abs": 0.2778453323649828,
+   "frac_samples_with_nll_change": 0.9482421875,
+   "frac_tokens_changed": 0.28453826904296875,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.28453826904296875,
+   "nfe_per_sample": 63,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_6.json",
+   "batches": [
+    0
+   ]
+  },
+  "nochurn_7": {
+   "n": 1024,
+   "d_nll_tok": 0.05769383120703786,
+   "ci_lo": 0.0499022653569837,
+   "ci_hi": 0.0653091609126774,
+   "ci_excludes_0": true,
+   "material": true,
+   "borderline": false,
+   "d_entropy": 0.0007534923497587442,
+   "d_entropy_ci": [
+    -0.0006945495028048754,
+    0.002189031470334157
+   ],
+   "entropy_flag": false,
+   "genppl_ref": 60.175668061117065,
+   "genppl_branch": 63.74953671431825,
+   "d_genppl": 3.5738686532011883,
+   "top10_share_signed": 0.4942539381750136,
+   "top10_share_abs": 0.27531640887525505,
+   "frac_samples_with_nll_change": 0.9248046875,
+   "frac_tokens_changed": 0.10172271728515625,
+   "null_frac_tokens_changed": 0.0,
+   "frac_tokens_changed_net": 0.10172271728515625,
+   "nfe_per_sample": 31,
+   "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_7.json",
+   "batches": [
+    0
+   ]
+  }
+ },
+ "rows_by_batch": {
+  "null": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.0,
+    "ci_lo": 0.0,
+    "ci_hi": 0.0,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": false,
+    "d_entropy": 0.0,
+    "d_entropy_ci": [
+     0.0,
+     0.0
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 60.175668061117065,
+    "d_genppl": 0.0,
+    "top10_share_signed": NaN,
+    "top10_share_abs": NaN,
+    "frac_samples_with_nll_change": 0.0,
+    "frac_tokens_changed": 0.0,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.0,
+    "nfe_per_sample": 255,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/null.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": 0.0,
+    "ci_lo": 0.0,
+    "ci_hi": 0.0,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": false,
+    "d_entropy": 0.0,
+    "d_entropy_ci": [
+     0.0,
+     0.0
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 59.92407009086704,
+    "d_genppl": 0.0,
+    "top10_share_signed": NaN,
+    "top10_share_abs": NaN,
+    "frac_samples_with_nll_change": 0.0,
+    "frac_tokens_changed": 0.0,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.0,
+    "nfe_per_sample": 255,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/null.json"
+   }
+  },
+  "refine_0": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.0075922709581508485,
+    "ci_lo": -0.0226997313634393,
+    "ci_hi": 0.007293899615232769,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.001168442890048027,
+    "d_entropy_ci": [
+     -0.005298971518641338,
+     0.003021468146471306
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 59.72052804356281,
+    "d_genppl": -0.4551400175542568,
+    "top10_share_signed": 6.344168259759832,
+    "top10_share_abs": 0.336308918062952,
+    "frac_samples_with_nll_change": 0.8974609375,
+    "frac_tokens_changed": 0.297821044921875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.297821044921875,
+    "nfe_per_sample": 351,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_0.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": -0.0074244295040992725,
+    "ci_lo": -0.021542432567908908,
+    "ci_hi": 0.007110088858794561,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.002769694896414876,
+    "d_entropy_ci": [
+     -0.006712791306199506,
+     0.001176042400766163
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 59.480815549021386,
+    "d_genppl": -0.44325454184565416,
+    "top10_share_signed": 6.007969929810782,
+    "top10_share_abs": 0.32449714783928796,
+    "frac_samples_with_nll_change": 0.8994140625,
+    "frac_tokens_changed": 0.28006744384765625,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.28006744384765625,
+    "nfe_per_sample": 351,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/refine_0.json"
+   }
+  },
+  "refine_1": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.05233505374708791,
+    "ci_lo": -0.07681181940970438,
+    "ci_hi": -0.029381330655626738,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": -0.0321702912915498,
+    "d_entropy_ci": [
+     -0.04445102200261317,
+     -0.020440937433158984
+    ],
+    "entropy_flag": true,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 57.10736153068379,
+    "d_genppl": -3.0683065304332757,
+    "top10_share_signed": 1.6034909337801806,
+    "top10_share_abs": 0.39720038861366436,
+    "frac_samples_with_nll_change": 0.9248046875,
+    "frac_tokens_changed": 0.3828582763671875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.3828582763671875,
+    "nfe_per_sample": 319,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_1.json"
+   }
+  },
+  "refine_2": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.34523656279550696,
+    "ci_lo": -0.3910684692053881,
+    "ci_hi": -0.3006767029995002,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": -0.13789755501784384,
+    "d_entropy_ci": [
+     -0.15783788452390582,
+     -0.11805105918319897
+    ],
+    "entropy_flag": true,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 42.6075523504166,
+    "d_genppl": -17.568115710700468,
+    "top10_share_signed": 0.5145029079200822,
+    "top10_share_abs": 0.3026349085814122,
+    "frac_samples_with_nll_change": 0.9814453125,
+    "frac_tokens_changed": 0.901702880859375,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.901702880859375,
+    "nfe_per_sample": 287,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_2.json"
+   }
+  },
+  "refine_3": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.26476824164121915,
+    "ci_lo": -0.29705260703064856,
+    "ci_hi": -0.23239479030219393,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": -0.03768137376755476,
+    "d_entropy_ci": [
+     -0.04958139802329242,
+     -0.025820267183007672
+    ],
+    "entropy_flag": true,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 46.177831438632765,
+    "d_genppl": -13.9978366224843,
+    "top10_share_signed": 0.4691566818569727,
+    "top10_share_abs": 0.2767799238438071,
+    "frac_samples_with_nll_change": 0.97265625,
+    "frac_tokens_changed": 0.8680191040039062,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.8680191040039062,
+    "nfe_per_sample": 255,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_3.json"
+   }
+  },
+  "refine_4": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.08745319044348498,
+    "ci_lo": -0.11121053863400407,
+    "ci_hi": -0.06318830543578054,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": 0.01851228647865355,
+    "d_entropy_ci": [
+     0.012060444278176874,
+     0.024855814158217977
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 55.13666355415813,
+    "d_genppl": -5.039004506958932,
+    "top10_share_signed": 0.888576168856314,
+    "top10_share_abs": 0.2663097374366437,
+    "frac_samples_with_nll_change": 0.96875,
+    "frac_tokens_changed": 0.6631698608398438,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.6631698608398438,
+    "nfe_per_sample": 223,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_4.json"
+   }
+  },
+  "refine_5": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.018186649651961595,
+    "ci_lo": 0.0012216599508876548,
+    "ci_hi": 0.03568644081243429,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": true,
+    "d_entropy": 0.017063761362805963,
+    "d_entropy_ci": [
+     0.012947024818276986,
+     0.021303852763958277
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 61.28007413648692,
+    "d_genppl": 1.1044060753698517,
+    "top10_share_signed": 2.861775210252828,
+    "top10_share_abs": 0.27523259436505265,
+    "frac_samples_with_nll_change": 0.953125,
+    "frac_tokens_changed": 0.40383148193359375,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.40383148193359375,
+    "nfe_per_sample": 191,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_5.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": 0.04078566758825897,
+    "ci_lo": 0.024146277454537103,
+    "ci_hi": 0.057483464825226836,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": 0.017774684354662895,
+    "d_entropy_ci": [
+     0.013825789239490405,
+     0.0218090224196203
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 62.4186388258195,
+    "d_genppl": 2.494568734952459,
+    "top10_share_signed": 1.291842320492002,
+    "top10_share_abs": 0.27895470883262247,
+    "frac_samples_with_nll_change": 0.9560546875,
+    "frac_tokens_changed": 0.39517974853515625,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.39517974853515625,
+    "nfe_per_sample": 191,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/refine_5.json"
+   }
+  },
+  "refine_6": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.03784564944473079,
+    "ci_lo": 0.02764102475729673,
+    "ci_hi": 0.04834842526491187,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": 0.009274011943489313,
+    "d_entropy_ci": [
+     0.006987467309227213,
+     0.011515015515033155
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 62.49669872975802,
+    "d_genppl": 2.321030668640958,
+    "top10_share_signed": 0.9069317958738996,
+    "top10_share_abs": 0.29051619721369204,
+    "frac_samples_with_nll_change": 0.92578125,
+    "frac_tokens_changed": 0.1739044189453125,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.1739044189453125,
+    "nfe_per_sample": 159,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_6.json"
+   }
+  },
+  "refine_7": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.009250803872742352,
+    "ci_lo": 0.004926669223836178,
+    "ci_hi": 0.01357338324190449,
+    "ci_excludes_0": true,
+    "material": false,
+    "borderline": true,
+    "d_entropy": 0.000946682645007968,
+    "d_entropy_ci": [
+     0.00023352974676527083,
+     0.00165319773950614
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 60.73492416020542,
+    "d_genppl": 0.5592560990883584,
+    "top10_share_signed": 1.5695884739409525,
+    "top10_share_abs": 0.33170467005052184,
+    "frac_samples_with_nll_change": 0.7109375,
+    "frac_tokens_changed": 0.03115081787109375,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.03115081787109375,
+    "nfe_per_sample": 121,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/refine_7.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": 0.009456132043778709,
+    "ci_lo": 0.005224144160684042,
+    "ci_hi": 0.013668543422025082,
+    "ci_excludes_0": true,
+    "material": false,
+    "borderline": true,
+    "d_entropy": 0.0005804453976452351,
+    "d_entropy_ci": [
+     -8.019024971872567e-05,
+     0.0012545073754154144
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 60.493407633303384,
+    "d_genppl": 0.5693375424363438,
+    "top10_share_signed": 1.5369225128026947,
+    "top10_share_abs": 0.330754344476711,
+    "frac_samples_with_nll_change": 0.71484375,
+    "frac_tokens_changed": 0.02916717529296875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.02916717529296875,
+    "nfe_per_sample": 121,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/refine_7.json"
+   }
+  },
+  "nochurn_0": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.015784136709160457,
+    "ci_lo": -0.031417569980288995,
+    "ci_hi": 2.4099621208847492e-06,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.00354943098500371,
+    "d_entropy_ci": [
+     -0.008374172128969803,
+     0.0011125633784104135
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 59.233303857474866,
+    "d_genppl": -0.9423642036421995,
+    "top10_share_signed": 3.2022150227466626,
+    "top10_share_abs": 0.34530681157490534,
+    "frac_samples_with_nll_change": 0.8955078125,
+    "frac_tokens_changed": 0.2981414794921875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.2981414794921875,
+    "nfe_per_sample": 255,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_0.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": 0.0017708618535268172,
+    "ci_lo": -0.012333973509207419,
+    "ci_hi": 0.015934760790959634,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.0008658815640956163,
+    "d_entropy_ci": [
+     -0.0044661240419372914,
+     0.0027791661967057723
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 60.03028135568155,
+    "d_genppl": 0.10621126481451171,
+    "top10_share_signed": 24.161888701701088,
+    "top10_share_abs": 0.31213561276283447,
+    "frac_samples_with_nll_change": 0.90234375,
+    "frac_tokens_changed": 0.284942626953125,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.284942626953125,
+    "nfe_per_sample": 255,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/nochurn_0.json"
+   }
+  },
+  "nochurn_1": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.009297596645360784,
+    "ci_lo": -0.03417107105362753,
+    "ci_hi": 0.015655319399126854,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.009034086251631379,
+    "d_entropy_ci": [
+     -0.01925332549144514,
+     0.0011546914000064132
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 59.61877188139503,
+    "d_genppl": -0.5568961797220382,
+    "top10_share_signed": 8.265968974969004,
+    "top10_share_abs": 0.372627965349581,
+    "frac_samples_with_nll_change": 0.9267578125,
+    "frac_tokens_changed": 0.45285797119140625,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.45285797119140625,
+    "nfe_per_sample": 223,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_1.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": -0.023333235932192053,
+    "ci_lo": -0.04622577705424753,
+    "ci_hi": -7.869966622964585e-05,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": true,
+    "d_entropy": -0.01463596592657268,
+    "d_entropy_ci": [
+     -0.02571548247942701,
+     -0.004168813925934956
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 58.542034014731456,
+    "d_genppl": -1.3820360761355843,
+    "top10_share_signed": 3.249365032281882,
+    "top10_share_abs": 0.3662532092529414,
+    "frac_samples_with_nll_change": 0.9345703125,
+    "frac_tokens_changed": 0.43566131591796875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.43566131591796875,
+    "nfe_per_sample": 223,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/nochurn_1.json"
+   }
+  },
+  "nochurn_2": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": -0.037687077284724424,
+    "ci_lo": -0.07733702587627697,
+    "ci_hi": 0.001305095452594387,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": -0.0028495811857283115,
+    "d_entropy_ci": [
+     -0.018933630379615353,
+     0.012759858503704884
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 57.950025411557256,
+    "d_genppl": -2.225642649559809,
+    "top10_share_signed": 3.247885896286497,
+    "top10_share_abs": 0.3118820600002774,
+    "frac_samples_with_nll_change": 0.98046875,
+    "frac_tokens_changed": 0.8994216918945312,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.8994216918945312,
+    "nfe_per_sample": 191,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_2.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": -0.009836324051923029,
+    "ci_lo": -0.048234156196355425,
+    "ci_hi": 0.029142573032051665,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": 0.01419130084104836,
+    "d_entropy_ci": [
+     0.00011771466233767644,
+     0.028340159560320898
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 59.33752696224115,
+    "d_genppl": -0.5865431286258911,
+    "top10_share_signed": 11.63777252540764,
+    "top10_share_abs": 0.30783135613111184,
+    "frac_samples_with_nll_change": 0.9833984375,
+    "frac_tokens_changed": 0.8944015502929688,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.8944015502929688,
+    "nfe_per_sample": 191,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/nochurn_2.json"
+   }
+  },
+  "nochurn_3": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.018223623454771243,
+    "ci_lo": -0.013374776804611542,
+    "ci_hi": 0.0502513752838609,
+    "ci_excludes_0": false,
+    "material": false,
+    "borderline": true,
+    "d_entropy": 0.011271349620074034,
+    "d_entropy_ci": [
+     0.0010542530624661603,
+     0.02185389416408725
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 61.282339935751544,
+    "d_genppl": 1.106671874634479,
+    "top10_share_signed": 5.387488062215977,
+    "top10_share_abs": 0.2788043566825733,
+    "frac_samples_with_nll_change": 0.9814453125,
+    "frac_tokens_changed": 0.898193359375,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.898193359375,
+    "nfe_per_sample": 159,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_3.json"
+   },
+   "1": {
+    "n": 1024,
+    "d_nll_tok": 0.04480328540047207,
+    "ci_lo": 0.012991717175915341,
+    "ci_hi": 0.07734691867709124,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": 0.026914916466921568,
+    "d_entropy_ci": [
+     0.015957376331789418,
+     0.03812074462184682
+    ],
+    "entropy_flag": true,
+    "genppl_ref": 59.92407009086704,
+    "genppl_branch": 62.66991749381043,
+    "d_genppl": 2.74584740294339,
+    "top10_share_signed": 2.3018869478620627,
+    "top10_share_abs": 0.2820773459977546,
+    "frac_samples_with_nll_change": 0.9833984375,
+    "frac_tokens_changed": 0.9028549194335938,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.9028549194335938,
+    "nfe_per_sample": 159,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch1/nochurn_3.json"
+   }
+  },
+  "nochurn_4": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.09295487523004109,
+    "ci_lo": 0.06858659402225473,
+    "ci_hi": 0.11746986969848028,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": 0.010624533286318183,
+    "d_entropy_ci": [
+     0.003989043430192396,
+     0.01750661361147649
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 66.03751309644721,
+    "d_genppl": 5.861845035330148,
+    "top10_share_signed": 0.8699025180769105,
+    "top10_share_abs": 0.26763461442661896,
+    "frac_samples_with_nll_change": 0.9677734375,
+    "frac_tokens_changed": 0.7245635986328125,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.7245635986328125,
+    "nfe_per_sample": 127,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_4.json"
+   }
+  },
+  "nochurn_5": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.10701283699814201,
+    "ci_lo": 0.08790698373260171,
+    "ci_hi": 0.12615126699632268,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": -0.00401811464689672,
+    "d_entropy_ci": [
+     -0.008492951025255024,
+     0.0003925088909454629
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 66.97242199073322,
+    "d_genppl": 6.796753929616159,
+    "top10_share_signed": 0.6266086810881619,
+    "top10_share_abs": 0.27324115778064245,
+    "frac_samples_with_nll_change": 0.94921875,
+    "frac_tokens_changed": 0.49969482421875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.49969482421875,
+    "nfe_per_sample": 95,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_5.json"
+   }
+  },
+  "nochurn_6": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.07453976136430907,
+    "ci_lo": 0.06119930079816305,
+    "ci_hi": 0.08779716172938794,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": -0.00199326709844172,
+    "d_entropy_ci": [
+     -0.0049556030367966745,
+     0.000906308932462704
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 64.83255355851811,
+    "d_genppl": 4.656885497401049,
+    "top10_share_signed": 0.6416666359147465,
+    "top10_share_abs": 0.2778453323649828,
+    "frac_samples_with_nll_change": 0.9482421875,
+    "frac_tokens_changed": 0.28453826904296875,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.28453826904296875,
+    "nfe_per_sample": 63,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_6.json"
+   }
+  },
+  "nochurn_7": {
+   "0": {
+    "n": 1024,
+    "d_nll_tok": 0.05769383120703786,
+    "ci_lo": 0.0499022653569837,
+    "ci_hi": 0.0653091609126774,
+    "ci_excludes_0": true,
+    "material": true,
+    "borderline": false,
+    "d_entropy": 0.0007534923497587442,
+    "d_entropy_ci": [
+     -0.0006945495028048754,
+     0.002189031470334157
+    ],
+    "entropy_flag": false,
+    "genppl_ref": 60.175668061117065,
+    "genppl_branch": 63.74953671431825,
+    "d_genppl": 3.5738686532011883,
+    "top10_share_signed": 0.4942539381750136,
+    "top10_share_abs": 0.27531640887525505,
+    "frac_samples_with_nll_change": 0.9248046875,
+    "frac_tokens_changed": 0.10172271728515625,
+    "null_frac_tokens_changed": 0.0,
+    "frac_tokens_changed_net": 0.10172271728515625,
+    "nfe_per_sample": 31,
+    "source": "/home/rg625/mnt/BitstreamDiffusion/experiments/compute_allocation/results/batch0/nochurn_7.json"
+   }
+  }
+ },
+ "token_breakdowns_batch0": {
+  "null": {
+   "frac_changed": 0.0,
+   "frac_samples_any_change": 0.0,
+   "by_position_bin16": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.0,
+    "11-100": 0.0,
+    "101-1000": 0.0,
+    "1001-inf": 0.0
+   },
+   "special_vs_regular": [
+    0.0,
+    0.0
+   ],
+   "bitflip_by_position_msb_first": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "net_by_position_bin16": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "net_bitflip_by_position": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "refine_0": {
+   "frac_changed": 0.297821044921875,
+   "frac_samples_any_change": 0.962890625,
+   "by_position_bin16": [
+    0.2969970703125,
+    0.278564453125,
+    0.28778076171875,
+    0.3018798828125,
+    0.30181884765625,
+    0.3006591796875,
+    0.2982177734375,
+    0.316650390625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.2248008829758673,
+    "11-100": 0.2748388099122194,
+    "101-1000": 0.28018412733625425,
+    "1001-inf": 0.4006603060910439
+   },
+   "special_vs_regular": [
+    0.12161731932505572,
+    0.30214725125262837
+   ],
+   "bitflip_by_position_msb_first": [
+    0.0306549072265625,
+    0.05500030517578125,
+    0.0837249755859375,
+    0.10863494873046875,
+    0.1174468994140625,
+    0.11100006103515625,
+    0.111541748046875,
+    0.11122894287109375,
+    0.11002349853515625,
+    0.12512969970703125,
+    0.12853240966796875,
+    0.127899169921875,
+    0.128082275390625,
+    0.1311492919921875,
+    0.13114166259765625
+   ],
+   "net_by_position_bin16": [
+    0.2969970703125,
+    0.278564453125,
+    0.28778076171875,
+    0.3018798828125,
+    0.30181884765625,
+    0.3006591796875,
+    0.2982177734375,
+    0.316650390625
+   ],
+   "net_bitflip_by_position": [
+    0.0306549072265625,
+    0.05500030517578125,
+    0.0837249755859375,
+    0.10863494873046875,
+    0.1174468994140625,
+    0.11100006103515625,
+    0.111541748046875,
+    0.11122894287109375,
+    0.11002349853515625,
+    0.12512969970703125,
+    0.12853240966796875,
+    0.127899169921875,
+    0.128082275390625,
+    0.1311492919921875,
+    0.13114166259765625
+   ]
+  },
+  "refine_1": {
+   "frac_changed": 0.3828582763671875,
+   "frac_samples_any_change": 0.9765625,
+   "by_position_bin16": [
+    0.382568359375,
+    0.38232421875,
+    0.37847900390625,
+    0.383056640625,
+    0.38604736328125,
+    0.38531494140625,
+    0.37835693359375,
+    0.38671875
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.3154550607045909,
+    "11-100": 0.36479453118931093,
+    "101-1000": 0.3659530808052798,
+    "1001-inf": 0.47614784141462185
+   },
+   "special_vs_regular": [
+    0.23432028016555237,
+    0.3865052254731066
+   ],
+   "bitflip_by_position_msb_first": [
+    0.04018402099609375,
+    0.0708465576171875,
+    0.10918426513671875,
+    0.15065765380859375,
+    0.1612091064453125,
+    0.154541015625,
+    0.15328216552734375,
+    0.15032196044921875,
+    0.1473541259765625,
+    0.16790008544921875,
+    0.17023468017578125,
+    0.17240142822265625,
+    0.1700592041015625,
+    0.17528533935546875,
+    0.17247772216796875
+   ],
+   "net_by_position_bin16": [
+    0.382568359375,
+    0.38232421875,
+    0.37847900390625,
+    0.383056640625,
+    0.38604736328125,
+    0.38531494140625,
+    0.37835693359375,
+    0.38671875
+   ],
+   "net_bitflip_by_position": [
+    0.04018402099609375,
+    0.0708465576171875,
+    0.10918426513671875,
+    0.15065765380859375,
+    0.1612091064453125,
+    0.154541015625,
+    0.15328216552734375,
+    0.15032196044921875,
+    0.1473541259765625,
+    0.16790008544921875,
+    0.17023468017578125,
+    0.17240142822265625,
+    0.1700592041015625,
+    0.17528533935546875,
+    0.17247772216796875
+   ]
+  },
+  "refine_2": {
+   "frac_changed": 0.901702880859375,
+   "frac_samples_any_change": 1.0,
+   "by_position_bin16": [
+    0.86663818359375,
+    0.8826904296875,
+    0.90203857421875,
+    0.91217041015625,
+    0.92364501953125,
+    0.9185791015625,
+    0.90875244140625,
+    0.89910888671875
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.8569340452823435,
+    "11-100": 0.8940806338848754,
+    "101-1000": 0.9043591592257778,
+    "1001-inf": 0.9465040149967824
+   },
+   "special_vs_regular": [
+    0.8382680674944285,
+    0.9032603512831135
+   ],
+   "bitflip_by_position_msb_first": [
+    0.104888916015625,
+    0.18289947509765625,
+    0.27143096923828125,
+    0.41375732421875,
+    0.427947998046875,
+    0.4104156494140625,
+    0.40677642822265625,
+    0.39888763427734375,
+    0.3920440673828125,
+    0.43732452392578125,
+    0.4364776611328125,
+    0.43634033203125,
+    0.4317169189453125,
+    0.437255859375,
+    0.433685302734375
+   ],
+   "net_by_position_bin16": [
+    0.86663818359375,
+    0.8826904296875,
+    0.90203857421875,
+    0.91217041015625,
+    0.92364501953125,
+    0.9185791015625,
+    0.90875244140625,
+    0.89910888671875
+   ],
+   "net_bitflip_by_position": [
+    0.104888916015625,
+    0.18289947509765625,
+    0.27143096923828125,
+    0.41375732421875,
+    0.427947998046875,
+    0.4104156494140625,
+    0.40677642822265625,
+    0.39888763427734375,
+    0.3920440673828125,
+    0.43732452392578125,
+    0.4364776611328125,
+    0.43634033203125,
+    0.4317169189453125,
+    0.437255859375,
+    0.433685302734375
+   ]
+  },
+  "refine_3": {
+   "frac_changed": 0.8680191040039062,
+   "frac_samples_any_change": 0.9990234375,
+   "by_position_bin16": [
+    0.8734130859375,
+    0.85308837890625,
+    0.8531494140625,
+    0.8524169921875,
+    0.8660888671875,
+    0.8729248046875,
+    0.87835693359375,
+    0.89471435546875
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.8175282641768338,
+    "11-100": 0.8423444418550454,
+    "101-1000": 0.8573845044645333,
+    "1001-inf": 0.944601438124283
+   },
+   "special_vs_regular": [
+    0.7943330149633875,
+    0.8698282668000719
+   ],
+   "bitflip_by_position_msb_first": [
+    0.10973358154296875,
+    0.183441162109375,
+    0.26982879638671875,
+    0.39990997314453125,
+    0.41452789306640625,
+    0.39606475830078125,
+    0.39066314697265625,
+    0.3871307373046875,
+    0.38027191162109375,
+    0.41860198974609375,
+    0.41963958740234375,
+    0.42156219482421875,
+    0.4166259765625,
+    0.42083740234375,
+    0.4176177978515625
+   ],
+   "net_by_position_bin16": [
+    0.8734130859375,
+    0.85308837890625,
+    0.8531494140625,
+    0.8524169921875,
+    0.8660888671875,
+    0.8729248046875,
+    0.87835693359375,
+    0.89471435546875
+   ],
+   "net_bitflip_by_position": [
+    0.10973358154296875,
+    0.183441162109375,
+    0.26982879638671875,
+    0.39990997314453125,
+    0.41452789306640625,
+    0.39606475830078125,
+    0.39066314697265625,
+    0.3871307373046875,
+    0.38027191162109375,
+    0.41860198974609375,
+    0.41963958740234375,
+    0.42156219482421875,
+    0.4166259765625,
+    0.42083740234375,
+    0.4176177978515625
+   ]
+  },
+  "refine_4": {
+   "frac_changed": 0.6631698608398438,
+   "frac_samples_any_change": 0.9990234375,
+   "by_position_bin16": [
+    0.71392822265625,
+    0.6497802734375,
+    0.62774658203125,
+    0.64447021484375,
+    0.6370849609375,
+    0.65325927734375,
+    0.659423828125,
+    0.71966552734375
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.5813918802016526,
+    "11-100": 0.6255729045288588,
+    "101-1000": 0.6238700016638012,
+    "1001-inf": 0.8066086567247699
+   },
+   "special_vs_regular": [
+    0.4775549188156638,
+    0.6677271341582572
+   ],
+   "bitflip_by_position_msb_first": [
+    0.080596923828125,
+    0.13544464111328125,
+    0.20836639404296875,
+    0.2857666015625,
+    0.30162811279296875,
+    0.28707122802734375,
+    0.28485870361328125,
+    0.28388214111328125,
+    0.27663421630859375,
+    0.30828857421875,
+    0.312591552734375,
+    0.309814453125,
+    0.30878448486328125,
+    0.313323974609375,
+    0.3116912841796875
+   ],
+   "net_by_position_bin16": [
+    0.71392822265625,
+    0.6497802734375,
+    0.62774658203125,
+    0.64447021484375,
+    0.6370849609375,
+    0.65325927734375,
+    0.659423828125,
+    0.71966552734375
+   ],
+   "net_bitflip_by_position": [
+    0.080596923828125,
+    0.13544464111328125,
+    0.20836639404296875,
+    0.2857666015625,
+    0.30162811279296875,
+    0.28707122802734375,
+    0.28485870361328125,
+    0.28388214111328125,
+    0.27663421630859375,
+    0.30828857421875,
+    0.312591552734375,
+    0.309814453125,
+    0.30878448486328125,
+    0.313323974609375,
+    0.3116912841796875
+   ]
+  },
+  "refine_5": {
+   "frac_changed": 0.40383148193359375,
+   "frac_samples_any_change": 0.998046875,
+   "by_position_bin16": [
+    0.45556640625,
+    0.37872314453125,
+    0.378173828125,
+    0.3758544921875,
+    0.38043212890625,
+    0.38134765625,
+    0.39849853515625,
+    0.4820556640625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.30179279897383887,
+    "11-100": 0.3802920842072555,
+    "101-1000": 0.3658144307026787,
+    "1001-inf": 0.5548529699784561
+   },
+   "special_vs_regular": [
+    0.13530722699777142,
+    0.41042436938662247
+   ],
+   "bitflip_by_position_msb_first": [
+    0.045623779296875,
+    0.07861328125,
+    0.1197509765625,
+    0.15152740478515625,
+    0.16300201416015625,
+    0.1558074951171875,
+    0.1541290283203125,
+    0.15444183349609375,
+    0.1523895263671875,
+    0.173614501953125,
+    0.17554473876953125,
+    0.1758575439453125,
+    0.177581787109375,
+    0.178955078125,
+    0.17865753173828125
+   ],
+   "net_by_position_bin16": [
+    0.45556640625,
+    0.37872314453125,
+    0.378173828125,
+    0.3758544921875,
+    0.38043212890625,
+    0.38134765625,
+    0.39849853515625,
+    0.4820556640625
+   ],
+   "net_bitflip_by_position": [
+    0.045623779296875,
+    0.07861328125,
+    0.1197509765625,
+    0.15152740478515625,
+    0.16300201416015625,
+    0.1558074951171875,
+    0.1541290283203125,
+    0.15444183349609375,
+    0.1523895263671875,
+    0.173614501953125,
+    0.17554473876953125,
+    0.1758575439453125,
+    0.177581787109375,
+    0.178955078125,
+    0.17865753173828125
+   ]
+  },
+  "refine_6": {
+   "frac_changed": 0.1739044189453125,
+   "frac_samples_any_change": 0.99609375,
+   "by_position_bin16": [
+    0.2103271484375,
+    0.15325927734375,
+    0.15185546875,
+    0.1656494140625,
+    0.154541015625,
+    0.1611328125,
+    0.16748046875,
+    0.22698974609375
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.09590430450735316,
+    "11-100": 0.14810067583313913,
+    "101-1000": 0.1550385447285231,
+    "1001-inf": 0.2846870540835455
+   },
+   "special_vs_regular": [
+    0.021649156319643426,
+    0.17764263548319015
+   ],
+   "bitflip_by_position_msb_first": [
+    0.01769256591796875,
+    0.03136444091796875,
+    0.04483795166015625,
+    0.05068206787109375,
+    0.056671142578125,
+    0.05438232421875,
+    0.054534912109375,
+    0.05527496337890625,
+    0.05532073974609375,
+    0.063262939453125,
+    0.06491851806640625,
+    0.0650177001953125,
+    0.06429290771484375,
+    0.06781005859375,
+    0.0666656494140625
+   ],
+   "net_by_position_bin16": [
+    0.2103271484375,
+    0.15325927734375,
+    0.15185546875,
+    0.1656494140625,
+    0.154541015625,
+    0.1611328125,
+    0.16748046875,
+    0.22698974609375
+   ],
+   "net_bitflip_by_position": [
+    0.01769256591796875,
+    0.03136444091796875,
+    0.04483795166015625,
+    0.05068206787109375,
+    0.056671142578125,
+    0.05438232421875,
+    0.054534912109375,
+    0.05527496337890625,
+    0.05532073974609375,
+    0.063262939453125,
+    0.06491851806640625,
+    0.0650177001953125,
+    0.06429290771484375,
+    0.06781005859375,
+    0.0666656494140625
+   ]
+  },
+  "refine_7": {
+   "frac_changed": 0.03115081787109375,
+   "frac_samples_any_change": 0.884765625,
+   "by_position_bin16": [
+    0.039794921875,
+    0.02606201171875,
+    0.02581787109375,
+    0.029296875,
+    0.0274658203125,
+    0.02716064453125,
+    0.029541015625,
+    0.0440673828125
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.00945619425469081,
+    "11-100": 0.02194515652916958,
+    "101-1000": 0.026038489268482057,
+    "1001-inf": 0.06328866008225847
+   },
+   "special_vs_regular": [
+    0.0,
+    0.03191564202577952
+   ],
+   "bitflip_by_position_msb_first": [
+    0.0024871826171875,
+    0.00396728515625,
+    0.00521087646484375,
+    0.00534820556640625,
+    0.00647735595703125,
+    0.0063629150390625,
+    0.0069122314453125,
+    0.00699615478515625,
+    0.0066680908203125,
+    0.00768280029296875,
+    0.007904052734375,
+    0.00763702392578125,
+    0.00807952880859375,
+    0.00823974609375,
+    0.00836181640625
+   ],
+   "net_by_position_bin16": [
+    0.039794921875,
+    0.02606201171875,
+    0.02581787109375,
+    0.029296875,
+    0.0274658203125,
+    0.02716064453125,
+    0.029541015625,
+    0.0440673828125
+   ],
+   "net_bitflip_by_position": [
+    0.0024871826171875,
+    0.00396728515625,
+    0.00521087646484375,
+    0.00534820556640625,
+    0.00647735595703125,
+    0.0063629150390625,
+    0.0069122314453125,
+    0.00699615478515625,
+    0.0066680908203125,
+    0.00768280029296875,
+    0.007904052734375,
+    0.00763702392578125,
+    0.00807952880859375,
+    0.00823974609375,
+    0.00836181640625
+   ]
+  },
+  "nochurn_0": {
+   "frac_changed": 0.2981414794921875,
+   "frac_samples_any_change": 0.9619140625,
+   "by_position_bin16": [
+    0.2962646484375,
+    0.28729248046875,
+    0.28936767578125,
+    0.30059814453125,
+    0.29840087890625,
+    0.30328369140625,
+    0.2998046875,
+    0.31011962890625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.22539748829162068,
+    "11-100": 0.27759651984774336,
+    "101-1000": 0.2764683045865454,
+    "1001-inf": 0.4030385271816681
+   },
+   "special_vs_regular": [
+    0.12575612862145813,
+    0.30237393594984796
+   ],
+   "bitflip_by_position_msb_first": [
+    0.03043365478515625,
+    0.05591583251953125,
+    0.08354949951171875,
+    0.10866546630859375,
+    0.116607666015625,
+    0.11151885986328125,
+    0.11190032958984375,
+    0.11138916015625,
+    0.10964202880859375,
+    0.1252899169921875,
+    0.12804412841796875,
+    0.12824249267578125,
+    0.1277313232421875,
+    0.1316680908203125,
+    0.13047027587890625
+   ],
+   "net_by_position_bin16": [
+    0.2962646484375,
+    0.28729248046875,
+    0.28936767578125,
+    0.30059814453125,
+    0.29840087890625,
+    0.30328369140625,
+    0.2998046875,
+    0.31011962890625
+   ],
+   "net_bitflip_by_position": [
+    0.03043365478515625,
+    0.05591583251953125,
+    0.08354949951171875,
+    0.10866546630859375,
+    0.116607666015625,
+    0.11151885986328125,
+    0.11190032958984375,
+    0.11138916015625,
+    0.10964202880859375,
+    0.1252899169921875,
+    0.12804412841796875,
+    0.12824249267578125,
+    0.1277313232421875,
+    0.1316680908203125,
+    0.13047027587890625
+   ]
+  },
+  "nochurn_1": {
+   "frac_changed": 0.45285797119140625,
+   "frac_samples_any_change": 0.9814453125,
+   "by_position_bin16": [
+    0.44195556640625,
+    0.44146728515625,
+    0.45562744140625,
+    0.46441650390625,
+    0.45745849609375,
+    0.45538330078125,
+    0.45098876953125,
+    0.45556640625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.3836172180294126,
+    "11-100": 0.44682669152489707,
+    "101-1000": 0.44254339748211413,
+    "1001-inf": 0.5325536498698973
+   },
+   "special_vs_regular": [
+    0.2941738299904489,
+    0.45675403147008936
+   ],
+   "bitflip_by_position_msb_first": [
+    0.04813385009765625,
+    0.085113525390625,
+    0.130340576171875,
+    0.18160247802734375,
+    0.1941070556640625,
+    0.1844635009765625,
+    0.184112548828125,
+    0.181976318359375,
+    0.17823028564453125,
+    0.20296478271484375,
+    0.20380401611328125,
+    0.20543670654296875,
+    0.202789306640625,
+    0.2077178955078125,
+    0.20619964599609375
+   ],
+   "net_by_position_bin16": [
+    0.44195556640625,
+    0.44146728515625,
+    0.45562744140625,
+    0.46441650390625,
+    0.45745849609375,
+    0.45538330078125,
+    0.45098876953125,
+    0.45556640625
+   ],
+   "net_bitflip_by_position": [
+    0.04813385009765625,
+    0.085113525390625,
+    0.130340576171875,
+    0.18160247802734375,
+    0.1941070556640625,
+    0.1844635009765625,
+    0.184112548828125,
+    0.181976318359375,
+    0.17823028564453125,
+    0.20296478271484375,
+    0.20380401611328125,
+    0.20543670654296875,
+    0.202789306640625,
+    0.2077178955078125,
+    0.20619964599609375
+   ]
+  },
+  "nochurn_2": {
+   "frac_changed": 0.8994216918945312,
+   "frac_samples_any_change": 1.0,
+   "by_position_bin16": [
+    0.86407470703125,
+    0.88995361328125,
+    0.9033203125,
+    0.912353515625,
+    0.915283203125,
+    0.91162109375,
+    0.9085693359375,
+    0.89019775390625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.847448020761865,
+    "11-100": 0.9123358968383438,
+    "101-1000": 0.9107925239864677,
+    "1001-inf": 0.9273943090568255
+   },
+   "special_vs_regular": [
+    0.7994269340974212,
+    0.9018767929587043
+   ],
+   "bitflip_by_position_msb_first": [
+    0.10286712646484375,
+    0.1800689697265625,
+    0.2706146240234375,
+    0.40204620361328125,
+    0.4203033447265625,
+    0.40242767333984375,
+    0.39897918701171875,
+    0.39014434814453125,
+    0.38250732421875,
+    0.42923736572265625,
+    0.428802490234375,
+    0.428924560546875,
+    0.4233551025390625,
+    0.4324798583984375,
+    0.4251861572265625
+   ],
+   "net_by_position_bin16": [
+    0.86407470703125,
+    0.88995361328125,
+    0.9033203125,
+    0.912353515625,
+    0.915283203125,
+    0.91162109375,
+    0.9085693359375,
+    0.89019775390625
+   ],
+   "net_bitflip_by_position": [
+    0.10286712646484375,
+    0.1800689697265625,
+    0.2706146240234375,
+    0.40204620361328125,
+    0.4203033447265625,
+    0.40242767333984375,
+    0.39897918701171875,
+    0.39014434814453125,
+    0.38250732421875,
+    0.42923736572265625,
+    0.428802490234375,
+    0.428924560546875,
+    0.4233551025390625,
+    0.4324798583984375,
+    0.4251861572265625
+   ]
+  },
+  "nochurn_3": {
+   "frac_changed": 0.898193359375,
+   "frac_samples_any_change": 1.0,
+   "by_position_bin16": [
+    0.90447998046875,
+    0.8902587890625,
+    0.88861083984375,
+    0.88360595703125,
+    0.89154052734375,
+    0.8994140625,
+    0.9080810546875,
+    0.9195556640625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.8453599021567282,
+    "11-100": 0.8750873922162666,
+    "101-1000": 0.9003383062503466,
+    "1001-inf": 0.9622282532665566
+   },
+   "special_vs_regular": [
+    0.8268067494428526,
+    0.8999460646754891
+   ],
+   "bitflip_by_position_msb_first": [
+    0.105865478515625,
+    0.18222808837890625,
+    0.27553558349609375,
+    0.404052734375,
+    0.4197998046875,
+    0.40595245361328125,
+    0.40006256103515625,
+    0.396148681640625,
+    0.3855743408203125,
+    0.426605224609375,
+    0.429718017578125,
+    0.431427001953125,
+    0.4229888916015625,
+    0.42877960205078125,
+    0.42702484130859375
+   ],
+   "net_by_position_bin16": [
+    0.90447998046875,
+    0.8902587890625,
+    0.88861083984375,
+    0.88360595703125,
+    0.89154052734375,
+    0.8994140625,
+    0.9080810546875,
+    0.9195556640625
+   ],
+   "net_bitflip_by_position": [
+    0.105865478515625,
+    0.18222808837890625,
+    0.27553558349609375,
+    0.404052734375,
+    0.4197998046875,
+    0.40595245361328125,
+    0.40006256103515625,
+    0.396148681640625,
+    0.3855743408203125,
+    0.426605224609375,
+    0.429718017578125,
+    0.431427001953125,
+    0.4229888916015625,
+    0.42877960205078125,
+    0.42702484130859375
+   ]
+  },
+  "nochurn_4": {
+   "frac_changed": 0.7245635986328125,
+   "frac_samples_any_change": 1.0,
+   "by_position_bin16": [
+    0.77337646484375,
+    0.704833984375,
+    0.68402099609375,
+    0.70086669921875,
+    0.70843505859375,
+    0.7152099609375,
+    0.72015380859375,
+    0.78961181640625
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.6386361602481878,
+    "11-100": 0.6795618736891168,
+    "101-1000": 0.6986855970273418,
+    "1001-inf": 0.863685962899751
+   },
+   "special_vs_regular": [
+    0.530722699777141,
+    0.7293228380924092
+   ],
+   "bitflip_by_position_msb_first": [
+    0.08148193359375,
+    0.142791748046875,
+    0.22174072265625,
+    0.31674957275390625,
+    0.330810546875,
+    0.318023681640625,
+    0.3149261474609375,
+    0.31292724609375,
+    0.304290771484375,
+    0.33704376220703125,
+    0.33951568603515625,
+    0.34067535400390625,
+    0.33586883544921875,
+    0.3410186767578125,
+    0.33876800537109375
+   ],
+   "net_by_position_bin16": [
+    0.77337646484375,
+    0.704833984375,
+    0.68402099609375,
+    0.70086669921875,
+    0.70843505859375,
+    0.7152099609375,
+    0.72015380859375,
+    0.78961181640625
+   ],
+   "net_bitflip_by_position": [
+    0.08148193359375,
+    0.142791748046875,
+    0.22174072265625,
+    0.31674957275390625,
+    0.330810546875,
+    0.318023681640625,
+    0.3149261474609375,
+    0.31292724609375,
+    0.304290771484375,
+    0.33704376220703125,
+    0.33951568603515625,
+    0.34067535400390625,
+    0.33586883544921875,
+    0.3410186767578125,
+    0.33876800537109375
+   ]
+  },
+  "nochurn_5": {
+   "frac_changed": 0.49969482421875,
+   "frac_samples_any_change": 1.0,
+   "by_position_bin16": [
+    0.55609130859375,
+    0.4710693359375,
+    0.46490478515625,
+    0.4664306640625,
+    0.47314453125,
+    0.48394775390625,
+    0.49468994140625,
+    0.5872802734375
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.3685529338066402,
+    "11-100": 0.4635283150780704,
+    "101-1000": 0.4762353724141756,
+    "1001-inf": 0.6724210290702555
+   },
+   "special_vs_regular": [
+    0.1696911811524992,
+    0.5077971719129843
+   ],
+   "bitflip_by_position_msb_first": [
+    0.04927825927734375,
+    0.09082794189453125,
+    0.14638519287109375,
+    0.19847869873046875,
+    0.2115631103515625,
+    0.20439910888671875,
+    0.20293426513671875,
+    0.20204925537109375,
+    0.1972198486328125,
+    0.2208709716796875,
+    0.2252197265625,
+    0.2237701416015625,
+    0.22472381591796875,
+    0.226348876953125,
+    0.2256317138671875
+   ],
+   "net_by_position_bin16": [
+    0.55609130859375,
+    0.4710693359375,
+    0.46490478515625,
+    0.4664306640625,
+    0.47314453125,
+    0.48394775390625,
+    0.49468994140625,
+    0.5872802734375
+   ],
+   "net_bitflip_by_position": [
+    0.04927825927734375,
+    0.09082794189453125,
+    0.14638519287109375,
+    0.19847869873046875,
+    0.2115631103515625,
+    0.20439910888671875,
+    0.20293426513671875,
+    0.20204925537109375,
+    0.1972198486328125,
+    0.2208709716796875,
+    0.2252197265625,
+    0.2237701416015625,
+    0.22472381591796875,
+    0.226348876953125,
+    0.2256317138671875
+   ]
+  },
+  "nochurn_6": {
+   "frac_changed": 0.28453826904296875,
+   "frac_samples_any_change": 1.0,
+   "by_position_bin16": [
+    0.33349609375,
+    0.2589111328125,
+    0.258056640625,
+    0.26568603515625,
+    0.264892578125,
+    0.26580810546875,
+    0.27777099609375,
+    0.3516845703125
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.15037436983563524,
+    "11-100": 0.25165074186281366,
+    "101-1000": 0.28281847928567466,
+    "1001-inf": 0.43580202008897345
+   },
+   "special_vs_regular": [
+    0.027698185291308502,
+    0.2908442832464375
+   ],
+   "bitflip_by_position_msb_first": [
+    0.02378082275390625,
+    0.04676055908203125,
+    0.07555389404296875,
+    0.08806610107421875,
+    0.0988006591796875,
+    0.09722900390625,
+    0.09860992431640625,
+    0.1002349853515625,
+    0.100494384765625,
+    0.11496734619140625,
+    0.1209869384765625,
+    0.12076568603515625,
+    0.11985015869140625,
+    0.122955322265625,
+    0.12237548828125
+   ],
+   "net_by_position_bin16": [
+    0.33349609375,
+    0.2589111328125,
+    0.258056640625,
+    0.26568603515625,
+    0.264892578125,
+    0.26580810546875,
+    0.27777099609375,
+    0.3516845703125
+   ],
+   "net_bitflip_by_position": [
+    0.02378082275390625,
+    0.04676055908203125,
+    0.07555389404296875,
+    0.08806610107421875,
+    0.0988006591796875,
+    0.09722900390625,
+    0.09860992431640625,
+    0.1002349853515625,
+    0.100494384765625,
+    0.11496734619140625,
+    0.1209869384765625,
+    0.12076568603515625,
+    0.11985015869140625,
+    0.122955322265625,
+    0.12237548828125
+   ]
+  },
+  "nochurn_7": {
+   "frac_changed": 0.10172271728515625,
+   "frac_samples_any_change": 0.9990234375,
+   "by_position_bin16": [
+    0.12371826171875,
+    0.09130859375,
+    0.09088134765625,
+    0.0958251953125,
+    0.09521484375,
+    0.09014892578125,
+    0.0960693359375,
+    0.130615234375
+   ],
+   "by_ref_freq_rank": {
+    "1-10": 0.03582614921098947,
+    "11-100": 0.09970480851394391,
+    "101-1000": 0.09835838278520326,
+    "1001-inf": 0.16837805321619428
+   },
+   "special_vs_regular": [
+    0.0012734797835084368,
+    0.10418897687034417
+   ],
+   "bitflip_by_position_msb_first": [
+    0.0065460205078125,
+    0.0107879638671875,
+    0.015228271484375,
+    0.01529693603515625,
+    0.0202484130859375,
+    0.01985931396484375,
+    0.02091217041015625,
+    0.02205657958984375,
+    0.02213287353515625,
+    0.0268096923828125,
+    0.0274200439453125,
+    0.0293731689453125,
+    0.0306243896484375,
+    0.03337860107421875,
+    0.033447265625
+   ],
+   "net_by_position_bin16": [
+    0.12371826171875,
+    0.09130859375,
+    0.09088134765625,
+    0.0958251953125,
+    0.09521484375,
+    0.09014892578125,
+    0.0960693359375,
+    0.130615234375
+   ],
+   "net_bitflip_by_position": [
+    0.0065460205078125,
+    0.0107879638671875,
+    0.015228271484375,
+    0.01529693603515625,
+    0.0202484130859375,
+    0.01985931396484375,
+    0.02091217041015625,
+    0.02205657958984375,
+    0.02213287353515625,
+    0.0268096923828125,
+    0.0274200439453125,
+    0.0293731689453125,
+    0.0306243896484375,
+    0.03337860107421875,
+    0.033447265625
+   ]
+  }
+ },
+ "decision": {
+  "per_segment": {
+   "0": null,
+   "1": null,
+   "2": null,
+   "3": null,
+   "4": "both",
+   "5": "uncorrected_errors",
+   "6": "uncorrected_errors",
+   "7": "uncorrected_errors"
+  },
+  "overall": "both",
+  "run3_cause": "uncorrected_errors",
+  "run3_s_star": 5,
+  "nochurn_median_d_nll": 0.04461459247225452,
+  "refine_material_but_entropy_flagged": [
+   1,
+   2,
+   3
+  ],
+  "refine_material_worse_unflagged": [
+   5,
+   6
+  ],
+  "settling_mismatch": {
+   "top2_settling_segments": [
+    5,
+    4
+   ],
+   "bottleneck_outside_top2": [
+    6,
+    7
+   ]
+  }
+ },
+ "definitions": "\nCPU analyses for the compute-allocation diagnostic (PLAN \u00a75, \u00a77, \u00a78).\n\nCalled by `diagnose.py analyze`. Reads per-branch score files\n(results/batch{b}/{name}.json), branch artefacts (runs/compute_allocation/batch{b}/{name}.pt)\nand the Run 1 step logs; writes results/analysis/*.json and *.csv.\n\nDefinitions (fixed before Run 2 data existed; see NOTEBOOK.md):\n  \u0394NLL/token   ratio-of-sums change: \u03a3nll_b/\u03a3tok_b \u2212 \u03a3nll_r/\u03a3tok_r (= \u0394 log GenPPL)\n  \u0394entropy     mean over samples of (entropy_b \u2212 entropy_r)\n  tokens changed  fraction of the 1024\u00d7128 token ids differing from the reference;\n                  \"net\" subtracts the null branch's fraction (same batch, else batch 0)\n  CI           95% percentile bootstrap, 10,000 paired resamples of samples, rng seed 20261002\n  material     CI excludes 0 and |\u0394NLL/token| \u2265 0.01\n  entropy flag |\u0394entropy| > 0.02  (\u0394NLL then reported, not interpreted on its own)\n  borderline   CI contains +0.01 or \u22120.01\n  concentration  per-sample contribution c_i = (nll_b,i \u2212 nll_r,i) \u2212 r\u0304_r\u00b7(tok_b,i \u2212 tok_r,i)\n                 (linearised \u0394NLL\u00b7\u03a3tok); share = \u03a3 of the top-10% c_i in the direction of\n                 the total / \u03a3 c_i; also the |c| version.\n"
+}
