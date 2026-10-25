@@ -1,0 +1,5 @@
+✅ Instantiating SequenceVDTContinuousModel for framework: 'continuous_score'
+[t2] tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg step 500000 sidecar sigma_data=0.399845; 256 held-out rows; suffix tokens/ex 461.2, content 139.7, pad 321.6; pad id 49152, eos id 0
+✅ Instantiating SequenceVDTContinuousModel for framework: 'continuous_score'
+[t2] tinigsm_gsm8k/runs/cobit_raw_binary_bits_cfg step 500000 sidecar sigma_data=0.399845; 256 held-out rows; suffix tokens/ex 461.2, content 139.7, pad 321.6; pad id 49152, eos id 0
+[t2] sigma=0.02: done (12.0 min)

@@ -406,10 +406,14 @@ def main() -> None:
         print(f"No cache files found under: {shared_root}")
         return
 
-    loader = get_loader(cfg, split=expected_split)
-    dataset_obj = getattr(loader, "dataset", None)
-    if dataset_obj is None:
-        raise RuntimeError(f"Could not resolve dataset object for split='{expected_split}'")
+    if bool(getattr(cfg.evaluation, "skip_test_loader", False)) and not include_real:
+        # OWT gpt2id_bpe16 decoding loads the tokenizer assets from cfg.data when there is no dataset.
+        dataset_obj = None
+    else:
+        loader = get_loader(cfg, split=expected_split)
+        dataset_obj = getattr(loader, "dataset", None)
+        if dataset_obj is None:
+            raise RuntimeError(f"Could not resolve dataset object for split='{expected_split}'")
 
     all_rows: List[Dict[str, Any]] = []
 

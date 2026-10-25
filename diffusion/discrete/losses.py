@@ -1,3 +1,10 @@
+# PEP 604 (`torch.Tensor | None`) is used in the signatures below, which is a
+# runtime TypeError on Python 3.9 -- the interpreter this project runs on --
+# unless annotations are postponed. Every other module in diffusion/ already
+# carries this import; this one was missed, and it makes `import
+# trainers.trainer` fail outright, i.e. it blocks ALL training.
+from __future__ import annotations
+
 import math
 import torch
 

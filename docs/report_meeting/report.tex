@@ -1,0 +1,321 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.9cm]{geometry}
+\usepackage{graphicx,booktabs,array,xcolor,amsmath}
+\usepackage[colorlinks=true,linkcolor=blue!50!black]{hyperref}
+\usepackage{parskip}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\yes}{\textcolor{green!45!black}{\textbf{DONE}}}
+\newcommand{\run}{\textcolor{orange!85!black}{\textbf{RUNNING}}}
+\newcommand{\no}{\textcolor{red!70!black}{\textbf{NOT DONE}}}
+\title{\vspace{-1.5cm}CoBit / BitstreamDiffusion --- Progress Report\\
+\large Friday 4 -- Wednesday 9 September 2026}
+\author{}\date{}
+\begin{document}\maketitle\vspace{-1.1cm}
+
+\section*{Status against the original task list}
+\begin{center}\small
+\begin{tabular}{@{}p{7.4cm}ll@{}}
+\toprule
+\textbf{Task} & \textbf{Status} & \textbf{Headline}\\ \midrule
+1. Reproduce best baselines & \yes & replicated exactly; gap was churn alone\\
+2. CFG + other guidance mechanisms, calibrate & \yes & CFG best, $+0.081$; study CLOSED\\
+3. Nature of errors on TinyGSM & \yes & guidance harms code validity, not reasoning\\
+4a. Temporal ordering --- at inference & \yes & no benefit; random is harmful\\
+4b. Temporal ordering --- trained (L2R/R2L/random) & \no & inconclusive: control arm degenerate\\
+5a. Per-bit softmax vs BCE & \yes & mathematically identical; no GPU spent\\
+5b. \textbf{V-way token softmax} (predict logits, not bits) & \run & implemented + tested; smoke queued\\
+5c. binary\_sm vs binary\_ce (50k, from scratch) & \yes & \textbf{negative}: neither measurable\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\fbox{\parbox{0.98\textwidth}{\textbf{The most consequential finding of
+the week was not on the task list.} Every training run in this environment
+diverged before ${\sim}12$k steps, which blocked all training experiments for
+four days. It is now solved: the cause is the \textbf{learning rate}, not the
+software environment. At \code{lr 3e-5} a from-scratch run reached 20{,}000
+steps cleanly where \code{3e-4} diverges 8/8 times.}}
+
+\section{Task 1 --- Reproduce best baselines \yes}
+Forensic replication audit against the collaborator's result: \textbf{verdict A,
+exact replication}. Our 0.1385 and their ${\sim}0.29$ differ by \textbf{one
+factor: EDM stochastic churn}, worth $+0.1622$ and free in compute. Two churn
+code paths existed (\code{--gamma} vs \code{--churn\_gamma}); the studies used
+different ones.
+
+Baseline hierarchy on the 1319-problem GSM8K test set:
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Setting & Accuracy & Note\\ \midrule
+Regime A (DDIM, $\gamma{=}0$, 500 steps) & 0.1385 & original arm\\
+Regime B (FKC-EM, churn 0.41, 1024 steps) & ${\sim}0.29$ & canonical, collaborator-matched\\
+Production 500k, karras/DDIM, 256 steps & 0.1640 & anchor used throughout\\
+\bottomrule
+\end{tabular}
+\end{center}
+Both regimes are retained and \textbf{every result is labelled with its
+regime}; they are never pooled.
+
+\section{Task 2 --- Guidance mechanisms \yes\ (CLOSED)}
+Three mechanisms implemented and compared: classifier-free (CFG), AutoGuidance
+(AG), and Self-Guidance (SG-prev, SG-exact). Confirmation runs use 1069
+problems $\times$ 3 seeds, paired bootstrap.
+
+\begin{center}
+\includegraphics[width=0.62\textwidth]{fig/guidance.pdf}
+\end{center}
+
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Config & Accuracy & $\Delta$ & 95\% CI & $p$ & NFE\\ \midrule
+\textbf{CFG $w{=}12$} & \textbf{0.2196} & $\mathbf{+0.0811}$ & $[+0.068,+0.095]$ & $<10^{-5}$ & 1024\\
+CFG $w{=}7$ & 0.2148 & $+0.0763$ & $[+0.063,+0.090]$ & $<10^{-5}$ & 1024\\
+AG $w{=}15$ (bad@350k) & 0.2047 & $+0.0662$ & $[+0.053,+0.079]$ & $<10^{-5}$ & 1024\\
+SG-prev $w{=}2$ & 0.1868 & $+0.0483$ & $[+0.039,+0.058]$ & $<10^{-5}$ & \textbf{512}\\
+SG-exact $w{=}1$ & 0.1233 & $-0.0152$ & $[-0.022,-0.008]$ & $<10^{-5}$ & 1024\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Findings.} CFG is the strongest mechanism and saturates around
+$w{\approx}7$--$12$. SG-prev gives about 60\% of CFG's gain at \textbf{half the
+NFE}, so it is the compute-efficient option. SG-exact actively hurts.
+\textbf{Mechanism:} guidance is not a correction --- it fixes ${\sim}10\%$ of
+problems and breaks ${\sim}20$--$25\%$ regardless of regime, so its net value is
+arithmetic and only positive above a break-even baseline accuracy of
+${\approx}33\%$.
+
+\section{Task 3 --- Nature of errors on TinyGSM \yes}
+Taxonomy: \textbf{T1} non-executing program, \textbf{T2} executes but wrong
+number, \textbf{T3} token-level degeneration.
+
+\textbf{The baseline's dominant failure is T1 (98/250 = 39\%)} --- the model
+emits programs that do not run. Under guidance, \textbf{T2 falls while T1
+rises}: guidance damages \emph{code validity}, not arithmetic reasoning. T3
+appears only under strong guidance. Invalid-token rate is
+$3\times10^{-6}$--$5\times10^{-5}$, i.e. bit$\to$token decoding is not the
+problem.
+
+\section{Task 4a --- Temporal ordering at inference \yes}
+Schedule: $t_j(t)=\mathrm{clip}(t(1+w)-w\,u_j,0,1)$, with $u_j$ a denoising
+\emph{priority} over the generated \textbf{suffix only}; prompt keeps the global
+$\sigma$. Verified causally active: at $w{=}0.5$ the per-position $\sigma$
+spread is $192\times$, first suffix token cleanest; at $w{=}0$ it is bit-identical
+to the current model.
+
+\begin{center}
+\includegraphics[width=0.55\textwidth]{fig/ordering_inference.pdf}
+\end{center}
+
+\begin{center}\small
+\begin{tabular}{@{}lcccl@{}}
+\toprule
+Arm & Accuracy & $\Delta$ & significant & Verdict\\ \midrule
+control ($w{=}0$) & 0.1387 & --- & --- & ---\\
+L2R $w{=}0.1$ & 0.1347 & $-0.0040$ & 0/3 seeds & \textbf{no effect}\\
+random $w{=}0.1$ & 0.1049 & $-0.0339$ & \textbf{3/3}, $p<10^{-4}$ & \textbf{harmful}\\
+L2R $w{\geq}0.25$ & 0.0000 & $-0.176$ & 3/3 & \textbf{collapse}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Applying an ordering only at decoding does not help.} The L2R/random
+asymmetry shows the intervention is real --- direction matters --- but nothing
+improves. Expected, since the model was \emph{trained} with uniform $\sigma$:
+it tolerates a ${\sim}2.9\times$ spread with no gain and breaks at ${\sim}9\times$.
+512 steps does not rescue it, so it is not a too-short-trajectory artefact.
+
+\section{Task 4b --- Temporal ordering, TRAINED \no\ (inconclusive)}
+Implementation is complete and tested (24 tests): $\sigma$ is drawn per example,
+mapped to normalised time by the \emph{same} map the sampler uses, offset per
+token, mapped back and expanded blockwise to bits. All three modes provably
+produce \emph{different} $\sigma$ fields; L2R and R2L are mirror images; random
+is redrawn per example \emph{and} per step; $w{=}0$ leaves the gradient hash
+unchanged. Four arms (control / L2R / R2L / random, $w{=}0.25$) fine-tuned from
+the same production 500k checkpoint at \code{lr 3e-5}; none diverged.
+
+\textbf{The experiment is nonetheless inconclusive, because the control arm is
+degenerate.} At the matched 5k checkpoint the uniform-$\sigma$ control scores
+\textbf{0.0000} while the ordered arms score 0.07--0.12. Taken at face value
+that reads as ``ordering massively improves TinyGSM''. It is not credible and
+is not claimed.
+
+\textbf{Diagnosis.} The control's weights moved only 4.65\% from init and its
+EMA is healthy, so the model is not destroyed. The likely cause is the
+$\sigma$-\emph{sampling} distribution: production converged under its
+entropy-adapted draw, but a fresh fine-tune restarts the entropy warmup
+(\code{entropy\_warmup\_steps=40000}) and therefore trains under the base
+log-normal draw. Every arm suffers that mismatch; the control, whose $\sigma$
+field is pure and unspread, appears to suffer it most. Verified under two
+independent sampling schedules (entropic and karras), so it is not a decoder
+artefact.
+
+\textbf{What is needed:} a control that provably retains the init's accuracy ---
+either by preserving the entropy schedule across the fine-tune, or by training
+all arms from scratch under a common schedule. Not attempted within this window.
+
+\section{Task 5 --- Predict logits instead of raw bits}
+\textbf{Softmax is not a distinct objective, and this is proved rather than
+assumed.} The model already emits \textbf{one logit per bit}
+(\code{out\_dim=1}, \code{vocab\_size=2}). A 2-class softmax is shift-invariant,
+so it has a single degree of freedom $d=z_1-z_0$ and
+\[
+\mathrm{softmax}(z_0,z_1)_1=\sigma(d),\qquad
+\mathrm{CE}(z,y)=\mathrm{BCEWithLogits}(d,y)
+\]
+exactly; the 2-class head merely splits the same gradient across two logits
+($\partial L/\partial z_1=-\partial L/\partial z_0=\partial L/\partial d$).
+Verified to $10^{-12}$ in 5 tests. \textbf{No GPU was spent on it.}
+
+\subsection*{The distinction I initially got wrong}
+The task asked for \emph{``bitstream embedding but predict logits''}. I first
+resolved that as a per-bit softmax and proved it redundant. That proof is
+correct but answers a \textbf{narrower} question than was asked:
+
+\begin{center}\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameterisation & Degrees of freedom & Distinct from BCE?\\ \midrule
+2-class softmax \emph{per bit} & 1 \ ($z_1-z_0$) & \textbf{No} --- exactly BCE\\
+\textbf{$V$-way softmax \emph{per token}} & \textbf{49{,}152} & \textbf{Yes} --- strictly more expressive\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The binary head predicts \textbf{16 independent Bernoullis} per token, so it can
+only represent a \emph{product} distribution over that token's bits. A $V$-way
+categorical over the 49{,}153-token vocabulary can represent \emph{any}
+distribution over tokens, including the bit correlations the binary head
+structurally cannot express. \textbf{That is the ``added flexibility'' the task
+was about, and it is a real experiment.}
+
+\subsection*{$V$-way token softmax --- implemented, not yet run \run}
+Now wired for TinyGSM:
+\begin{center}\small
+\code{representation=tokens \ \ V=49153 \ \ S=512 \ \ patch\_size=1 \ \ out\_dim=49153}\\
+\code{loss=token\_ce \ \ data\_center=1/V=2.03e-05 \ \ p\_uncond=0.1 \ \ edm \ \ clamp off}
+\end{center}
+Two defects had to be fixed beyond the config. The TinyGSM dataset returned
+\emph{bits}, but the trainer's token path indexes \code{x0} as \emph{class
+indices} --- it would have trained silently on the wrong target space; it now
+returns token IDs and a token-level prefix mask, with the binary path
+bit-identical (tested). And \code{data\_center} must be $1/V$, not the bits
+value 0.5: a one-hot token's mean is $1/49153$, and centring the diffusion at
+0.5 would place it nowhere near the data manifold. 7 new tests; 431 pass.
+
+\textbf{Not yet run.} The open question is memory: the logits tensor is
+$[B,512,49153]$, i.e.\ \textbf{26 GB in bf16} at global batch 512 ($\approx$6.4
+GB per GPU over 4 ranks) before activations, so the loss is evaluated in chunks
+rather than materialised. A 300-step smoke test is queued. If it OOMs, the batch
+drops \emph{and the binary control is rerun at the same batch}, so the
+comparison never confounds representation with batch size.
+
+\textbf{Caveat.} Unlike SM-vs-CE this is \emph{not} a one-variable experiment:
+representation, output dimensionality, loss and memory profile all change
+together. And with accuracy at 0.0000 for 5k/10k and the first non-zero point at
+200k, a 50k token run will most likely also score zero --- the readable endpoints
+would be stability and the loss/gradient diagnostics, not accuracy.
+
+\subsection*{binary\_sm vs binary\_ce --- definitive, from scratch, and negative}
+Both arms trained \textbf{from scratch for 50{,}000 steps} at \code{lr 3e-5},
+\textbf{neither diverged}, differing in exactly four keys (\code{train.loss\_type}
+plus three output paths). Evaluated on 1319 problems $\times$ 3 seeds,
+karras/DDIM, identical settings.
+
+\begin{center}\small
+\begin{tabular}{@{}lccl@{}}
+\toprule
+Arm & Mean accuracy & Correct / 1319 & Stability\\ \midrule
+binary\_sm & 0.00027 & 0.4 & stable to 50k\\
+binary\_ce & 0.00100 & 1.3 & stable to 50k\\
+\textbf{$\Delta$} & $\mathbf{+0.00073}$ & \textbf{one problem} & ---\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Neither objective produces measurable task performance at this budget},
+and a one-problem difference is not evidence of anything. The gradient
+diagnostics --- computed identically in both arms and therefore directly
+comparable --- agree:
+
+\begin{center}
+\includegraphics[width=0.86\textwidth]{fig/sm_vs_ce.pdf}
+\end{center}
+
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+& SM @1k & CE @1k & SM @25k & CE @25k\\ \midrule
+gradient survival & 0.1854 & 0.1866 & 0.1805 & 0.1808\\
+saturation $D(1{-}D)<10^{-3}$ & 0.846 & 0.865 & 0.942 & 0.956\\
+$|\mathrm{logit}|$ mean & 17.9 & 20.1 & 25.1 & 29.4\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{CE's theoretical advantage does not appear.} The motivation for CE was
+that its gradient lacks the $D(1{-}D)$ factor that suppresses SM's. In a
+from-scratch matched pair at 50k, gradient survival is identical to three
+decimals. \textbf{This is the cleanest test the objective branch has had, and it
+is negative.}
+
+\emph{Caveat, stated deliberately:} \code{lr 3e-5} establishes a \textbf{stable}
+regime, not a \textbf{tuned} one. These arms are compared only to each other,
+never to production's 3e-4 trajectory. A comparison at a tuned learning rate and
+a convergent budget remains untested.
+
+\section{The infrastructural finding (not on the task list)}
+\begin{center}
+\includegraphics[width=0.60\textwidth]{fig/lr_stability.pdf}
+\end{center}
+Eight from-scratch runs diverged before ${\sim}12$k steps at \code{lr 3e-4},
+\textbf{including the production-era commit itself}. Ruled out along the way:
+corpus ($\sigma_{\text{data}}$ fingerprint matches to ${\sim}8$ s.f.), data
+config (identical on 22 keys), our post-June code (fp32 forward+loss+backward
+\textbf{bit-identical} to the production commit), and the Python interpreter ---
+a 3.10 rebuild diverged at 5{,}346, falsifying a hypothesis I had put weight on.
+
+\textbf{At \code{lr 3e-5} a from-scratch run reached 20{,}000 steps cleanly},
+as did all four ordering arms. The learning rate is the identified factor.
+\emph{Caveat:} 3e-5 establishes a \textbf{stable} regime, not a \textbf{tuned}
+one. It is 10$\times$ below production's value, so absolute accuracies in this
+regime are compared only against the matched control and never against
+production's 3e-4 trajectory.
+
+\section{Why accuracy could not be measured on short runs}
+\begin{center}
+\includegraphics[width=0.52\textwidth]{fig/accuracy_vs_steps.pdf}
+\end{center}
+GSM8K accuracy is \textbf{exactly 0.0000 at both 5k and 10k} training steps
+(measured, both objectives), and the first non-zero point we have is 0.2024 at
+200k. Combined with divergence before 12k, the trainable range and the range
+where accuracy exists \textbf{did not overlap} --- which is why the objective
+branch was blocked rather than merely slow.
+
+\section{Currently running}
+Only the L2R 30k retrain (its checkpoint was corrupted by a disk-full event) and
+the control's matched 5k evaluation. Neither changes any verdict above.
+
+\section{Not done}
+\begin{enumerate}\itemsep2pt
+\item \textbf{The $V$-way token-softmax run itself.} Implemented and tested;
+memory smoke test queued. This is the experiment the task actually asked for and
+it is the top priority for the next window.
+\item \textbf{A valid ordering-as-training verdict.} Blocked on a control arm
+that does not retain its initialisation's accuracy. The implementation is
+finished and tested; the experimental setup is at fault.
+\item \textbf{CE vs SM at a convergent budget.} The 50k result is clean and
+negative, but at \code{lr 3e-5} neither arm is near convergence. Whether CE
+helps a \emph{converged} model is untested.
+\item \textbf{Accuracy lift-off point} between 10k and 200k steps --- unmeasured,
+and it sets the cost of every future training comparison.
+\item \textbf{Why production tolerated \code{lr 3e-4} for 500k steps.} Their
+working tree is permission-denied to us, so this stays open.
+\item \textbf{Ordering at other strengths, and R2L at inference} --- deliberately
+not run; the first results did not justify the spend.
+\end{enumerate}
+
+
+\end{document}

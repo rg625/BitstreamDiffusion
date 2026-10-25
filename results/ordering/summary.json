@@ -1,0 +1,77 @@
+[
+  {
+    "arm": "l2r w=0.1",
+    "steps": 256,
+    "seed": 0,
+    "n": 250,
+    "accuracy": 0.176,
+    "control_accuracy": 0.176,
+    "delta": 0.0,
+    "ci95": [
+      -0.01999999999999999,
+      0.01999999999999999
+    ],
+    "p": 1.0,
+    "significant": false
+  },
+  {
+    "arm": "l2r w=0.25",
+    "steps": 256,
+    "seed": 0,
+    "n": 250,
+    "accuracy": 0.0,
+    "control_accuracy": 0.176,
+    "delta": -0.176,
+    "ci95": [
+      -0.224,
+      -0.132
+    ],
+    "p": 0.0,
+    "significant": true
+  },
+  {
+    "arm": "l2r w=0.5",
+    "steps": 256,
+    "seed": 0,
+    "n": 250,
+    "accuracy": 0.0,
+    "control_accuracy": 0.176,
+    "delta": -0.176,
+    "ci95": [
+      -0.224,
+      -0.132
+    ],
+    "p": 0.0,
+    "significant": true
+  },
+  {
+    "arm": "l2r w=1.0",
+    "steps": 256,
+    "seed": 0,
+    "n": 250,
+    "accuracy": 0.0,
+    "control_accuracy": 0.176,
+    "delta": -0.176,
+    "ci95": [
+      -0.224,
+      -0.132
+    ],
+    "p": 0.0,
+    "significant": true
+  },
+  {
+    "arm": "l2r w=0.25",
+    "steps": 512,
+    "seed": 0,
+    "n": 250,
+    "accuracy": 0.0,
+    "control_accuracy": 0.184,
+    "delta": -0.184,
+    "ci95": [
+      -0.232,
+      -0.136
+    ],
+    "p": 0.0,
+    "significant": true
+  }
+]

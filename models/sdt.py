@@ -193,11 +193,17 @@ class _SinTimeSigma(nn.Module):
         self.register_buffer("_freq", _build_sinusoidal_table(dim, "cpu"))
 
     def forward(self, sigma: torch.Tensor) -> torch.Tensor:
+        """sigma [B] -> [B,E]  (one noise level per example, the current model)
+           sigma [B,S] -> [B,S,E] (per-position noise, for ordering experiments)
+
+        `unsqueeze(-1)` handles both ranks identically; the [B] path is
+        arithmetically what `[:, None]` did before.
+        """
         freq = self._freq.to(sigma.device)
-        phases = sigma.log()[:, None] * freq
+        phases = sigma.log().unsqueeze(-1) * freq
         emb = torch.empty_like(phases)
-        emb[:, 0::2] = phases[:, 0::2].cos()
-        emb[:, 1::2] = phases[:, 1::2].sin()
+        emb[..., 0::2] = phases[..., 0::2].cos()
+        emb[..., 1::2] = phases[..., 1::2].sin()
         return emb
 
 
@@ -230,10 +236,32 @@ class AdaLNZero(nn.Module):
         nn.init.zeros_(self.mlp[1].bias)
 
     def forward(self, h: torch.Tensor, t_emb: torch.Tensor):
+        """t_emb [B,d]   -> global conditioning, broadcast over tokens (current)
+           t_emb [B,n,d] -> per-token conditioning (per-position sigma)
+
+        The returned gate is already broadcast-ready in both cases, so callers
+        must NOT unsqueeze it.
+        """
         orig_dtype = h.dtype
         s, b, g = self.mlp(t_emb).chunk(3, dim=-1)
+        if s.dim() == 2:
+            s, b, g = s.unsqueeze(1), b.unsqueeze(1), g.unsqueeze(1)
+        elif s.shape[1] != h.shape[1]:
+            # Per-token conditioning against bit-resolution features: the
+            # transformer blocks run at token resolution (n) while the output
+            # heads run at bit resolution (n*P). One noise level per token
+            # expands blockwise to its own bits -- the same mapping
+            # expand_token_sigma_to_bits uses on the sampler side.
+            if h.shape[1] % s.shape[1] != 0:
+                raise RuntimeError(
+                    f"cannot broadcast conditioning of length {s.shape[1]} "
+                    f"onto {h.shape[1]} positions")
+            rep = h.shape[1] // s.shape[1]
+            s = s.repeat_interleave(rep, dim=1)
+            b = b.repeat_interleave(rep, dim=1)
+            g = g.repeat_interleave(rep, dim=1)
         h_norm = F.layer_norm(h, h.shape[-1:]).to(orig_dtype)
-        h_mod = (1 + s).unsqueeze(1) * h_norm + b.unsqueeze(1)
+        h_mod = (1 + s) * h_norm + b
         return h_mod, g
 
 
@@ -285,11 +313,11 @@ class PreNormBlockAda(nn.Module):
     ) -> torch.Tensor:
         h, gate = self.adaln1(x, t_emb)
         y = self.attn(h, key_padding_mask=key_padding_mask, attn_bias=attn_bias)
-        x = x + self.drop(y) * gate.unsqueeze(1)
+        x = x + self.drop(y) * gate          # AdaLNZero returns it broadcast-ready
 
         h, gate = self.adaln2(x, t_emb)
         y = self.ff(h)
-        x = x + self.drop(y) * gate.unsqueeze(1)
+        x = x + self.drop(y) * gate
         return x
 
 
@@ -493,7 +521,7 @@ class HybridSequenceHeadV2(nn.Module):
 
         h, gate_ff = self.adaln_ff(seq, t_emb)
         y = self.ff(h)
-        seq = seq + self.drop(y) * gate_ff.unsqueeze(1)
+        seq = seq + self.drop(y) * gate_ff      # AdaLNZero returns it broadcast-ready
         logits = self.out(seq)
         return logits
 
@@ -570,7 +598,7 @@ class OptimalSkipMLPHead(nn.Module):
 
         t_emb_proj = self.time_proj(t_emb)
         h_norm, gate = self.adaln(h, t_emb_proj)
-        h_gated = h_norm * gate.unsqueeze(1)
+        h_gated = h_norm * gate                 # AdaLNZero returns it broadcast-ready
         logits = self.mixer(h_gated)
         return logits
 
@@ -973,8 +1001,13 @@ class SequenceVDTContinuousModel(nn.Module):
         return logits
 
     def _build_continuous_embed_1ch(self, x: torch.Tensor, c_in: torch.Tensor) -> torch.Tensor:
-        """x: [B,S] -> [B,S,C]"""
-        x_scaled = x * c_in.view(-1, 1)
+        """x: [B,S] -> [B,S,C]
+
+        `c_in` is [B] (one noise level per example) or per-bit [B,S] for
+        temporal ordering, in which case it already aligns with x and must not
+        be reshaped.
+        """
+        x_scaled = x * (c_in if c_in.dim() == 2 else c_in.view(-1, 1))
         if self.cont_input_proj is None:
             return x_scaled.unsqueeze(-1)
         return self.cont_input_proj(x_scaled.unsqueeze(-1))
@@ -1071,8 +1104,36 @@ class SequenceVDTContinuousModel(nn.Module):
           - continuous bits:        x_t [B,S]
           - continuous one-hot:     x_t [B,S,V]
         """
-        if sigma.dim() != 1 or x_t.size(0) != sigma.size(0):
-            raise RuntimeError("Expected x_t batch dimension to match sigma [B]")
+        # sigma is either [B] (one noise level per example -- the trained model)
+        # or, for temporal ordering, PER-BIT [B,S] matching x_t's position axis.
+        # The two consumers want different granularities: the input scaling c_in
+        # is per bit, while the time embedding is per TOKEN (one per patch), so
+        # the per-bit form is reduced blockwise below. sigma is constant within a
+        # patch by construction (expand_token_sigma_to_bits), and that is checked
+        # rather than assumed -- a violation would silently mean the time
+        # embedding described a different noise level than the input scaling.
+        if x_t.size(0) != sigma.size(0):
+            raise RuntimeError("Expected x_t batch dimension to match sigma")
+        sigma_tok = sigma
+        if sigma.dim() == 2:
+            if not self.is_continuous_bits:
+                raise RuntimeError(
+                    "Per-position sigma is implemented for continuous bits only")
+            if sigma.shape != x_t.shape:
+                raise RuntimeError(
+                    f"Per-position sigma must match x_t {tuple(x_t.shape)}, "
+                    f"got {tuple(sigma.shape)}")
+            if x_t.size(1) % self.P != 0:
+                raise RuntimeError(
+                    f"Per-position sigma needs S divisible by patch {self.P}")
+            blocks = sigma.view(sigma.size(0), x_t.size(1) // self.P, self.P)
+            if not torch.allclose(blocks, blocks[..., :1].expand_as(blocks),
+                                  rtol=1e-5, atol=1e-8):
+                raise RuntimeError(
+                    "Per-position sigma must be constant within each token/patch")
+            sigma_tok = blocks[..., 0]
+        elif sigma.dim() != 1:
+            raise RuntimeError("sigma must be [B] or [B,S]")
 
         if self.is_discrete_tokens or self.is_discrete_bits:
             if x_t.dim() != 2:
@@ -1108,7 +1169,7 @@ class SequenceVDTContinuousModel(nn.Module):
         tokens_in, n = self._patchify(x_pad)
         tokens = self.patch_proj(tokens_in)
 
-        t_emb = self.time_cond(self.time_proj(self.time_fn(sigma)))
+        t_emb = self.time_cond(self.time_proj(self.time_fn(sigma_tok)))
         attn_bias = None if self.rpb is None else self.rpb(n, device=tokens.device, dtype=tokens.dtype)
 
         for blk in self.blocks:

@@ -9,6 +9,42 @@ import torch.distributed as dist
 from ml_collections import config_dict
 from trainers import Trainer
 import datetime
+import faulthandler
+import signal
+
+
+def _install_stack_dumper():
+    """Dump every thread's Python stack on SIGUSR1 (and on a hard crash).
+
+    The epoch-boundary deadlock shows up as ranks 1-3 waiting in a scalar
+    ALLREDUCE while rank 0 is three collectives ahead in a gradient bucket
+    all-reduce.  The NCCL watchdog names the op but not the Python line that
+    issued it, and each occurrence costs hours of queue time, so the stall
+    watchdog in the launcher signals every rank before the process group times
+    out and we get the issuing frame for free.  Costs nothing when unused.
+    """
+    faulthandler.enable()
+    rank = os.environ.get("RANK", "0")
+    job = os.environ.get("SLURM_JOB_ID", "local")
+    out_dir = Path(os.environ.get("COBIT_STACK_DIR", "logs/arch"))
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Kept open for the process lifetime: faulthandler writes to the fd.
+        fh = open(out_dir / f"stack_{job}_rank{rank}.txt", "a", buffering=1)
+        faulthandler.register(signal.SIGUSR1, file=fh, all_threads=True, chain=False)
+        # Publish our pid so the stall watchdog signals THIS process and nothing
+        # else. Guessing from the process tree is not safe: SIGUSR1 terminates a
+        # process that has no handler, and the launcher's command line contains
+        # "train.py" too, so a cmdline match killed the torchrun agent (rc=138)
+        # and captured nothing. Only a process that has reached this line can be
+        # signalled safely, and reaching this line is what writes the file.
+        (out_dir / f"pid_{job}_rank{rank}.txt").write_text(str(os.getpid()))
+    except Exception as e:  # never let diagnostics break training
+        print(f"[stackdump] WARN: could not install SIGUSR1 handler ({e})")
+
+
+_install_stack_dumper()
+
 
 def _is_distributed():
     """Check if we are running under torchrun."""
@@ -17,11 +53,23 @@ def _is_distributed():
 def _setup_ddp():
     """Initialize DDP process group if distributed."""
     if _is_distributed():
-        dist.init_process_group(backend="nccl", timeout=datetime.timedelta(minutes=20))
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
+        # Bind this rank to its GPU and pass device_id so NCCL knows the
+        # rank->GPU mapping (avoids the "devices currently unknown" barrier
+        # warning / potential hang on some clusters; see docs NCCL tip).
         torch.cuda.set_device(local_rank)
+        dist.init_process_group(
+            backend="nccl",
+            # Default unchanged (20 min). Overridable because end-of-epoch work on
+            # rank 0 (validation + callbacks) with the 49,153-way token head can
+            # outlast 20 min while the other ranks wait in an all-reduce: that is
+            # exactly what killed token_ce at step 401,435 (epoch-6 boundary).
+            # A timeout changes no training arithmetic.
+            timeout=datetime.timedelta(minutes=int(os.environ.get("DDP_TIMEOUT_MIN", 20))),
+            device_id=torch.device(f"cuda:{local_rank}"),
+        )
         # Only print setup info on master or for debugging
         if rank == 0:
             print(f"🚀 DDP Initialized: Global Rank {rank}, World Size {world_size}")
@@ -43,6 +91,56 @@ def _update_cfg_from_dict(cfg, d, skip_sections=("logging", "system", "evaluatio
             _update_cfg_from_dict(getattr(cfg, k), v, skip_sections=skip_sections)
         else:
             setattr(cfg, k, v)
+
+
+# Keys where the FRESH Python config wins over the saved snapshot on resume.
+# They set how a step is computed (micro-batch layout, checkpoint cadence),
+# never what a step is: the effective batch is train.batch_size, which stays
+# saved. Without this, moving a run to more nodes with TOK_ACCUM=1 silently
+# kept the saved accumulation (32/GPU x 8 GPUs x 2 instead of 64/GPU x 8, ~10%
+# slower), because the merge below overwrote what the config had just read
+# from the environment. stop_at_step and the explicit checkpoint steps are
+# here for the same reason: they say where a run pauses and what it keeps, and
+# resuming a run stopped at 250k must be able to move both.
+RESUME_LAYOUT_KEYS = (
+    ("train", "grad_accum_steps"),
+    ("train", "stop_at_step"),
+    ("train", "checkpointing", "resume_interval", "every_steps"),
+    ("train", "checkpointing", "interval", "at_steps"),
+)
+
+
+def _get_path(cfg, path):
+    for k in path:
+        if cfg is None or not hasattr(cfg, k):
+            return None
+        cfg = getattr(cfg, k)
+    return cfg
+
+
+def _snapshot_layout(cfg):
+    """Fresh-config values of RESUME_LAYOUT_KEYS; keys it does not set are omitted."""
+    out = {}
+    for path in RESUME_LAYOUT_KEYS:
+        v = _get_path(cfg, path)
+        if v is not None:
+            out[path] = v
+    return out
+
+
+def _restore_layout(cfg, snapshot):
+    """Re-apply the fresh layout values after the saved-config merge. Returns
+    [(dotted key, saved value, fresh value)] for every key that changed."""
+    changed = []
+    for path, fresh in snapshot.items():
+        parent = _get_path(cfg, path[:-1])
+        if parent is None:
+            continue
+        saved = getattr(parent, path[-1], None)
+        if saved != fresh:
+            setattr(parent, path[-1], fresh)
+            changed.append((".".join(path), saved, fresh))
+    return changed
 
 
 def main():
@@ -77,7 +175,23 @@ def main():
     if last_ckpt.exists() and saved_cfg_path.exists():
         with open(saved_cfg_path, "r") as f:
             saved_cfg_dict = json.load(f)
+        layout = _snapshot_layout(cfg)
         _update_cfg_from_dict(cfg, saved_cfg_dict)
+        for key, saved, fresh in _restore_layout(cfg, layout):
+            if rank == 0:
+                print(f"  ↳ resume override: {key} = {fresh} (saved run had {saved})")
+        # The saved snapshot is authoritative for architecture/data, but the
+        # merge above also clobbers env-derived knobs that the Python config had
+        # just read (e.g. cfg.optim.total_steps from TINYGSM_TOTAL_STEPS). A
+        # resume legitimately wants to *extend* training, so re-apply the small
+        # allowlist of resume-tunable env overrides AFTER the merge. Without
+        # this, TINYGSM_TOTAL_STEPS=500000 is silently discarded and a run
+        # already at the saved total_steps stops on its first batch.
+        if "TINYGSM_TOTAL_STEPS" in os.environ:
+            cfg.optim.total_steps = int(os.environ["TINYGSM_TOTAL_STEPS"])
+            if rank == 0:
+                print(f"  ↳ resume override: optim.total_steps = {cfg.optim.total_steps} "
+                      f"(from env TINYGSM_TOTAL_STEPS)")
         if rank == 0:
             print(f"✓ Resuming experiment '{cfg.experiment}' using saved config.")
     elif rank == 0:

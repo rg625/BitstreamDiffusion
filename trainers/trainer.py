@@ -6,6 +6,7 @@ os.environ.setdefault("TORCHINDUCTOR_DISABLE_CUDAGRAPHS", "1")
 
 import math
 import random
+import collections
 import json
 import shutil
 from pathlib import Path
@@ -105,6 +106,96 @@ def _enable_flash_sdp():
 
 def _ddp_is_on() -> bool:
     return dist.is_available() and dist.is_initialized()
+
+
+# Sigma bands for the objective probe. The original (0, 0.5) "lo" band pooled
+# sigma=0.05 -- where the production run's gradient survival is exactly 0 --
+# with sigma=0.4, where it is a healthy 0.15. That average hid the only real
+# effect, so the low end is resolved finely.
+SIGMA_BANDS = (
+    (0.0, 0.075, "s000_075"),
+    (0.075, 0.15, "s075_150"),
+    (0.15, 0.30, "s150_300"),
+    (0.30, 0.50, "s300_500"),
+    (0.50, 1.0, "s500_1k"),
+    (1.0, 3.0, "s1_3"),
+    (3.0, 10.0, "s3_10"),
+    (10.0, float("inf"), "s10_up"),
+)
+
+
+def _broadcast_sigma_data(cfg, device, ddp_active: bool) -> float:
+    """Make every rank use rank 0's sigma_data (T1).
+
+    SigmaDataEstimator runs on rank 0 only and overwrites
+    cfg.diffusion.continuous.sigma_data there; without this, ranks 1..N-1 kept
+    the configured 0.5 and gradients mixed two preconditionings and two EDM
+    loss weightings. Must be called on every rank (it is a collective).
+    """
+    val = float(cfg.diffusion.continuous.sigma_data)
+    if ddp_active and dist.is_available() and dist.is_initialized():
+        t = torch.tensor([val], dtype=torch.float64, device=device)
+        dist.broadcast(t, src=0)
+        val = float(t.item())
+        cfg.diffusion.continuous.sigma_data = val
+    return val
+
+
+def _rank_seed(seed: int, rank: int, step: int = 0) -> int:
+    """Seed for one rank's training RNG streams (T3).
+
+    Distinct per (seed, rank, step) so that DDP ranks draw different noise,
+    sigma, CFG-drop and self-conditioning masks for their different shards.
+    Rank 0 at step 0 gets `seed` itself, so single-GPU runs are unchanged.
+    """
+    return (int(seed) + 1_000_003 * int(rank) + 7_919 * int(step)) % (2 ** 31 - 1)
+
+
+def _seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed % (2 ** 32))
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def _make_distributed_sampler(dataset, *, world_size: int, rank: int, seed: int,
+                              shuffle: bool, drop_last: bool):
+    """DistributedSampler that honours cfg.train.seed (T4).
+
+    Without seed= the shuffle seed defaults to 0, so every training seed saw
+    the identical data order.
+    """
+    return DistributedSampler(dataset, num_replicas=world_size, rank=rank,
+                              shuffle=shuffle, drop_last=drop_last, seed=int(seed))
+
+
+def _stop_step(cfg) -> int:
+    """Step at which train() returns: optim.total_steps, or cfg.train.stop_at_step
+    if that comes first (0 = no stop).
+
+    stop_at_step ends a run early WITHOUT touching the LR schedule, which keeps
+    reading optim.total_steps: a cosine over 500k stopped at 250k is the first
+    half of that cosine, and resuming with a later stop_at_step continues it.
+    """
+    stops = [int(getattr(cfg.optim, "total_steps", 0) or 0),
+             int(getattr(cfg.train, "stop_at_step", 0) or 0)]
+    stops = [s for s in stops if s > 0]
+    return min(stops) if stops else 0
+
+
+def _data_order_seed(cfg) -> int:
+    """Shuffle seed for the training DistributedSampler.
+
+    cfg.train.data_order_seed when set, else cfg.train.seed. Setting it to 0
+    reproduces the data order of every multi-GPU run trained before T4, whose
+    sampler always shuffled with DistributedSampler's default seed of 0. The
+    global batch at step s is shuffled indices [s*B, (s+1)*B) whatever the
+    world size, so the order carries across GPU counts.
+    """
+    seed = getattr(cfg.train, "data_order_seed", None)
+    if seed is None:
+        seed = getattr(cfg.train, "seed", 0)
+    return int(seed or 0)
 
 
 def _maybe_set_seed(cfg):
@@ -550,6 +641,26 @@ def _sample_cond_len_positions_per_example_discrete(cfg, B: int, seq_len_positio
     cL = units * int(pos_per_tok)
     return torch.clamp(cL, min=0, max=int(seq_len_positions)).to(torch.long)
 
+def _micro_batch_size(effective_batch: int, world_size: int, accum_steps: int) -> int:
+    """Examples per GPU per forward pass.
+
+    `effective_batch` is the number of examples behind ONE optimiser step -- the
+    number that has to match across arms for a comparison to mean anything.
+    Accumulation splits that work into more, smaller forward passes; it does not
+    change the number itself. Raises rather than rounding, because a silently
+    rounded batch would make an arm quietly incomparable.
+    """
+    denom = int(world_size) * int(accum_steps)
+    if denom <= 0:
+        raise ValueError(f"world_size x accum_steps must be positive, got {denom}")
+    if int(effective_batch) % denom != 0:
+        raise ValueError(
+            f"Effective batch_size ({effective_batch}) must be divisible by "
+            f"world_size x grad_accum_steps ({world_size} x {accum_steps} = {denom})"
+        )
+    return int(effective_batch) // denom
+
+
 def _dataloader_kwargs(cfg) -> dict:
     """
     DataLoader kwargs with version-safe handling of prefetch_factor and persistent_workers.
@@ -594,6 +705,7 @@ def _resolve_checkpointing_cfg(cfg) -> dict:
     interval_enabled = False
     interval_every_steps = 100_000
     interval_keep_last = 5  # None/0 means keep all
+    interval_at_steps = None  # explicit step list; replaces every_steps when set
 
     # rolling resume checkpoint
     resume_interval_enabled = False
@@ -627,6 +739,9 @@ def _resolve_checkpointing_cfg(cfg) -> dict:
             interval_enabled = bool(getattr(ci, "enabled", interval_enabled))
             interval_every_steps = int(getattr(ci, "every_steps", interval_every_steps))
             interval_keep_last = getattr(ci, "keep_last", interval_keep_last)
+            at_steps = getattr(ci, "at_steps", None)
+            if at_steps:
+                interval_at_steps = frozenset(int(s) for s in at_steps)
 
         if hasattr(ck, "resume_interval"):
             ri = ck.resume_interval
@@ -658,6 +773,7 @@ def _resolve_checkpointing_cfg(cfg) -> dict:
         "interval_enabled": interval_enabled,
         "interval_every_steps": interval_every_steps,
         "interval_keep_last": keep_last_norm,
+        "interval_at_steps": interval_at_steps,
 
         "resume_interval_enabled": resume_interval_enabled,
         "resume_interval_every_steps": resume_interval_every_steps,
@@ -796,6 +912,7 @@ class Trainer:
         self.ckpt_interval_enabled = bool(ck["interval_enabled"])
         self.ckpt_interval_every_steps = int(ck["interval_every_steps"])
         self.ckpt_interval_keep_last = ck["interval_keep_last"]  # None => keep all
+        self.ckpt_interval_at_steps = ck["interval_at_steps"]  # None => every_steps
         self.resume_interval_enabled = bool(ck["resume_interval_enabled"])
         self.resume_interval_every_steps = int(ck["resume_interval_every_steps"])
 
@@ -805,24 +922,39 @@ class Trainer:
         self._interval_ckpt_paths: List[str] = []
 
 
+        # ── gradient accumulation ───────────────────────────────────────────
+        # The token-space model materialises a [B, 512, 49153] logits tensor and
+        # OOMs at 128 examples/GPU on an 80 GB A100 (it asked for 12 GiB with
+        # 3.44 GiB left), which forced the first V-way run down to an effective
+        # batch of 128 -- a quarter of the binary control's 512, so the two were
+        # matched to each other but measured well below the production operating
+        # point. Accumulation buys back the batch on the same four GPUs: 32/GPU
+        # x 4 GPUs x 4 accumulation steps is 512 examples per optimiser step at
+        # the per-GPU memory the 128-batch run already proved fits.
+        self.grad_accum_steps = max(1, int(getattr(cfg.train, "grad_accum_steps", 1) or 1))
+        if self.grad_accum_steps > 1 and cfg.framework != "continuous_score":
+            raise NotImplementedError(
+                "grad_accum_steps > 1 is implemented for continuous_score only")
+
         # ── data ────────────────────────────────────────────────────────────
         raw_train_loader, raw_val_loader, _ = get_dataloaders(cfg)
         dl_kw = _dataloader_kwargs(cfg)
 
         if self.ddp_active:
-            assert cfg.train.batch_size % self.world_size == 0, (
-                f"Global batch_size ({cfg.train.batch_size}) must be divisible by world_size "
-                f"({self.world_size}) for fixed-shape DDP training."
-            )
-            batch_size_per_gpu = cfg.train.batch_size // self.world_size
+            # cfg.train.batch_size is the EFFECTIVE global batch: the number of
+            # examples behind one optimiser step, and so the number that has to
+            # match across arms. Accumulation splits it over more, smaller
+            # forward passes; it does not change it.
+            batch_size_per_gpu = _micro_batch_size(
+                cfg.train.batch_size, self.world_size, self.grad_accum_steps)
+            if self.is_master and self.grad_accum_steps > 1:
+                print(f"[accum] effective batch {cfg.train.batch_size} = "
+                      f"{batch_size_per_gpu}/GPU x {self.world_size} GPUs x "
+                      f"{self.grad_accum_steps} accumulation steps")
 
-            train_sampler = DistributedSampler(
-                raw_train_loader.dataset,
-                num_replicas=self.world_size,
-                rank=self.rank,
-                shuffle=True,
-                drop_last=True,
-            )
+            train_sampler = _make_distributed_sampler(
+                raw_train_loader.dataset, world_size=self.world_size, rank=self.rank,
+                seed=_data_order_seed(cfg), shuffle=True, drop_last=True)
             self.train_loader = torch.utils.data.DataLoader(
                 raw_train_loader.dataset,
                 batch_size=batch_size_per_gpu,
@@ -850,7 +982,8 @@ class Trainer:
         else:
             self.train_loader = torch.utils.data.DataLoader(
                 raw_train_loader.dataset,
-                batch_size=cfg.train.batch_size,
+                batch_size=_micro_batch_size(
+                    cfg.train.batch_size, 1, self.grad_accum_steps),
                 shuffle=True,
                 drop_last=True,
                 **dl_kw,
@@ -908,6 +1041,11 @@ class Trainer:
         # ── opt / ema / amp ────────────────────────────────────────────────
         self.ema = EMA(self.model, decay=cfg.train.ema_decay)
         self.opt, self.lr_sched = get_optimizer_and_scheduler(self.model, cfg, 0)
+        # Weights are initialised from the shared seed (identical on every rank);
+        # from here on each rank gets its own stream (T3). Rank 0 keeps the base
+        # seed, so a single-GPU run is unchanged.
+        if getattr(cfg.train, "seed", None) is not None and self.world_size > 1:
+            _seed_everything(_rank_seed(int(cfg.train.seed), self.rank, 0))
 
         self.amp_enabled = bool(getattr(cfg.train, "use_fp16", False))
         amp_dtype_req = str(getattr(cfg.train, "amp_dtype", "auto")).lower()
@@ -1117,6 +1255,16 @@ class Trainer:
 
         # ── resume ──────────────────────────────────────────────────────────
         self.global_step = 0
+        self._div_ema = None
+        self._div_best = None
+        self._div_strikes = 0
+        # Per-STEP ring buffer. The 100-step scalar logs cannot see a spike:
+        # the production-era break went 0.033 -> 13.7 inside one 20-step
+        # interval and the spike step itself was never sampled. This keeps the
+        # last N steps at full resolution and dumps them when the guard fires.
+        self._spike_ring = collections.deque(maxlen=int(
+            getattr(getattr(self.cfg.train, "divergence_guard", object()),
+                    "ring_steps", 2000)))
         self.resume_mode = "scratch"  # one of: scratch | init_from | resume
         self.start_epoch = self._resume()
 
@@ -1254,8 +1402,20 @@ class Trainer:
             if self.is_master:
                 print(f"⚠️  RNG state restore warning: {e}")
 
+    def _restore_rng_on_resume(self, state, step: int):
+        """Single process: restore the saved RNG state exactly. DDP: the
+        checkpoint holds rank 0's state only, and loading it into every rank
+        put all ranks on one stream (T3), so each rank is re-seeded from
+        (seed, rank, step) instead."""
+        if int(getattr(self, "world_size", 1)) <= 1:
+            if state is not None:
+                self._set_rng_state(state)
+            return
+        seed = getattr(self.cfg.train, "seed", None)
+        _seed_everything(_rank_seed(0 if seed is None else int(seed), int(self.rank), int(step)))
+
     def _load_checkpoint(self, path: Path):
-        ckpt = torch.load(path, map_location="cpu")
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
         state_dict = ckpt["model"]
         clean_state_dict = {}
         for k, v in state_dict.items():
@@ -1282,8 +1442,7 @@ class Trainer:
             self.ema.load_state_dict(ckpt["ema"])
             self.ema.to(self.device)
 
-        if "rng_state" in ckpt and ckpt["rng_state"] is not None:
-            self._set_rng_state(ckpt["rng_state"])
+        self._restore_rng_on_resume(ckpt.get("rng_state"), int(ckpt.get("global_step", 0)))
 
         self.global_step = ckpt.get("global_step", 0)
         start_epoch = ckpt.get("epoch", -1) + 1
@@ -1316,7 +1475,7 @@ class Trainer:
 
         This is the "fresh run from weights" mode.
         """
-        ckpt = torch.load(path, map_location="cpu")
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
         if "model" not in ckpt:
             raise KeyError(f"Checkpoint at {path} missing key 'model'.")
 
@@ -1408,7 +1567,9 @@ class Trainer:
     # -----------------------------------------------------------------------------
     # Trainer method: full step_continuous
     # -----------------------------------------------------------------------------
-    def _step_continuous(self, x0, is_train: bool):
+    def _step_continuous(self, x0, is_train: bool, batch_prefix_mask=None,
+                         accum_first: bool = True, accum_last: bool = True,
+                         accum_scale: float = 1.0):
         """
         Continuous score training step with optional CFG-style prefix conditioning.
 
@@ -1454,7 +1615,22 @@ class Trainer:
         cond_cfg = getattr(self.cfg, "cond", None)
         cond_enabled_cfg = (cond_cfg is not None) and bool(getattr(cond_cfg, "enabled", False))
 
-        if not cond_enabled_cfg:
+        # Per-example prefix mask supplied by the batch (task datasets: Sudoku /
+        # TinyGSM). It takes precedence over the config-derived fixed/random
+        # prompt length, enabling variable-length per-example prompts.
+        batch_pm = None
+        if batch_prefix_mask is not None:
+            batch_pm = batch_prefix_mask.to(self.device, non_blocking=True).view(B, -1).bool()
+            if batch_pm.shape[1] != S:
+                raise ValueError(
+                    f"batch_prefix_mask has {batch_pm.shape[1]} positions but x0 has S={S}"
+                )
+
+        if batch_pm is not None:
+            prefix_mask = batch_pm
+            cL_pos = None
+            cond_enabled = True
+        elif not cond_enabled_cfg:
             cond_enabled = False
             prefix_mask = None
             cL_pos = None
@@ -1470,16 +1646,38 @@ class Trainer:
         p_uncond = 0.0
 
         if cond_enabled:
-            noise_prefix = bool(getattr(cond_cfg, "noise_prefix", False))
-            suffix_only_loss = bool(getattr(cond_cfg, "loss_on_suffix_only", True))
-            p_uncond = float(getattr(cond_cfg, "p_uncond", 0.0))
+            # Defaults are clean-prefix + suffix-only loss, which is exactly the
+            # task (prompt/solution) regime; cfg.cond may still override.
+            noise_prefix = bool(getattr(cond_cfg, "noise_prefix", False)) if cond_cfg is not None else False
+            suffix_only_loss = bool(getattr(cond_cfg, "loss_on_suffix_only", True)) if cond_cfg is not None else True
+            p_uncond = float(getattr(cond_cfg, "p_uncond", 0.0)) if cond_cfg is not None else 0.0
             p_uncond = max(0.0, min(1.0, p_uncond))
 
         # ------------------------------------------------------------------
         # Draw sigma
         # ------------------------------------------------------------------
-        sigma = self._draw_sigma(B)
-        sigma_exp = sigma.view(-1, 1, 1) if is_cont_tokens else sigma.view(-1, 1)
+        window_keep = None
+        if self._window_ordering_enabled():
+            # Window ordering replaces the sigma draw itself (for EVERY arm,
+            # control included): tau ~ U(0,1] from a dedicated stream, then
+            # sigma_j = F^-1(t_j) through the frozen noise CDF. See
+            # _draw_window_sigma.
+            sigma, window_keep, sigma_global = self._draw_window_sigma(
+                B, S, prefix_mask, is_cont_tokens, is_train, accum_first)
+        else:
+            sigma = self._draw_sigma(B)
+            # Keep the GLOBAL (per-example) sigma: the entropy schedule and the
+            # objective probe are about the trajectory's noise level, not about
+            # any one token's, so they must not see the per-position form.
+            sigma_global = sigma
+            sigma = self._apply_training_ordering(sigma, S, prefix_mask, is_cont_tokens)
+        # sigma is [B] today. Per-position sigma ([B,S], temporal ordering) needs
+        # only the position axis kept and the trailing dims padded; the [B] path
+        # below is byte-for-byte what it was.
+        if sigma.dim() == 1:
+            sigma_exp = sigma.view(-1, 1, 1) if is_cont_tokens else sigma.view(-1, 1)
+        else:
+            sigma_exp = sigma.unsqueeze(-1) if is_cont_tokens else sigma
 
         # ------------------------------------------------------------------
         # Build xt
@@ -1497,7 +1695,9 @@ class Trainer:
 
             if drop_mask.any():
                 if is_cont_tokens:
-                    replace = drop_mask.view(B, 1, 1) & prefix_mask.unsqueeze(-1)
+                    # expand: a [B,S,1] boolean mask cannot index a [B,S,V] tensor
+                    replace = (drop_mask.view(B, 1, 1)
+                               & prefix_mask.unsqueeze(-1)).expand_as(prefix_used_full)
                     prefix_used_full[replace] = null_full[replace]
                 else:
                     replace = drop_mask.view(B, 1) & prefix_mask
@@ -1513,7 +1713,7 @@ class Trainer:
 
             # Clamp prefix positions to chosen clean/null prefix.
             if is_cont_tokens:
-                pm = prefix_mask.unsqueeze(-1)
+                pm = prefix_mask.unsqueeze(-1).expand_as(xt)
                 xt[pm] = prefix_used_full[pm]
             else:
                 xt[prefix_mask] = prefix_used_full[prefix_mask]
@@ -1577,7 +1777,7 @@ class Trainer:
 
             if needs_sc_injection:
                 if is_cont_tokens:
-                    pm = prefix_mask.unsqueeze(-1)
+                    pm = prefix_mask.unsqueeze(-1).expand_as(x0_hat)
                     x0_hat[pm] = prefix_used_full[pm]
                 else:
                     x0_hat[prefix_mask] = prefix_used_full[prefix_mask]
@@ -1601,6 +1801,11 @@ class Trainer:
             loss_mask = None
             if suffix_only_loss and cond_enabled and (not noise_prefix):
                 loss_mask = (~prefix_mask).to(dtype=torch.float32)
+            if window_keep is not None:
+                # Resolved-context tokens (t_j = 0) carry no loss; at k = inf
+                # window_keep is the suffix mask and this changes nothing.
+                wk = window_keep.to(dtype=torch.float32)
+                loss_mask = wk if loss_mask is None else loss_mask * wk
 
             loss_target = x0_target if is_cont_tokens else x0_clean
 
@@ -1624,6 +1829,19 @@ class Trainer:
                 )
                 entropy_metric = None
 
+        # Mechanistic telemetry for the objective pilot (PRIMARY endpoint).
+        # This is the dispatched path for framework == "continuous_score", which
+        # is what every bitstream task uses; see tests/test_objective_probe.py.
+        # Outside the autocast block and under no_grad, so it cannot perturb the
+        # loss or the graph. Binary representation only: the D = sigmoid(ell)
+        # parameterisation the probe measures does not exist in tokens mode.
+        # is_train only: validation does not advance global_step, so every
+        # validation batch would log at the SAME step -- the 5k smoke wrote 230
+        # extra points at step 5000, on validation data with a different noise
+        # draw. The endpoint must be a training-step series.
+        if is_train and not is_cont_tokens:
+            self._log_objective_probe(logits, loss_target, sigma_global, loss_mask)
+
         # Large intermediates no longer needed before backward bookkeeping.
         del logits, xt
         if x0_hat is not None:
@@ -1636,23 +1854,54 @@ class Trainer:
         # Optim step
         # ------------------------------------------------------------------
         if is_train:
-            self.opt.zero_grad(set_to_none=True)
+            # GRADIENT ACCUMULATION.
+            # accum_first/accum_last/accum_scale are all defaults (True/True/1.0)
+            # when cfg.train.grad_accum_steps == 1, so every existing run is
+            # bit-identical to before: zero_grad, one backward, one step.
+            #
+            # With accumulation the micro-batch loss is scaled by 1/accum before
+            # backward, so the accumulated gradient is the mean over the FULL
+            # effective batch, not the sum -- the same quantity a single large
+            # batch would produce. Clipping, the optimiser step, the LR schedule
+            # and the EMA update all happen once per effective batch.
+            #
+            # DDP's all-reduce is deliberately NOT suppressed with no_sync() on
+            # the non-final micro-batches. Autograd accumulates into .grad before
+            # DDP's hook fires, so each micro-backward all-reduces the running
+            # accumulated gradient; averaging an already-averaged value across
+            # ranks is idempotent and the result is identical. That costs
+            # (accum-1) extra all-reduces per step -- a few percent inside one
+            # NVLink node -- and buys correctness that does not depend on
+            # no_sync() interacting correctly with torch.compile's DDPOptimizer,
+            # which splits the backward graph and is exactly the kind of
+            # never-exercised path that has bitten this project before.
+            if accum_first:
+                self.opt.zero_grad(set_to_none=True)
+            gnorm = None
+            loss_for_backward = loss * accum_scale if accum_scale != 1.0 else loss
 
             if self.use_scaler:
-                self.scaler.scale(loss).backward()
-                if self.grad_clip > 0:
-                    self.scaler.unscale_(self.opt)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
-                self.scaler.step(self.opt)
-                self.scaler.update()
+                self.scaler.scale(loss_for_backward).backward()
+                if accum_last:
+                    if self.grad_clip > 0:
+                        self.scaler.unscale_(self.opt)
+                        gnorm = torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.grad_clip)
+                    self.scaler.step(self.opt)
+                    self.scaler.update()
             else:
-                loss.backward()
-                if self.grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
-                self.opt.step()
+                loss_for_backward.backward()
+                if accum_last:
+                    if self.grad_clip > 0:
+                        gnorm = torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.grad_clip)
+                    self.opt.step()
 
-            self.lr_sched.step()
-            self.ema.update(self.model)
+            if accum_last:
+                self.lr_sched.step()
+                self.ema.update(self.model)
+                self._last_grad_norm = (float(gnorm) if gnorm is not None else None)
+                self._log_optim_diagnostics(gnorm)
 
         # ------------------------------------------------------------------
         # Entropy buffer update
@@ -1661,13 +1910,25 @@ class Trainer:
             if cond_enabled and (drop_mask is not None):
                 keep = ~drop_mask
                 if keep.any():
-                    self._update_entropy_buffer(sigma[keep], entropy_metric[keep])
+                    self._update_entropy_buffer(sigma_global[keep], entropy_metric[keep])
             else:
-                self._update_entropy_buffer(sigma, entropy_metric)
+                self._update_entropy_buffer(sigma_global, entropy_metric)
 
         return loss.item()
 
-    def _step_discrete(self, x0, is_train: bool):
+    def _step_discrete(self, x0, is_train: bool, batch_prefix_mask=None,
+                       accum_first: bool = True, accum_last: bool = True,
+                       accum_scale: float = 1.0):
+        # Interface parity with _step_continuous. Gradient accumulation is
+        # implemented for the continuous-score framework only (that is where the
+        # token-space V-way head needs it); fail loudly rather than silently
+        # ignoring accum and training at a quarter of the intended batch.
+        if not (accum_first and accum_last and accum_scale == 1.0):
+            raise NotImplementedError(
+                "grad_accum_steps > 1 is not implemented for the discrete framework")
+        # batch_prefix_mask is accepted for interface parity with _step_continuous.
+        # The task experiments use the continuous-score framework; discrete
+        # conditioning still flows through the config-derived path below.
         B, S = x0.shape
         x0_flat = x0.to(self.device, non_blocking=True).view(B, -1).long()
 
@@ -1716,6 +1977,10 @@ class Trainer:
                 mask=loss_mask,
             )
 
+        # Mechanistic telemetry for the objective pilot. Outside the autocast
+        # block and under no_grad, so it cannot perturb the loss or the graph.
+        self._log_objective_probe(model_scores, x0_flat, sigma, loss_mask)
+
         if is_train:
             self.opt.zero_grad(set_to_none=True)
 
@@ -1737,8 +2002,317 @@ class Trainer:
 
         return loss.item()
 
+    def _window_ordering_enabled(self) -> bool:
+        cfg_o = getattr(self.cfg.train, "ordering", None)
+        return (cfg_o is not None and bool(getattr(cfg_o, "enabled", False))
+                and str(getattr(cfg_o, "kind", "w")) == "window")
+
+    def _draw_window_sigma(self, B, n_bits, prefix_mask, is_cont_tokens, is_train,
+                           accum_first):
+        """Window ordering: (sigma [B,n_bits], keep [B,n_bits], sigma_global [B]).
+
+        MATCHING ACROSS ARMS. tau and the random-order keys come from two
+        dedicated generators seeded from (seed, rank, optimiser step, micro-batch),
+        never from the global RNG. So for a given training seed every arm sees
+        the same data order, the same Gaussian noise and the same tau; arms at the
+        same k differ only in which token gets which of an identical multiset of
+        sigmas. Keyed to the step, the streams are also resume-exact.
+        """
+        if is_cont_tokens:
+            raise NotImplementedError("window ordering is implemented for binary bitstreams only")
+        from diffusion.continuous.ordering import NoiseCDF, training_window_sigma
+        cfg_o = self.cfg.train.ordering
+        if getattr(self, "_window_noise", None) is None:
+            self._window_noise = NoiseCDF.load(str(cfg_o.noise_table))
+            self._window_gen_tau = torch.Generator(device=self.device)
+            self._window_gen_key = torch.Generator(device=self.device)
+            self._window_micro = 0
+        # micro-batch index within the optimiser step; validation gets its own
+        # stream so evaluating never shifts the training draws
+        self._window_micro = 0 if accum_first else self._window_micro + 1
+        stream = 0 if is_train else 1
+        base = (int(self.cfg.train.seed) * 1_000_003 + int(self.rank) * 7_919
+                + int(self.global_step) * 64 + self._window_micro) * 2 + stream
+        self._window_gen_tau.manual_seed(base)
+        self._window_gen_key.manual_seed(base ^ 0x5DEECE66D)
+        # tau in (0, 1]: tau = 0 would put the whole sequence at the clean atom
+        tau = 1.0 - torch.rand(B, device=self.device, generator=self._window_gen_tau)
+        return training_window_sigma(
+            tau,
+            n_bits=int(n_bits),
+            bits_per_token=int(getattr(self.cfg.data, "bits_per_token", 16)),
+            mode=str(getattr(cfg_o, "mode", "none")),
+            k=float(getattr(cfg_o, "k", float("inf"))),
+            noise=self._window_noise,
+            prefix_mask=prefix_mask,
+            generator=self._window_gen_key,
+            loss_match_k=getattr(cfg_o, "loss_match_k", None),
+        )
+
+    def _apply_training_ordering(self, sigma, n_bits, prefix_mask, is_cont_tokens):
+        """[B] -> [B, n_bits] per-position sigma when temporal ordering is on.
+
+        TRAINING-time ordering: the model is taught to denoise the suffix in an
+        order, rather than merely being asked to at inference. Disabled by
+        default, and at w == 0 it returns `sigma` untouched, so every existing
+        run is bit-identical.
+
+        The random permutation is redrawn on every call, i.e. per example PER
+        STEP, so a fixed order can never be memorised for a given example.
+        """
+        cfg_o = getattr(self.cfg.train, "ordering", None)
+        if cfg_o is None or not bool(getattr(cfg_o, "enabled", False)):
+            return sigma
+        w = float(getattr(cfg_o, "w", 0.0))
+        if w == 0.0:
+            return sigma
+        if is_cont_tokens:
+            raise NotImplementedError(
+                "training-time ordering is implemented for binary bitstreams only")
+        from diffusion.continuous.ordering import training_position_sigma
+        cont = self.cfg.diffusion.continuous
+        return training_position_sigma(
+            sigma,
+            n_bits=int(n_bits),
+            bits_per_token=int(getattr(self.cfg.data, "bits_per_token", 16)),
+            mode=str(getattr(cfg_o, "mode", "l2r")),
+            w=w,
+            sigma_min=float(cont.sigma_min),
+            sigma_max=float(cont.sigma_max),
+            prefix_mask=prefix_mask,
+            generator=None,          # follow global RNG: reseeded per run, fresh per step
+        )
+
     @torch.compiler.disable
     @torch.no_grad()
+    def _log_optim_diagnostics(self, grad_norm=None) -> None:
+        """Secondary diagnostics for the stability study.
+
+        The first pilot froze with bit-identical weights for ~55k steps and
+        nobody could tell from the logs; it took diffing checkpoints afterwards.
+        Adam's exp_avg_sq had decayed to 1e-29, which IS visible live -- so log
+        it. `update_rms` is the actual parameter step size: it goes to exactly
+        zero in a frozen run even while the loss keeps fluctuating from the data
+        draw, which is the signal that was missing.
+        """
+        probe = getattr(self.cfg.train, "objective_probe", None)
+        if probe is None or not bool(getattr(probe, "enabled", False)):
+            return
+        every = int(getattr(probe, "every_steps", 500))
+        if every <= 0 or int(self.global_step) % every:
+            return
+        if not getattr(self, "is_master", True):
+            return
+
+        if grad_norm is not None and math.isfinite(float(grad_norm)):
+            self.writer.add_scalar("optim/grad_norm_preclip",
+                                   float(grad_norm), int(self.global_step))
+
+        st = getattr(self.opt, "state", None)
+        if not st:
+            return
+        v_max = 0.0
+        m_abs = 0.0
+        n = 0
+        upd = 0.0
+        eps = float(getattr(self.cfg.optim, "eps", 1e-8))
+        for p, sd in st.items():
+            v = sd.get("exp_avg_sq")
+            m = sd.get("exp_avg")
+            if v is None or m is None:
+                continue
+            v = v.float()
+            m = m.float()
+            v_max = max(v_max, float(v.max()))
+            m_abs += float(m.abs().sum())
+            upd += float((m / (v.sqrt() + eps)).pow(2).sum())
+            n += v.numel()
+        if n == 0:
+            return
+        self.writer.add_scalar("optim/exp_avg_sq_max", v_max, int(self.global_step))
+        self.writer.add_scalar("optim/exp_avg_abs_mean", m_abs / n, int(self.global_step))
+        self.writer.add_scalar("optim/update_rms", (upd / n) ** 0.5,
+                               int(self.global_step))
+
+    def _dump_spike_ring(self, reason: str) -> None:
+        """Write the per-step ring buffer next to the checkpoints.
+
+        Only the master writes, and failure here must never mask the abort it is
+        reporting on.
+        """
+        if not getattr(self, "is_master", True) or not self._spike_ring:
+            return
+        try:
+            out = Path(self.cfg.evaluation.checkpoint_path).parent.parent / "spike_ring.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            rows = list(self._spike_ring)
+            out.write_text(json.dumps({
+                "reason": reason,
+                "global_step": int(self.global_step),
+                "n_steps": len(rows),
+                "columns": ["step", "loss", "grad_norm_preclip"],
+                "rows": rows,
+            }, indent=2))
+            print(f"[divergence-guard] wrote per-step ring buffer "
+                  f"({len(rows)} steps) to {out}")
+        except Exception as e:  # pragma: no cover
+            print(f"[divergence-guard] could not write ring buffer: {e}")
+
+    def _check_divergence(self, loss: float) -> None:
+        """Abort a run that has diverged, instead of letting it burn the budget.
+
+        The first CE/SM pilot diverged (CE at step 6,580, SM at 19,540) and then
+        sat with bit-identical weights for ~55k further steps -- roughly 55 GPU-h
+        that computed nothing, and which no one noticed until the checkpoints
+        were diffed afterwards.
+
+        Rule: track an EMA of the training loss, remember its best value, and
+        abort once the EMA has stayed above `factor * best` for `patience`
+        consecutive steps. Comparing against the BEST-so-far (not a fixed
+        baseline) means a legitimately decreasing loss can never trigger it, and
+        the patience window means a single bad batch cannot either.
+
+        Off unless cfg.train.divergence_guard.enabled is set.
+        """
+        g = getattr(self.cfg.train, "divergence_guard", None)
+        if g is None or not bool(getattr(g, "enabled", False)):
+            return
+        if not math.isfinite(loss):
+            self._spike_ring.append((int(self.global_step), float("nan"), float("nan")))
+            self._dump_spike_ring("non_finite")
+            raise SystemExit(
+                f"[divergence-guard] non-finite loss ({loss}) at step "
+                f"{self.global_step}; aborting.")
+
+        self._spike_ring.append((int(self.global_step), float(loss),
+                                 float(self._last_grad_norm)
+                                 if getattr(self, "_last_grad_norm", None) is not None
+                                 else float("nan")))
+        decay = float(getattr(g, "ema_decay", 0.99))
+        self._div_ema = loss if self._div_ema is None \
+            else decay * self._div_ema + (1.0 - decay) * loss
+
+        # Do not arm during warmup: the loss is still falling fast and the EMA
+        # has not settled, so "best so far" is not yet meaningful.
+        if self.global_step < int(getattr(g, "min_steps", 2000)):
+            return
+        if self._div_best is None or self._div_ema < self._div_best:
+            self._div_best = self._div_ema
+            self._div_strikes = 0
+            return
+
+        factor = float(getattr(g, "factor", 20.0))
+        if self._div_ema > factor * self._div_best:
+            self._div_strikes += 1
+        else:
+            self._div_strikes = 0
+
+        patience = int(getattr(g, "patience", 200))
+        if self._div_strikes >= patience:
+            # Flush first: the abort truncates the event file, and on one run
+            # TensorBoard lost the final 481 steps -- the entire record of the
+            # break it was aborting for.
+            try:
+                self.writer.flush()
+            except Exception:
+                pass
+            self._dump_spike_ring("divergence")
+            raise SystemExit(
+                f"[divergence-guard] loss EMA {self._div_ema:.6g} has exceeded "
+                f"{factor}x its best ({self._div_best:.6g}) for {patience} "
+                f"consecutive steps, at step {self.global_step}. Aborting rather "
+                f"than burning the remaining budget. Set "
+                f"cfg.train.divergence_guard.enabled=False to override.")
+
+    @torch.compiler.disable
+    @torch.no_grad()
+    def _log_objective_probe(self, logits, x0, sigma, loss_mask):
+        """PRIMARY endpoint of the binary_sm vs binary_ce pilot.
+
+        The two objectives differ by exactly the factor D(1-D) per bit:
+
+            dL_ce/d_ell = w(sigma) * (D - x0)
+            dL_sm/d_ell = w(sigma) * (D - x0) * D(1-D)
+
+        so `grad_survival` = sum|dL_sm| / sum|dL_ce| measures how much of the
+        learning signal the score-matching objective retains. It is computed the
+        same way in BOTH arms -- it is a property of the model's D values, not of
+        the loss being optimised -- so the two runs are directly comparable.
+
+        Measured on FREE bits only (loss_mask): prompt positions are clamped and
+        carry no gradient, and including them would dilute every statistic.
+        """
+        probe = getattr(self.cfg.train, "objective_probe", None)
+        if probe is None or not bool(getattr(probe, "enabled", False)):
+            return
+        every = int(getattr(probe, "every_steps", 500))
+        if every <= 0 or int(self.global_step) % every:
+            return
+        if not getattr(self, "is_master", True):
+            return
+
+        D = torch.sigmoid(logits.detach().float().reshape(logits.shape[0], -1))
+        t = x0.detach().float().reshape(D.shape)
+        keep = (loss_mask.detach().float().reshape(D.shape) > 0) if loss_mask is not None \
+            else torch.ones_like(D, dtype=torch.bool)
+        if keep.sum() == 0:
+            return
+        d, tt = D[keep], t[keep]
+        supp = d * (1 - d)
+        err = (d - tt).abs()
+        # Logit magnitude: the diverged pilot sat at |ell| ~ 1e3, where sigmoid
+        # saturates exactly and D(1-D) is identically zero. Cheap to watch, and
+        # it is the quantity that actually distinguishes "confident" from "broken".
+        ell = logits.detach().float().reshape(D.shape)[keep]
+        stats = {
+            "objective/logit_abs_mean": float(ell.abs().mean()),
+            "objective/logit_abs_p99": float(torch.quantile(
+                ell.abs()[:100000].float(), 0.99)) if ell.numel() else 0.0,
+            "objective/logit_abs_max": float(ell.abs().max()),
+            "objective/grad_survival": float((err * supp).sum() / err.sum().clamp_min(1e-12)),
+            "objective/median_D1mD": float(supp.median()),
+            "objective/frac_D1mD_lt_0.01": float((supp < 0.01).float().mean()),
+            "objective/frac_D1mD_lt_0.001": float((supp < 0.001).float().mean()),
+            "objective/mean_abs_err": float(err.mean()),
+        }
+        # Stratify by sigma: suppression is strongly sigma-dependent, and an
+        # aggregate over a log-uniform sigma draw hides that.
+        sig = sigma.detach().float().reshape(-1)
+        if sig.numel() == D.shape[0]:
+            per_row_keep = keep.view(D.shape[0], -1)
+            for lo, hi, name in SIGMA_BANDS:
+                sel = (sig >= lo) & (sig < hi)
+                if not sel.any():
+                    continue
+                dr, tr, kr = D[sel], t[sel], per_row_keep[sel]
+                if kr.sum() == 0:
+                    continue
+                dd, ttt = dr[kr], tr[kr]
+                sp = dd * (1 - dd); er = (dd - ttt).abs()
+                stats[f"objective/grad_survival_{name}"] = float(
+                    (er * sp).sum() / er.sum().clamp_min(1e-12))
+        for k, v in stats.items():
+            self.writer.add_scalar(k, v, int(self.global_step))
+
+    @torch.compiler.disable
+    @torch.no_grad()
+    def _unpack_batch(self, batch):
+        """Return (x0, batch_prefix_mask).
+
+        Supports three batch formats:
+          - plain tensor                         -> (tensor, None)        [LM1B / OWT]
+          - (list/tuple)                         -> (batch[0], None)
+          - dict with keys 'x0' [, 'prefix_mask']-> (x0, prefix_mask)     [task datasets]
+
+        batch_prefix_mask, when present, is a per-example [B, S] bool mask marking
+        the conditioned prompt region (clamped clean, excluded from the loss).
+        """
+        if isinstance(batch, dict):
+            return batch["x0"], batch.get("prefix_mask", None)
+        if isinstance(batch, (list, tuple)):
+            return batch[0], None
+        return batch, None
+
     def _validate_epoch(self, step_fn):
         self.model.eval()
         self.ema.apply(self.model)
@@ -1749,8 +2323,8 @@ class Trainer:
         pbar = tqdm(self.val_loader, desc="Validating", leave=False, disable=not self.is_master)
 
         for batch in pbar:
-            x0 = batch[0] if isinstance(batch, (list, tuple)) else batch
-            loss = step_fn(x0, is_train=False)
+            x0, batch_prefix_mask = self._unpack_batch(batch)
+            loss = step_fn(x0, is_train=False, batch_prefix_mask=batch_prefix_mask)
             local_loss += loss
             local_count += 1.0
 
@@ -1876,13 +2450,17 @@ class Trainer:
         """
         if (not self.is_master) or (not self.ckpt_interval_enabled):
             return
-        if self._next_interval_ckpt_step is None:
-            return
-        if self.ckpt_interval_every_steps <= 0:
-            return
-
-        if int(self.global_step) < int(self._next_interval_ckpt_step):
-            return
+        if self.ckpt_interval_at_steps:
+            # Explicit list: exactly these steps and no others.
+            if int(self.global_step) not in self.ckpt_interval_at_steps:
+                return
+        else:
+            if self._next_interval_ckpt_step is None:
+                return
+            if self.ckpt_interval_every_steps <= 0:
+                return
+            if int(self.global_step) < int(self._next_interval_ckpt_step):
+                return
 
         # Build checkpoint state (same as others)
         state = self._build_ckpt_state(epoch)
@@ -1905,8 +2483,9 @@ class Trainer:
                     pass
 
         # Advance threshold robustly even if steps jump
-        while int(self._next_interval_ckpt_step) <= int(self.global_step):
-            self._next_interval_ckpt_step += int(self.ckpt_interval_every_steps)
+        if not self.ckpt_interval_at_steps:
+            while int(self._next_interval_ckpt_step) <= int(self.global_step):
+                self._next_interval_ckpt_step += int(self.ckpt_interval_every_steps)
 
 
     # ──────────────────────────────────────────────────────────────────────
@@ -1917,12 +2496,33 @@ class Trainer:
 
         # IMPORTANT: callbacks may include run_on_all_ranks=True (e.g. offline entropy)
         self._run_callbacks("on_train_begin")
+        # SigmaDataEstimator ran on rank 0 only: give every rank its value (T1)
+        # before any forward pass. Every rank reaches this line, so the
+        # collective always matches.
+        sd = _broadcast_sigma_data(self.cfg, self.device, self.ddp_active)
+        if self.is_master:
+            print(f"[sigma_data] all ranks use {sd:.6f}")
 
         # Lightning-style sanity: run callbacks once before training
         self._maybe_run_sanity()
 
-        target_total_steps = int(getattr(self.cfg.optim, "total_steps", 0))
+        target_total_steps = _stop_step(self.cfg)
         stop_training = False
+
+        # DEBUG KNOB: cap the number of batches per epoch.
+        # The epoch-boundary deadlock is deterministic -- every arm hangs at the
+        # same collective index, one epoch (22,858 steps ~ 4 h) after a fresh
+        # start -- so reproducing it normally costs a 4 h job plus queue time.
+        # Capping the epoch makes the boundary arrive in minutes WITHOUT
+        # changing it: the cap is a batch count, identical on every rank, so the
+        # ranks stay in lockstep exactly as they do at a natural boundary.
+        # Unset (0) in every production run; set only by the repro launcher.
+        epoch_batch_limit = int(
+            os.environ.get("COBIT_STEPS_PER_EPOCH",
+                           getattr(self.cfg.train, "steps_per_epoch_limit", 0) or 0))
+        if epoch_batch_limit > 0 and self.is_master:
+            print(f"[debug] COBIT_STEPS_PER_EPOCH={epoch_batch_limit}: epochs are "
+                  f"truncated to {epoch_batch_limit} batches (deadlock repro only)")
 
         try:
             for epoch in range(self.start_epoch, self.cfg.train.epochs):
@@ -1942,6 +2542,13 @@ class Trainer:
                     disable=not self.is_master,
                 )
 
+                # Micro-batch bookkeeping for gradient accumulation. With
+                # grad_accum_steps == 1 this reduces to the original loop:
+                # every batch is both the first and the last of its group.
+                accum = self.grad_accum_steps
+                micro_idx = 0
+                micro_loss_sum = 0.0
+
                 for batch in pbar:
                     # Safety guard in case we resumed exactly at target_total_steps
                     if target_total_steps > 0 and self.global_step >= target_total_steps:
@@ -1951,12 +2558,31 @@ class Trainer:
                     if hasattr(torch.compiler, "cudagraph_mark_step_begin"):
                         torch.compiler.cudagraph_mark_step_begin()
 
-                    x0 = batch[0] if isinstance(batch, (list, tuple)) else batch
-                    loss = step_fn(x0, is_train=True)
+                    x0, batch_prefix_mask = self._unpack_batch(batch)
+                    is_last_micro = (micro_idx + 1) >= accum
+                    micro_loss = step_fn(
+                        x0, is_train=True, batch_prefix_mask=batch_prefix_mask,
+                        accum_first=(micro_idx == 0), accum_last=is_last_micro,
+                        accum_scale=(1.0 / accum),
+                    )
+                    micro_loss_sum += micro_loss
+                    micro_idx += 1
+
+                    # Nothing below this line may run on a partial batch: the
+                    # optimiser has not stepped, so global_step must not move
+                    # and no checkpoint may be written mid-accumulation.
+                    if not is_last_micro:
+                        continue
+
+                    loss = micro_loss_sum / accum
+                    micro_idx = 0
+                    micro_loss_sum = 0.0
 
                     self.global_step += 1
                     train_loss += loss
                     num_train_batches += 1
+
+                    self._check_divergence(loss)
 
                     # ----------------------------------------------------------
                     # PATCH: refresh online entropy schedule during training
@@ -2000,6 +2626,10 @@ class Trainer:
 
                     if target_total_steps > 0 and self.global_step >= target_total_steps:
                         stop_training = True
+                        break
+
+                    # Deterministic on every rank: same count, same break point.
+                    if epoch_batch_limit > 0 and num_train_batches >= epoch_batch_limit:
                         break
 
                 # If we did not process any batch in this epoch, stop cleanly

@@ -64,9 +64,9 @@ class EntropySchedulePlotCallback(Callback):
 
         dev = trainer.device
         try:
-            pdf = torch.load(pdf_p, map_location=dev).to(dev).float()
-            cdf = torch.load(cdf_p, map_location=dev).to(dev).float()
-            sig = torch.load(sig_p, map_location=dev).to(dev).float()
+            pdf = torch.load(pdf_p, map_location=dev, weights_only=True).to(dev).float()
+            cdf = torch.load(cdf_p, map_location=dev, weights_only=True).to(dev).float()
+            sig = torch.load(sig_p, map_location=dev, weights_only=True).to(dev).float()
         except Exception as e:
             if getattr(trainer, "is_master", False):
                 print(f"[WARN] Failed to load entropy tables from {entropy_run_dir}: {e}")
@@ -125,7 +125,12 @@ class EntropySchedulePlotCallback(Callback):
                 it = iter(trainer.val_loader)
                 batch = next(it)
 
-            x0 = batch[0] if isinstance(batch, (tuple, list)) else batch
+            if isinstance(batch, dict):
+                x0 = batch["x0"]
+            elif isinstance(batch, (tuple, list)):
+                x0 = batch[0]
+            else:
+                x0 = batch
             x0 = x0.to(device, non_blocking=True)
 
             if batch_size is not None and x0.size(0) > batch_size:

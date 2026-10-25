@@ -19,7 +19,13 @@ try:
 except Exception:
     dist = None
 
-import mauve
+# NOT imported at module scope. utils/callbacks/__init__ imports this module,
+# which trainers/trainer.py imports unconditionally at line 36 -- so a top-level
+# `import mauve` makes the package a hard dependency of ALL training, even when
+# cfg.train.mauve.enabled is False (which it is for every task config). That is
+# how the throughput probe died: a disabled metric's dependency crashed a
+# training run that never intended to compute it. Imported lazily at the one
+# place it is used instead. evaluation/mauve.py already does the same.
 
 from evaluation.generation_driver import GenerationDriver
 from evaluation.mauve import MauveEvaluator, MauveConfig
@@ -215,6 +221,8 @@ class MauveCallback:
             self._log_scalar(trainer, f"mauve/val/{tag}/ecc/{k}", float(v), step)
 
     def _score_mauve_rank0(self, gen_texts: List[str], ref_texts: List[str]) -> Dict[str, float]:
+        import mauve  # lazy: only reached when MAUVE is actually enabled
+
         original_compute = mauve.compute_mauve
         for bs in (128, 64, 32, 16, 8, 4, 2, 1):
             try:

@@ -67,7 +67,40 @@ generated_output.png
 # Exception: entropy-rate schedule artefacts that ship with the repo and are
 # loaded at evaluation time (assets/entropy_tables/<dataset>/entropy_*.pt).
 !assets/entropy_tables/**/*.pt
+# Frozen noise CDF the window-ordering trainer, WindowSampler and
+# configs/tasks/tinygsm_bits_window.py all load (audit R1).
+!assets/noise_tables/**/*.pt
 
 # Crash dumps
 core
 core.*
+
+# task experiment artifacts (regenerable)
+datasets/sudoku/
+datasets/tinygsm/
+datasets/tinygsm_smoke/
+logs/tasks/
+
+# CFG-FKC 2D/1D demo generated figures + artifact (regenerable via scripts/fkc_cfg_2d_demo.py)
+scripts/_fkc_cfg_2d_out/
+
+# Guidance analysis: per-step diagnostics are ~19 MB and regenerate from runs/
+results/guidance/per_step.csv
+
+# Production-era checkpoints, 18 GB. They are data, not source: the anchor
+# travels with the checkpoint bundle (scripts/site/transfer_manifest.txt),
+# never through git.
+tinigsm_gsm8k/
+
+# Stray LaTeX build artefacts at the repo root; the real ones live in
+# docs/report_meeting/.
+/report.aux
+/report.log
+/report.out
+/report.pdf
+
+# On Isambard these are symlinks into $PROJECTDIR (home is capped at 101 GB);
+# a trailing-slash pattern matches only directories, not links.
+/runs
+/datasets
+/tinigsm_gsm8k

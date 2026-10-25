@@ -8,6 +8,8 @@ def _normalize_sc_refresh_mode(mode: str) -> str:
         return "refined"
     if mode in {"carry", "unrefined", "no_refresh", "no-refine"}:
         return "carry"
+    if mode == "null":
+        return "carry"   # one call per step, like carry; the self-condition is simply never updated
     raise ValueError(f"Unknown sc_refresh_mode='{mode}'")
 
 
@@ -33,7 +35,8 @@ def compute_nfe(
                 nfe += 1
             return nfe
 
-        if s in {"ddim", "ddim_karras", "ddim_entropic", "entropic", "euler"}:
+        if s in {"ddim", "ddim_karras", "ddim_entropic", "entropic", "euler", "ddim_dp_dgc", "dp_dgc",
+                 "ddim_grid", "euler_lambda"}:
             nfe = steps if not self_condition else ((2 if sc_refresh_mode == "refined" else 1) * steps)
             if return_probs:
                 nfe += 1
