@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,7 @@ def _normalize_sc_refresh_mode(mode: Optional[str]) -> str:
         "unrefined": "carry",
         "no_refresh": "carry",
         "no-refine": "carry",
+        "null": "null",   # never update: every call sees the zero/null self-condition (memoryless closure)
     }
     if mode not in aliases:
         raise ValueError(f"Unknown sc_refresh_mode='{mode}'")
@@ -209,6 +211,33 @@ def _compute_edm_gamma(
         0.0,
         min(float(s_churn) / float(num_intervals), math.sqrt(2.0) - 1.0),
     )
+
+
+def _churn_density_weights(sigmas: torch.Tensor, grid_dir, target_dir) -> list:
+    """Per-step churn multipliers w_i = p_target(u_i) / p_grid(u_i), u = log sigma.
+
+    With gamma_i = gamma * w_i (re-capped at sqrt(2)-1) the steps stay on the grid table's sigmas while
+    the churn per unit log-sigma, ~ gamma * N * p(u), follows the target table instead. Both tables must
+    share their sigma bins (true for the DGC tables, which copy them). Used to separate where the steps
+    are from where the churn acts (env COBIT_CHURN_TABLE, read by DDIMSampler.sample).
+    """
+    import numpy as np
+
+    def density(d):
+        pdf = torch.load(Path(d) / "entropy_pdf.pt", map_location="cpu", weights_only=True).double().numpy()
+        sig = torch.load(Path(d) / "entropy_sigmas.pt", map_location="cpu", weights_only=True).double().numpy()
+        return np.log(sig), pdf / pdf.sum()
+
+    (ug, pg), (ut, pt) = density(grid_dir), density(target_dir)
+    if ug.shape != ut.shape or not np.allclose(ug, ut):
+        raise ValueError(f"COBIT_CHURN_TABLE {target_dir} does not share sigma bins with {grid_dir}")
+    floor = 1e-6 * pg.max()
+    out = []
+    for i in range(len(sigmas) - 1):
+        u = math.log(max(float(sigmas[i]), 1e-12))
+        a, b = np.interp(u, ug, pt), np.interp(u, ug, pg)
+        out.append(float(a / max(b, floor)))
+    return out
 
 
 def _apply_edm_churn(
@@ -766,6 +795,7 @@ class SigmaSchedule:
         self.process = process
         self.cfg = cfg
         self.device = device
+        self._dp_dgc_cache = {}   # (table, N, K, lo, hi, weight) -> (sigmas, block allocation)
 
     @staticmethod
     def _entropy_run_dir_from_ckpt(ckpt_path: Path) -> Path:
@@ -1051,6 +1081,46 @@ class SigmaSchedule:
 
         if schedule_name == "karras":
             return self._karras_schedule(N, sigma_min=sigma_min, sigma_max=sigma_max)
+
+        if schedule_name == "grid_file":
+            # A precomputed grid (scripts/dgc/build_gamma_grid.py): npz with one array per interval count, "N<k>",
+            # descending, N + 1 points. num_steps points here = num_steps - 1 intervals (the sampler convention).
+            import numpy as np
+
+            path = getattr(getattr(self.cfg, "evaluation", None), "grid_file", None)
+            if not path:
+                raise ValueError("schedule 'grid_file' needs cfg.evaluation.grid_file")
+            key = f"N{N - 1}"
+            with np.load(path) as z:
+                if key not in z.files:
+                    raise KeyError(f"{path} has no grid for {N - 1} intervals (has {sorted(z.files)})")
+                s = np.asarray(z[key], dtype=np.float64)
+            if len(s) != N or not np.all(np.diff(s) < 0):
+                raise ValueError(f"{path}:{key} must hold {N} strictly descending sigmas")
+            return torch.tensor(s, device=self.device, dtype=torch.float32)
+
+        if schedule_name == "dp_dgc":
+            # Finite-NFE DGC: same table (a DGC table), same endpoints as "entropic", but the block allocation
+            # solves the discrete problem (diffusion/continuous/dp_dgc.py) instead of inverse-CDF sampling.
+            from diffusion.continuous.dp_dgc import dp_dgc_sigmas
+
+            pdf, cdf, sigmas_base = self._load_entropy_tables(entropy_run_dir=entropy_run_dir)
+            if pdf is None or cdf is None or sigmas_base is None:
+                raise FileNotFoundError(f"dp_dgc schedule needs entropy tables in {entropy_run_dir}")
+            sig = sigmas_base.double().cpu().numpy()
+            F = cdf.double().cpu().numpy().copy()
+            F[-1] = 1.0
+            lo, hi = max(sigma_min, float(sig[0])), min(sigma_max, float(sig[-1]))
+            ev = getattr(self.cfg, "evaluation", None)
+            K = int(getattr(ev, "dp_dgc_blocks", 8))
+            weight = str(getattr(ev, "dp_dgc_weight", "increment"))
+            key = (str(entropy_run_dir), N, K, lo, hi, weight)
+            if key not in self._dp_dgc_cache:
+                self._dp_dgc_cache[key] = dp_dgc_sigmas(sig, F, N, lo, hi, K, pdf=pdf.double().cpu().numpy(),
+                                                        weight=weight)
+                print(f"[dp_dgc] N={N} K={K} G={weight} sigma {hi:.4g}->{lo:.4g} allocation (high sigma first) "
+                      f"{self._dp_dgc_cache[key][1]}", flush=True)
+            return torch.tensor(self._dp_dgc_cache[key][0], device=self.device, dtype=torch.float32)
 
         if schedule_name == "entropic":
             _, cdf, sigmas_base = self._load_entropy_tables(entropy_run_dir=entropy_run_dir)
@@ -1865,6 +1935,17 @@ class DDIMSampler:
                     _clamp_mask_(_z, null_full if _b[1] == "u" else prefix_full, prefix_mask)
                 sc_state.set(_b, _z)
 
+        churn_w = None
+        churn_table = os.environ.get("COBIT_CHURN_TABLE")
+        if churn_table and stoch_cfg.enabled:
+            grid_dir = entropy_run_dir if entropy_run_dir is not None else self.sigmas._default_entropy_run_dir()
+            churn_w = _churn_density_weights(sigmas, grid_dir, churn_table)
+            g0 = min(stoch_cfg.s_churn / max(1, len(sigmas) - 1), math.sqrt(2.0) - 1.0)
+            cap = math.sqrt(2.0) - 1.0
+            print(f"[churn] steps from {grid_dir}, churn density from {churn_table}: sum(gamma_i) "
+                  f"{g0 * len(churn_w):.2f} -> {sum(min(g0 * w, cap) for w in churn_w):.2f}, "
+                  f"{sum(g0 * w > cap for w in churn_w)}/{len(churn_w)} steps capped", flush=True)
+
         indices = range(len(sigmas) - 1)
         if progress:
             indices = tqdm(indices, desc="DDIM Sampler", leave=False)
@@ -1886,6 +1967,8 @@ class DDIMSampler:
                 s_tmin=stoch_cfg.s_tmin,
                 s_tmax=stoch_cfg.s_tmax,
             ) if stoch_cfg.enabled else 0.0
+            if churn_w is not None and gamma_i > 0.0:
+                gamma_i = min(gamma_i * churn_w[i], math.sqrt(2.0) - 1.0)
 
             x_state, sigma_state = _apply_edm_churn(
                 x,
@@ -1944,7 +2027,7 @@ class DDIMSampler:
             # "refined" mode re-evaluates at sigma_next using this step's
             # per-branch predictions as the model input (never the guided
             # mixture, which is not any single model's belief).
-            if self.sc_enabled:
+            if self.sc_enabled and sc_refresh_mode != "null":
                 if sc_refresh_mode == "refined":
                     sc_in = gdn.make_self_cond_state(cond_enabled)
                     for _b in branches:
@@ -2045,6 +2128,53 @@ class AncestralSampler(DDIMSampler):
         st = getattr(getattr(self.cfg, "evaluation", object()), "stochastic", None)
         if st is not None and bool(getattr(st, "enabled", False)) and float(getattr(st, "s_churn", 0.0)) > 0.0:
             raise RuntimeError("AncestralSampler does not support EDM churn; run it with --sampler deterministic.")
+        return super().sample(*args, **kwargs)
+
+
+class EulerLambdaSampler(DDIMSampler):
+    """Literal Euler update of the generalised reverse VE SDE with lambda_i = gamma * sigma_i / Delta_i.
+
+        x_next = x + (1 + lambda_i) sigma_i Delta_i (D - x) / sigma_i^2 + sqrt(2 lambda_i sigma_i Delta_i) z
+
+    (euler_dgc_derivation.pdf Eq. 2.2-2.4): the score is evaluated BEFORE any noise is added, so this is a different
+    finite-step kernel from EDM churn followed by denoising; gamma is the per-interval churn it stands in for
+    (cfg.evaluation.euler_gamma), or, with cfg.evaluation.euler_S, gamma = S / N for the N intervals of each call (the
+    fixed-S theory sweep). The noise std reduces to sigma_i * sqrt(2 gamma). EDM churn is refused.
+    """
+
+    def __init__(self, model, forward_process, cfg, *, gamma: Optional[float] = None):
+        super().__init__(model, forward_process, cfg)
+        ev = getattr(cfg, "evaluation", object())
+        g = gamma if gamma is not None else getattr(ev, "euler_gamma", None)
+        S = None if gamma is not None else getattr(ev, "euler_S", None)
+        if (g is None) == (S is None):
+            raise ValueError("EulerLambdaSampler needs exactly one of euler_gamma or euler_S")
+        if float(g if S is None else S) < 0:
+            raise ValueError(f"EulerLambdaSampler needs euler_gamma / euler_S >= 0, got {g if S is None else S}")
+        self.S = None if S is None else float(S)
+        self.gamma = 0.0 if g is None else float(g)
+
+    def _integrate_step(self, x_state, h, d_cur, *, sigma_cur, sigma_next, prefix_mask):
+        delta = (sigma_cur - sigma_next).clamp_min(1e-12)
+        lam = self.gamma * sigma_cur / delta
+        x_det = x_state + h * (1.0 + lam) * d_cur
+        if self.gamma == 0.0:
+            return x_det
+        z = torch.randn_like(x_state)
+        if prefix_mask is not None:
+            _zero_mask_(z, prefix_mask)
+        return x_det + (2.0 * lam * sigma_cur * delta).clamp_min(0.0).sqrt() * z
+
+    @torch.no_grad()
+    def sample(self, *args, **kwargs):
+        st = getattr(getattr(self.cfg, "evaluation", object()), "stochastic", None)
+        if st is not None and bool(getattr(st, "enabled", False)) and float(getattr(st, "s_churn", 0.0)) > 0.0:
+            raise RuntimeError("EulerLambdaSampler owns its stochasticity (euler_gamma); disable EDM churn.")
+        if self.S is not None:
+            n = kwargs.get("num_steps")
+            if n is None or int(n) < 2:
+                raise ValueError("euler_S needs an explicit num_steps >= 2 to set gamma = S / intervals")
+            self.gamma = self.S / (int(n) - 1)
         return super().sample(*args, **kwargs)
 
 

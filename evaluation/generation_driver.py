@@ -331,6 +331,25 @@ def create_sampler(
             is_discrete=False,
         )
 
+    if name in {"ddim_grid"}:   # the production DDIM/EDM sampler on a precomputed grid (cfg.evaluation.grid_file)
+        from diffusion.continuous.samplers import DDIMSampler
+
+        return SamplerBundle(sampler=DDIMSampler(model, proc, cfg), schedule="grid_file", is_discrete=False)
+
+    if name in {"euler_lambda"}:   # literal Euler, lambda_i = gamma sigma_i / Delta_i (cfg.evaluation.euler_gamma)
+        from diffusion.continuous.samplers import EulerLambdaSampler
+
+        return SamplerBundle(sampler=EulerLambdaSampler(model, proc, cfg), schedule="grid_file", is_discrete=False)
+
+    if name in {"ddim_dp_dgc", "dp_dgc"}:
+        from diffusion.continuous.samplers import DDIMSampler
+
+        return SamplerBundle(
+            sampler=DDIMSampler(model, proc, cfg),
+            schedule="dp_dgc",
+            is_discrete=False,
+        )
+
     if name in {"ddim_karras"}:
         from diffusion.continuous.samplers import DDIMSampler
 

@@ -42,7 +42,6 @@ from evaluation.evaluation_drivers.likelihood import evaluate_likelihood
 from evaluation.evaluation_drivers.vlb import evaluate_vlb
 from evaluation.evaluation_drivers.external_ppl import evaluate_external_ppl
 from evaluation.evaluation_drivers.fid_sweep import evaluate_fid_sweep
-from evaluation.evaluation_drivers.fid import evaluate_fid
 from evaluation.evaluation_drivers.mauve import evaluate_mauve
 from evaluation.evaluation_drivers.generate_samples import evaluate_generate_samples
 
@@ -229,7 +228,14 @@ def main():
         or (("vlb" in args.metrics) and ("train" in args.vlb_splits))
     )
 
-    test_loader = get_loader(cfg, split="test") if need_test else None
+    # skip_test_loader: unconditional external_ppl without the real-data reference never reads the
+    # test set (generation falls back to an empty reference), so the dataset cache is not needed.
+    skip_test = bool(getattr(cfg.evaluation, "skip_test_loader", False))
+    if skip_test and (set(args.metrics) - {"external_ppl"}
+                      or bool(getattr(cfg.evaluation.external_ppl, "compute_real_reference", True))):
+        raise ValueError("evaluation.skip_test_loader needs --metrics external_ppl only "
+                         "and external_ppl.compute_real_reference=False")
+    test_loader = ([] if skip_test else get_loader(cfg, split="test")) if need_test else None
     train_loader = get_loader(cfg, split="train") if need_train else None
 
     model = create_model(cfg).to(device)
@@ -273,6 +279,8 @@ def main():
         evaluate_fid_sweep(args, cfg, model, test_loader, device, rank0, ddp_active, samples_dir, is_text_dataset)
 
     if "fid" in args.metrics:
+        # Imported here: it needs pytorch_fid, which text-only environments don't install.
+        from evaluation.evaluation_drivers.fid import evaluate_fid
         evaluate_fid(
             args, cfg, model, ema, use_ema, test_loader, train_loader, device,
             rank0, ddp_active, dist_info, samples_dir, fid_splits, run_meta,

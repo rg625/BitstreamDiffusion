@@ -146,6 +146,7 @@ def _provenance(args, cfg) -> dict:
         "order_w": args.order_w, "order_mode": args.order_mode,
         "order_seed": args.order_seed,
         "order_k": args.order_k, "noise_table": args.noise_table,
+        "entropy_dir": args.entropy_dir, "grid_file": args.grid_file,
         "num_sampling_steps": int(args.steps or getattr(cfg.evaluation, "num_sampling_steps", 1024)),
         "seed": int(args.seed),
         "torch_version": torch.__version__,
@@ -174,7 +175,7 @@ def bootstrap_ci(correct: np.ndarray, n_boot: int, seed: int = 0):
     return float(means.mean()), float(lo), float(hi)
 
 
-def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir, out_dir,
+def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, table_dir, out_dir,
                    sigma_data_used, steps, timeout_s, n_boot):
     """FKC particle evaluation on GSM8K: per-particle acc / pass@K / maj@K + SMC telemetry.
 
@@ -223,7 +224,7 @@ def _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir, out_di
 
         out = sample_bit_particles(
             cfg, sampler, prefix_full=x0, prefix_mask=pm, num_steps=steps,
-            schedule=args.schedule, entropy_run_dir=str(run_dir),
+            schedule=args.schedule, entropy_run_dir=str(table_dir),
             sigma_min_override=args.sigma_min, seed=args.seed,
             guidance_scale=args.guidance_scale,
         )
@@ -420,7 +421,14 @@ def main():
                          "(stochasticity via lambda_zero, NO churn cap -> exceed the EDM ceiling); "
                          "pc = predictor-corrector entropy-gated SDE; "
                          "fkc_em = Feynman-Kac SMC sampler for the tempered target p^beta.")
-    ap.add_argument("--schedule", default="entropic", choices=["entropic", "karras"])
+    ap.add_argument("--schedule", default="entropic", choices=["entropic", "karras", "dp_dgc", "grid_file"])
+    ap.add_argument("--grid_file", default=None,
+                    help="Precomputed sigma grids (scripts/dgc/build_gamma_grid.py; key N<steps-1>); implies "
+                         "--schedule grid_file. The churn window still comes from the entropy table.")
+    ap.add_argument("--entropy_dir", default=None,
+                    help="Directory with entropy_{pdf,cdf,sigmas,edges}.pt that sets the entropic sigma "
+                         "grid and the churn window (default: the checkpoint's run dir). E.g. a DGC table "
+                         "from scripts/dgc/build_dgc_tables.py.")
     ap.add_argument("--gamma", type=float, default=0.0)
     ap.add_argument("--guidance_scale", type=float, default=0.0,
                     help="Classifier-free guidance weight w (probs_u + w*(probs_c-probs_u)). "
@@ -623,6 +631,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     run_dir = Path(args.checkpoint).resolve().parent.parent
+    # sigma grid + churn window table: the run's own unless --entropy_dir points elsewhere
+    table_dir = Path(args.entropy_dir) if args.entropy_dir else run_dir
     out_dir = Path(args.out_dir or (run_dir / "gsm8k_eval"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -666,6 +676,12 @@ def main():
     print(f"[gsm8k] guidance = {gcfg.describe()}", flush=True)
 
     schedule = args.schedule
+    if args.grid_file:
+        schedule = "grid_file"
+        cfg.evaluation.grid_file = args.grid_file
+        print(f"[gsm8k] sigma grid: {args.grid_file} (key N{steps - 1})", flush=True)
+    elif schedule == "grid_file":
+        raise SystemExit("--schedule grid_file needs --grid_file")
     configure_stochastic(cfg, mode=args.sampler, gamma=args.gamma, num_steps=steps)
 
     if args.gsm8k_test_path is not None:
@@ -679,7 +695,7 @@ def main():
     n = len(ds) if args.limit is None else min(args.limit, len(ds))
 
     if args.sampler_kind in {"fkc_em", "fkc"}:
-        return _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, run_dir,
+        return _run_fkc_gsm8k(cfg, sampler, ds, n, bpt, tok, tok_len, args, table_dir,
                               out_dir, sigma_data_used, steps, timeout_s, n_boot)
 
     per_correct = []
@@ -708,7 +724,7 @@ def main():
         t_batch = time.time()
         bits = sample_bits(
             cfg, sampler, prefix_full=x0, prefix_mask=pm, num_steps=steps,
-            schedule=schedule, entropy_run_dir=str(run_dir),
+            schedule=schedule, entropy_run_dir=str(table_dir),
             sigma_min_override=args.sigma_min, sigma_max_override=args.sigma_max,
             seed=args.seed,
             guidance=gcfg,

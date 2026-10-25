@@ -25,6 +25,7 @@
 #   [ST_SAMPLER_KIND=ddim]  ddim | ancestral (ancestral needs ST_GAMMA=0) | em
 #   [ST_ST_FINAL=sharpened] unsharpened = last step uses the untempered drift
 #   [ST_SCHEDULE=karras] [ST_EMA=1] [ST_SIGMA_MIN] (unset = config 0.002)
+#   [ST_ENTROPY_DIR]        entropic grid + churn window table (unset = the run dir), e.g. a DGC table
 #
 # PROTOCOL: Karras schedule (analytic, identical for every checkpoint; the
 # entropic schedule is refitted per run and the unguided CoBit-S run has no
@@ -51,14 +52,17 @@ mkdir -p logs/arch "$ST_OUT_DIR"
 # without those tables resolve_stochastic_cfg falls back to DETERMINISTIC with
 # no error (12 Oct: all 21 s425 "gamma=0.41" cells silently ran as gamma=0).
 RUN_DIR="$(dirname "$(dirname "$(readlink -f "$CK")")")"   # gsm8k_eval resolves symlinks too
-if awk "BEGIN{exit !($ST_GAMMA > 0)}" && [ ! -f "$RUN_DIR/entropy_cdf.pt" ]; then
-  echo "[st] FATAL: gamma=$ST_GAMMA but $RUN_DIR has no entropy tables -> churn would silently be off" >&2
+TABLE_DIR="${ST_ENTROPY_DIR:-$RUN_DIR}"
+if awk "BEGIN{exit !($ST_GAMMA > 0)}" && [ ! -f "$TABLE_DIR/entropy_cdf.pt" ]; then
+  echo "[st] FATAL: gamma=$ST_GAMMA but $TABLE_DIR has no entropy tables -> churn would silently be off" >&2
   exit 1
 fi
 if awk "BEGIN{exit !($ST_GAMMA > 0)}"; then SAMPLER=(--sampler stochastic --gamma "$ST_GAMMA")
 else SAMPLER=(--sampler deterministic --gamma 0.0); fi
 EXTRA=()
 [ -n "${ST_SIGMA_DATA:-}" ] && EXTRA+=(--sigma_data "$ST_SIGMA_DATA")
+[ -n "${ST_ENTROPY_DIR:-}" ] && EXTRA+=(--entropy_dir "$ST_ENTROPY_DIR")
+[ -n "${ST_GRID_FILE:-}" ] && EXTRA+=(--grid_file "$ST_GRID_FILE")   # precomputed sigma grid (gamma-Euler study)
 [ "${ST_DIAG:-0}" = 1 ] && EXTRA+=(--collect_diagnostics)
 [ -n "${ST_SIGMA_MIN:-}" ] && EXTRA+=(--sigma_min "$ST_SIGMA_MIN")   # end the trajectory here (e.g. 0.1, as on OWT)
 # DeepMind-style logit temperature (softmax(logits/T) over valid codewords, every step)

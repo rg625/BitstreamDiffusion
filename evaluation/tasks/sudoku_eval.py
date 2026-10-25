@@ -73,7 +73,7 @@ def _valid_sudoku(cells):
     return True
 
 
-def _run_fkc_sudoku(cfg, sampler, ds, n, bpt, args, run_dir, out_dir, sigma_data_used):
+def _run_fkc_sudoku(cfg, sampler, ds, n, bpt, args, table_dir, out_dir, sigma_data_used):
     """FKC particle evaluation: pass@K / maj@K / per-particle acc + SMC telemetry.
 
     For each prompt we decode all K particles, then report:
@@ -112,7 +112,7 @@ def _run_fkc_sudoku(cfg, sampler, ds, n, bpt, args, run_dir, out_dir, sigma_data
 
         out = sample_bit_particles(
             cfg, sampler, prefix_full=x0, prefix_mask=pm, num_steps=steps,
-            schedule=args.schedule, entropy_run_dir=str(run_dir),
+            schedule=args.schedule, entropy_run_dir=str(table_dir),
             sigma_min_override=args.sigma_min, seed=args.seed,
             guidance_scale=args.guidance_scale,
         )
@@ -230,6 +230,8 @@ def _run_fkc_sudoku(cfg, sampler, ds, n, bpt, args, run_dir, out_dir, sigma_data
         tag += f"_cfgw{args.guidance_scale:g}"
     if args.resample_entropy_frac is not None:
         tag += f"_rband{args.resample_entropy_frac:g}"
+    if args.tag:
+        tag += f"_{args.tag}"
     out_path = out_dir / f"sudoku_results_{tag}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print("\n=== SUDOKU FKC RESULT ===")
@@ -247,8 +249,11 @@ def main():
     ap.add_argument("--sampler_kind", default="ddim", choices=["ddim", "heun", "em", "pc", "fkc_em"],
                     help="ddim = CoBit ddim_entropic headline path (EDM churn); heun = 2nd-order ablation; "
                          "fkc_em = Feynman-Kac SMC sampler for the tempered target p^beta")
-    ap.add_argument("--schedule", default="entropic", choices=["entropic", "karras"],
+    ap.add_argument("--schedule", default="entropic", choices=["entropic", "karras", "dp_dgc"],
                     help="sigma grid; entropic = trained entropy-rate schedule")
+    ap.add_argument("--entropy_dir", default=None,
+                    help="Directory with entropy_{pdf,cdf,sigmas,edges}.pt that sets the entropic sigma "
+                         "grid and the churn window (default: the checkpoint's run dir).")
     ap.add_argument("--gamma", type=float, default=0.0, help="churn gamma; 0 => deterministic")
     ap.add_argument("--ema", type=int, default=1, help="1=EMA weights (headline), 0=raw weights")
     ap.add_argument("--steps", type=int, default=None)
@@ -319,6 +324,7 @@ def main():
                          "still accumulate everywhere (target unchanged); avoids burning particle "
                          "diversity on low-signal steps outside the informative band.")
     ap.add_argument("--out_dir", default=None)
+    ap.add_argument("--tag", default=None, help="Suffix appended to the result file name.")
     ap.add_argument("--allow_cpu", action="store_true",
                     help="Permit running on CPU. By default the eval ASSERTS CUDA is available, "
                          "because a silent CPU fallback (e.g. CUDA failing to init on a bad node) "
@@ -342,6 +348,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     run_dir = Path(args.checkpoint).resolve().parent.parent
+    # sigma grid + churn window table: the run's own unless --entropy_dir points elsewhere
+    table_dir = Path(args.entropy_dir) if args.entropy_dir else run_dir
     out_dir = Path(args.out_dir or (run_dir / "sudoku_eval"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -368,7 +376,7 @@ def main():
     bpt = BITS_PER_TOKEN
 
     if args.sampler_kind in {"fkc_em", "fkc"}:
-        return _run_fkc_sudoku(cfg, sampler, ds, n, bpt, args, run_dir, out_dir, sigma_data_used)
+        return _run_fkc_sudoku(cfg, sampler, ds, n, bpt, args, table_dir, out_dir, sigma_data_used)
 
     n_exact = 0
     n_grid = 0
@@ -378,6 +386,7 @@ def main():
     n_invalid_tok = 0
     n_sol_tokens = 0
     records = []
+    per_puzzle_exact = []
 
     for start in range(0, n, args.batch_size):
         idxs = list(range(start, min(start + args.batch_size, n)))
@@ -387,7 +396,7 @@ def main():
 
         bits = sample_bits(
             cfg, sampler, prefix_full=x0, prefix_mask=pm, num_steps=steps,
-            schedule=schedule, entropy_run_dir=str(run_dir),
+            schedule=schedule, entropy_run_dir=str(table_dir),
             sigma_min_override=args.sigma_min, seed=args.seed,
             guidance_scale=args.guidance_scale,
             score_temp_tau=args.score_temp_tau,
@@ -399,6 +408,7 @@ def main():
         gt_suffix = gt_ids[:, PROMPT_LEN_TOKENS:].cpu()
         exact = (gen_suffix == gt_suffix).all(dim=1)
         n_exact += int(exact.sum())
+        per_puzzle_exact += [bool(e) for e in exact]
 
         for b, gi in enumerate(idxs):
             row = gen_ids[b].cpu().tolist()
@@ -444,6 +454,8 @@ def main():
         "score_temp_tau": args.score_temp_tau,
         "score_temp_clean_var": args.score_temp_clean_var,
         "sigma_data": sigma_data_used,
+        "entropy_dir": args.entropy_dir,
+        "seed": args.seed,
         "num_examples": n,
         "exact_match_accuracy": n_exact / max(1, n),
         "grid_exact_match": n_grid / max(1, n),
@@ -452,6 +464,7 @@ def main():
         "separator_accuracy": n_sep / max(1, n),
         "invalid_token_rate": n_invalid_tok / max(1, n_sol_tokens),
         "sample_records": records,
+        "per_puzzle_exact": per_puzzle_exact,
     }
     tag = f"{cfg.data.difficulty}_{args.sampler}_g{args.gamma}_s{steps}_sd{sigma_data_used:.4f}_w{args.guidance_scale:g}_ema{int(bool(args.ema))}"
     if abs(args.score_temp_tau - 1.0) > 1e-8:
@@ -460,6 +473,8 @@ def main():
         tag += f"_kind{args.sampler_kind}_lz{args.lambda_zero:g}_{args.lambda_normalize}"
         if args.sampler_kind == "pc":
             tag += f"_{args.guidance_mode}"
+    if args.tag:
+        tag += f"_{args.tag}"
     out_path = out_dir / f"sudoku_results_{tag}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print("\n=== SUDOKU RESULT ===")
